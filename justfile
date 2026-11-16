@@ -26,3 +26,12 @@ cli-run:
 [working-directory: 'espr-cli']
 cli-generate-tls:
     cargo run -p espr-cli -- --config config.toml --generate-tls localhost 127.0.0.1
+
+[working-directory: 'conbira']
+conbira-run:
+    cargo run -p conbira --bin conbira --
+
+[working-directory: 'conbira']
+conbira-cli:
+    cargo run -p conbira --bin conbira-cli --
+    
