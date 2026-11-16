@@ -20,6 +20,9 @@ pub enum Error {
     #[error("config error: {0}")]
     ConfigError(#[from] ::config::ConfigError),
 
+    #[error("database error: {0}")]
+    DatabaseError(#[from] sqlx::Error),
+
     #[error("internal error: {0}")]
     Internal(#[from] anyhow::Error),
 }

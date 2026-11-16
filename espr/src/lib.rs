@@ -5,4 +5,5 @@ pub mod tracing;
 pub use error::*;
 pub mod hash;
 pub mod http;
+pub mod sqlxdb;
 pub mod validate;
