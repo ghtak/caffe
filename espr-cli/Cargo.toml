@@ -10,4 +10,5 @@ dotenvy = "0.15"
 espr = { path = "../espr" }
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.54.1", features = ["full"] }
+tower-http = { version = "0.7.1", features = ["trace"] }
 tracing = "0.1.44"

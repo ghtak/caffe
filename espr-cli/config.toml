@@ -1,9 +1,9 @@
 [trace.console]
-filter = "info"
+filter = "trace"
 ansi = true
 
 [trace.file]
-filter = "info"
+filter = "trace"
 directory = "var/log"
 filename_prefix = "espr-cli"
 

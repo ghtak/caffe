@@ -1,12 +1,71 @@
 use std::path::PathBuf;
 
 use anyhow::Context;
+use axum::http::{HeaderMap, HeaderName, HeaderValue};
+use opentelemetry::propagation::{Extractor, Injector, TextMapPropagator as _};
+use opentelemetry::trace::{TraceContextExt as _, TracerProvider as _};
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use serde::Deserialize;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
+use tracing_opentelemetry::OpenTelemetrySpanExt as _;
 use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::{EnvFilter, Layer as _, Registry, fmt};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TraceIds {
+    pub trace_id: String,
+    pub span_id: String,
+}
+
+pub fn current_trace_ids() -> Option<TraceIds> {
+    let context = tracing::Span::current().context();
+    let span = context.span();
+    let span_context = span.span_context();
+    span_context.is_valid().then(|| TraceIds {
+        trace_id: span_context.trace_id().to_string(),
+        span_id: span_context.span_id().to_string(),
+    })
+}
+
+pub fn inject_trace_context(headers: &mut HeaderMap) {
+    headers.remove("traceparent");
+    headers.remove("tracestate");
+    let context = tracing::Span::current().context();
+    TraceContextPropagator::new().inject_context(&context, &mut HeaderInjector(headers));
+}
+
+pub(crate) fn extract_trace_context(headers: &HeaderMap) -> opentelemetry::Context {
+    TraceContextPropagator::new()
+        .extract_with_context(&opentelemetry::Context::new(), &HeaderExtractor(headers))
+}
+
+struct HeaderExtractor<'a>(&'a HeaderMap);
+
+impl Extractor for HeaderExtractor<'_> {
+    fn get(&self, key: &str) -> Option<&str> {
+        self.0.get(key)?.to_str().ok()
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        self.0.keys().map(HeaderName::as_str).collect()
+    }
+}
+
+struct HeaderInjector<'a>(&'a mut HeaderMap);
+
+impl Injector for HeaderInjector<'_> {
+    fn set(&mut self, key: &str, value: String) {
+        if key == "tracestate" && value.is_empty() {
+            return;
+        }
+        if let (Ok(name), Ok(value)) = (HeaderName::try_from(key), HeaderValue::try_from(value)) {
+            self.0.insert(name, value);
+        }
+    }
+}
 
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Config {
@@ -47,13 +106,19 @@ fn default_lossy() -> bool {
 #[must_use = "keep this guard alive until application shutdown"]
 pub struct TracingGuard {
     _workers: Vec<WorkerGuard>,
+    provider: SdkTracerProvider,
+}
+
+impl Drop for TracingGuard {
+    fn drop(&mut self) {
+        let _ = self.provider.shutdown();
+    }
 }
 
 pub fn initialize(config: &Config) -> crate::Result<TracingGuard> {
     let mut guards = Vec::new();
-    if config.console.is_none() && config.file.is_none() {
-        return Ok(TracingGuard { _workers: guards });
-    }
+    let provider = SdkTracerProvider::builder().build();
+    let tracer = provider.tracer("espr");
 
     let console = config.console.as_ref().map(|v| {
         let filter = resolve_filter(v.filter.as_deref());
@@ -105,10 +170,14 @@ pub fn initialize(config: &Config) -> crate::Result<TracingGuard> {
     Registry::default()
         .with(console)
         .with(file)
+        .with(tracing_opentelemetry::layer().with_tracer(tracer))
         .try_init()
         .context("failed to install the global tracing subscriber")?;
 
-    Ok(TracingGuard { _workers: guards })
+    Ok(TracingGuard {
+        _workers: guards,
+        provider,
+    })
 }
 
 fn resolve_filter(filter: Option<&str>) -> EnvFilter {
@@ -123,13 +192,61 @@ mod tests {
     use super::*;
 
     #[test]
+    fn propagates_request_context() {
+        let provider = SdkTracerProvider::builder().build();
+        let subscriber = Registry::default()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+        tracing::subscriber::with_default(subscriber, || {
+            assert_eq!(current_trace_ids(), None);
+            let request = axum::http::Request::builder()
+                .header(
+                    "traceparent",
+                    "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                )
+                .header("tracestate", "vendor=value")
+                .body(())
+                .unwrap();
+            let span = crate::http::make_request_span(&request);
+            let _entered = span.enter();
+            let ids = current_trace_ids().unwrap();
+            assert_eq!(ids.trace_id, "4bf92f3577b34da6a3ce929d0e0e4736");
+            assert_ne!(ids.span_id, "00f067aa0ba902b7");
+            let mut headers = HeaderMap::new();
+            inject_trace_context(&mut headers);
+            assert_eq!(
+                headers["traceparent"],
+                format!("00-{}-{}-01", ids.trace_id, ids.span_id)
+            );
+            assert_eq!(headers["tracestate"], "vendor=value");
+        });
+    }
+
+    #[test]
+    fn invalid_parent_starts_new_trace() {
+        let provider = SdkTracerProvider::builder().build();
+        let subscriber = Registry::default()
+            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+        tracing::subscriber::with_default(subscriber, || {
+            let request = axum::http::Request::builder()
+                .header("traceparent", "invalid")
+                .header("tracestate", "vendor=value")
+                .body(())
+                .unwrap();
+            let span = crate::http::make_request_span(&request);
+            let _entered = span.enter();
+            assert!(current_trace_ids().is_some());
+            let mut headers = HeaderMap::new();
+            inject_trace_context(&mut headers);
+            assert!(headers.contains_key("traceparent"));
+            assert!(!headers.contains_key("tracestate"));
+        });
+    }
+
+    #[test]
     fn initializes_file_logging() {
         const LOG_DIR: &str = "ESPR_TRACING_TEST_DIR";
 
         if let Some(directory) = std::env::var_os(LOG_DIR) {
-            // An empty configuration must not occupy the global subscriber.
-            drop(initialize(&Config::default()).unwrap());
-
             let config = Config {
                 console: None,
                 file: Some(File {
@@ -141,6 +258,8 @@ mod tests {
                 }),
             };
             let guard = initialize(&config).unwrap();
+            let span = tracing::info_span!("request");
+            assert!(span.context().span().span_context().is_valid());
             tracing::debug!("visible debug event");
             tracing::trace!("hidden trace event");
             assert!(initialize(&config).is_err());

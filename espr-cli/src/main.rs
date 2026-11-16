@@ -4,6 +4,7 @@ use std::path::Path;
 
 use clap::Parser;
 use espr::validate::Validate;
+use tower_http::trace::TraceLayer;
 
 #[derive(serde::Deserialize, Debug)]
 struct Config {
@@ -55,6 +56,8 @@ async fn prepare_server(
         }
         None => router,
     };
+    let router =
+        router.layer(TraceLayer::new_for_http().make_span_with(espr::http::make_request_span));
     Ok((espr::http::Server::new(config).await?, router))
 }
 
