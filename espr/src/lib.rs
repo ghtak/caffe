@@ -6,6 +6,7 @@ pub use error::*;
 pub mod cache;
 pub mod hash;
 pub mod http;
+pub mod jwt;
 pub mod oracledb;
 pub mod sqlxdb;
 pub mod validate;
