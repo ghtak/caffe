@@ -3,6 +3,7 @@ mod error;
 pub mod tls;
 pub mod tracing;
 pub use error::*;
+pub mod cache;
 pub mod hash;
 pub mod http;
 pub mod oracledb;

@@ -26,6 +26,12 @@ pub enum Error {
     #[error("Oracle database error: {0}")]
     OracleDatabaseError(#[from] oracledb::Error),
 
+    #[error("cache error: {0}")]
+    CacheError(#[from] deadpool_redis::redis::RedisError),
+
+    #[error("cache pool error: {0}")]
+    CachePoolError(#[from] deadpool_redis::PoolError),
+
     #[error("internal error: {0}")]
     Internal(#[from] anyhow::Error),
 }
