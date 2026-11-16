@@ -13,6 +13,7 @@ config = "0.15.27"
 opentelemetry = "0.33.1"
 opentelemetry-otlp = { version = "0.33.1", default-features = false, features = ["grpc-tonic", "trace"] }
 opentelemetry_sdk = "0.33.1"
+oracledb = "26.0.0-beta.6"
 password-hash = "0.5"
 pbkdf2 = { version = "0.12", features = ["simple"] }
 rand_core = { version = "0.6", features = ["getrandom"] }

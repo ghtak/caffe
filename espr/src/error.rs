@@ -23,6 +23,9 @@ pub enum Error {
     #[error("database error: {0}")]
     DatabaseError(#[from] sqlx::Error),
 
+    #[error("Oracle database error: {0}")]
+    OracleDatabaseError(#[from] oracledb::Error),
+
     #[error("internal error: {0}")]
     Internal(#[from] anyhow::Error),
 }
