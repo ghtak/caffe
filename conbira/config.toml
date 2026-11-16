@@ -16,3 +16,12 @@ bind_addr = "127.0.0.1:18443"
 [https.tls]
 cert_path = "var/cert/cert.pem"
 key_path = "var/cert/key.pem"
+
+[jwt]
+issuer = "conbira"
+audience = "conbira"
+access_token_ttl_seconds = 900
+
+[jwt.ed25519]
+key_path = "var/jwt/private.pem"
+public_key_path = "var/jwt/public.pem"

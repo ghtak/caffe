@@ -44,3 +44,13 @@ conbira-run:
 [working-directory: 'conbira']
 conbira-cli:
     cargo run -p conbira --bin conbira-cli --
+
+# 설정된 경로에 localhost용 TLS 인증서와 키 생성
+[working-directory: 'conbira']
+conbira-generate-tls:
+    cargo run -p conbira --bin conbira-cli -- --generate-tls localhost 127.0.0.1
+
+# 설정된 경로에 Ed25519 키 쌍 생성
+[working-directory: 'conbira']
+conbira-generate-ed25519:
+    cargo run -p conbira --bin conbira-cli -- --generate-ed25519

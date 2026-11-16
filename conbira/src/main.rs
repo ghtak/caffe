@@ -15,6 +15,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config: conbira::Config = espr::config::load(&options.config, None)?;
     let guard = espr::tracing::initialize(&config.trace)?;
 
+    let _container = conbira::Container::new(&config).await?;
+
     guard.shutdown().await?;
     Ok(())
 }
