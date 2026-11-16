@@ -28,19 +28,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let _guard = espr::tracing::initialize(&config.trace)?;
+    let guard = espr::tracing::initialize(&config.trace)?;
 
-    config.https.tls.as_ref().ok_or_else(|| {
-        espr::Error::InvalidParameter("HTTPS TLS configuration is required".into())
-    })?;
+    let result = async {
+        config.https.tls.as_ref().ok_or_else(|| {
+            espr::Error::InvalidParameter("HTTPS TLS configuration is required".into())
+        })?;
 
-    let router = axum::Router::new().route("/", axum::routing::get(|| async { "Hello, World!" }));
-
-    let ((http, http_router), (https, https_router)) = tokio::try_join!(
-        prepare_server(config.http, router.clone()),
-        prepare_server(config.https, router),
-    )?;
-    tokio::try_join!(http.run(http_router), https.run(https_router))?;
+        let router =
+            axum::Router::new().route("/", axum::routing::get(|| async { "Hello, World!" }));
+        let ((http, http_router), (https, https_router)) = tokio::try_join!(
+            prepare_server(config.http, router.clone()),
+            prepare_server(config.https, router),
+        )?;
+        tokio::try_join!(http.run(http_router), https.run(https_router))?;
+        Ok::<(), espr::Error>(())
+    }
+    .await;
+    result.and(guard.shutdown().await)?;
 
     Ok(())
 }

@@ -14,6 +14,8 @@ use tracing_subscriber::layer::SubscriberExt as _;
 use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::{EnvFilter, Layer as _, Registry, fmt};
 
+pub mod exporter;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TraceIds {
     pub trace_id: String,
@@ -71,6 +73,7 @@ impl Injector for HeaderInjector<'_> {
 pub struct Config {
     pub console: Option<Console>,
     pub file: Option<File>,
+    pub exporter: Option<exporter::Config>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -106,18 +109,39 @@ fn default_lossy() -> bool {
 #[must_use = "keep this guard alive until application shutdown"]
 pub struct TracingGuard {
     _workers: Vec<WorkerGuard>,
-    provider: SdkTracerProvider,
+    provider: Option<SdkTracerProvider>,
 }
 
 impl Drop for TracingGuard {
     fn drop(&mut self) {
-        let _ = self.provider.shutdown();
+        if let Some(provider) = self.provider.take() {
+            let _ = provider.shutdown();
+        }
+    }
+}
+
+impl TracingGuard {
+    /// Flushes pending spans without blocking the async runtime thread.
+    pub async fn shutdown(mut self) -> crate::Result<()> {
+        let provider = self
+            .provider
+            .take()
+            .expect("provider is present until shutdown");
+        tokio::task::spawn_blocking(move || provider.shutdown())
+            .await
+            .map_err(|error| anyhow::anyhow!(error).context("trace shutdown task failed"))?
+            .map_err(|error| anyhow::anyhow!(error).context("trace provider shutdown failed"))?;
+        Ok(())
     }
 }
 
 pub fn initialize(config: &Config) -> crate::Result<TracingGuard> {
     let mut guards = Vec::new();
-    let provider = SdkTracerProvider::builder().build();
+    let mut builder = SdkTracerProvider::builder();
+    if let Some(exporter) = &config.exporter {
+        builder = exporter::configure(builder, exporter)?;
+    }
+    let provider = builder.build();
     let tracer = provider.tracer("espr");
 
     let console = config.console.as_ref().map(|v| {
@@ -176,7 +200,7 @@ pub fn initialize(config: &Config) -> crate::Result<TracingGuard> {
 
     Ok(TracingGuard {
         _workers: guards,
-        provider,
+        provider: Some(provider),
     })
 }
 
@@ -190,6 +214,21 @@ fn resolve_filter(filter: Option<&str>) -> EnvFilter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exporter_requires_tokio_runtime() {
+        let config = Config {
+            exporter: Some(exporter::Config {
+                endpoint: "http://localhost:4317".into(),
+            }),
+            ..Config::default()
+        };
+        let error = match initialize(&config) {
+            Ok(_) => panic!("exporter must require a runtime"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("requires a Tokio runtime"));
+    }
 
     #[test]
     fn propagates_request_context() {
@@ -249,6 +288,7 @@ mod tests {
         if let Some(directory) = std::env::var_os(LOG_DIR) {
             let config = Config {
                 console: None,
+                exporter: None,
                 file: Some(File {
                     filter: Some("error".into()),
                     directory: directory.into(),
