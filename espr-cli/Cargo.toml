@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+axum = "0.8.9"
 clap = { version = "4", features = ["derive"] }
 dotenvy = "0.15"
 espr = { path = "../espr" }
 serde = { version = "1.0.229", features = ["derive"] }
+tokio = { version = "1.54.1", features = ["full"] }
 tracing = "0.1.44"

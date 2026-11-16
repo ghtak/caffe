@@ -3,29 +3,59 @@ mod option;
 use std::path::Path;
 
 use clap::Parser;
+use espr::validate::Validate;
 
 #[derive(serde::Deserialize, Debug)]
 struct Config {
     trace: espr::tracing::Config,
-    tls: espr::tls::Config,
+    http: espr::http::Config,
+    https: espr::http::Config,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let options = option::Options::parse();
     load_dotenv(options.env_file.unwrap_or_else(|| ".env".into()))?;
 
     let config: Config = espr::config::load(&options.config, None)?;
 
     if let Some(names) = &options.generate_tls {
-        generate_tls(&config.tls, names)?;
+        let tls = config.https.tls.as_ref().ok_or_else(|| {
+            espr::Error::InvalidParameter("HTTPS TLS configuration is required".into())
+        })?;
+        generate_tls(tls, names)?;
         return Ok(());
     }
 
     let _guard = espr::tracing::initialize(&config.trace)?;
 
-    tracing::info!("hello");
+    config.https.tls.as_ref().ok_or_else(|| {
+        espr::Error::InvalidParameter("HTTPS TLS configuration is required".into())
+    })?;
+
+    let router = axum::Router::new().route("/", axum::routing::get(|| async { "Hello, World!" }));
+
+    let ((http, http_router), (https, https_router)) = tokio::try_join!(
+        prepare_server(config.http, router.clone()),
+        prepare_server(config.https, router),
+    )?;
+    tokio::try_join!(http.run(http_router), https.run(https_router))?;
 
     Ok(())
+}
+
+async fn prepare_server(
+    config: espr::http::Config,
+    router: axum::Router,
+) -> espr::Result<(espr::http::Server, axum::Router)> {
+    let router = match &config.static_files {
+        Some(static_files) => {
+            static_files.validate()?;
+            router.merge(static_files.as_router())
+        }
+        None => router,
+    };
+    Ok((espr::http::Server::new(config).await?, router))
 }
 
 fn load_dotenv<P: AsRef<Path>>(path: P) -> espr::Result<()> {

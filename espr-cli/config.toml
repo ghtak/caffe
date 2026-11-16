@@ -7,6 +7,12 @@ filter = "info"
 directory = "var/log"
 filename_prefix = "espr-cli"
 
-[tls]
+[http]
+bind_addr = "127.0.0.1:18080"
+
+[https]
+bind_addr = "127.0.0.1:18443"
+
+[https.tls]
 cert_path = "var/cert/cert.pem"
 key_path = "var/cert/key.pem"

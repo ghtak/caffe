@@ -2,6 +2,9 @@ use std::borrow::Cow;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("validation failed: {0}")]
+    Validation(Cow<'static, str>),
+
     #[error("invalid parameter: {0}")]
     InvalidParameter(Cow<'static, str>),
 

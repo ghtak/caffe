@@ -40,7 +40,9 @@ fn default_buffered_lines_limit() -> usize {
     tracing_appender::non_blocking::DEFAULT_BUFFERED_LINES_LIMIT
 }
 
-fn default_lossy() -> bool { true }
+fn default_lossy() -> bool {
+    true
+}
 
 #[must_use = "keep this guard alive until application shutdown"]
 pub struct TracingGuard {
