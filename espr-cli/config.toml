@@ -4,5 +4,9 @@ ansi = true
 
 [trace.file]
 filter = "info"
-directory = "logs"
+directory = "var/log"
 filename_prefix = "espr-cli"
+
+[tls]
+cert_path = "var/cert/cert.pem"
+key_path = "var/cert/key.pem"

@@ -8,6 +8,9 @@ pub enum Error {
     #[error("illegal state: {0}")]
     IllegalState(Cow<'static, str>),
 
+    #[error("not found: {0}")]
+    NotFound(Cow<'static, str>),
+
     #[error("I/O error: {0}")]
     IoError(#[from] std::io::Error),
 
