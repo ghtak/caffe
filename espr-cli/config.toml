@@ -1,0 +1,8 @@
+[trace.console]
+filter = "info"
+ansi = true
+
+[trace.file]
+filter = "info"
+directory = "logs"
+filename_prefix = "espr-cli"
