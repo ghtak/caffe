@@ -93,7 +93,7 @@ impl TokenService {
                 "subject must not be empty".into(),
             ));
         }
-        let iat = chrono::Utc::now().timestamp();
+        let iat = jiff::Timestamp::now().as_second();
         let exp = iat
             .checked_add(self.config.access_token_ttl_seconds as i64)
             .ok_or_else(|| {
@@ -118,7 +118,7 @@ impl TokenService {
         let claims = jsonwebtoken::decode::<Claims>(token, &self.decoding_key, &self.validation)
             .map_err(|_| crate::Error::Validation("invalid or expired JWT".into()))?
             .claims;
-        if claims.exp <= chrono::Utc::now().timestamp() || claims.sub.is_empty() {
+        if claims.exp <= jiff::Timestamp::now().as_second() || claims.sub.is_empty() {
             return Err(crate::Error::Validation("invalid or expired JWT".into()));
         }
         Ok(claims)
@@ -152,12 +152,12 @@ mod tests {
         ed25519::generate(&config.ed25519).unwrap();
         let service = TokenService::new(&config).unwrap();
         let user = serde_json::from_value(serde_json::json!({"name": "Kim"})).unwrap();
-        let before = chrono::Utc::now().timestamp();
+        let before = jiff::Timestamp::now().as_second();
 
         let token = service.issue("user-1", user).unwrap();
         let claims = service.verify(&token).unwrap();
 
-        let after = chrono::Utc::now().timestamp();
+        let after = jiff::Timestamp::now().as_second();
         assert_eq!(claims.sub, "user-1");
         assert_eq!(claims.iss, config.issuer);
         assert_eq!(claims.aud, config.audience);

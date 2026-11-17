@@ -59,14 +59,12 @@ mod sample {
     }
 
     mod entity {
-        use chrono::{DateTime, Utc};
-
         #[derive(Debug, PartialEq)]
         pub struct Sample {
             pub id: i64,
             pub name: String,
-            pub created_at: DateTime<Utc>,
-            pub updated_at: DateTime<Utc>,
+            pub created_at: jiff::Timestamp,
+            pub updated_at: jiff::Timestamp,
         }
     }
 
@@ -74,6 +72,43 @@ mod sample {
         use super::entity::Sample;
         use super::{Connection, OracleTimestamp};
         use crate::Result;
+
+        fn from_oracle(value: OracleTimestamp) -> anyhow::Result<jiff::Timestamp> {
+            let datetime = jiff::civil::DateTime::new(
+                value.year(),
+                value.month().try_into()?,
+                value.day().try_into()?,
+                value.hour().try_into()?,
+                value.minute().try_into()?,
+                value.second().try_into()?,
+                value.nanoseconds().try_into()?,
+            )?;
+            Ok(jiff::tz::offset(0).to_timestamp(datetime)?)
+        }
+
+        fn to_oracle(value: jiff::Timestamp) -> OracleTimestamp {
+            let datetime = jiff::tz::offset(0).to_datetime(value);
+            OracleTimestamp::new_timestamp(
+                datetime.year(),
+                datetime.month() as u8,
+                datetime.day() as u8,
+                datetime.hour() as u8,
+                datetime.minute() as u8,
+                datetime.second() as u8,
+                datetime.subsec_nanosecond() as u32,
+            )
+        }
+
+        #[test]
+        fn oracle_timestamp_round_trips_utc_with_nanoseconds() {
+            let timestamp: jiff::Timestamp = "2024-01-01T12:34:56.123456789Z".parse().unwrap();
+            let oracle = to_oracle(timestamp);
+
+            // 시간대 없는 Oracle 값은 UTC 구성 요소로 읽는다.
+            assert_eq!(oracle.hour(), 12);
+            assert_eq!(oracle.nanoseconds(), 123_456_789);
+            assert_eq!(from_oracle(oracle).unwrap(), timestamp);
+        }
 
         pub fn find_by_id(conn: &Connection, id: i64) -> Result<Option<Sample>> {
             let mut rows = conn.query(
@@ -89,14 +124,14 @@ mod sample {
             Ok(Some(Sample {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                created_at: chrono::NaiveDateTime::try_from(created)?.and_utc(),
-                updated_at: chrono::NaiveDateTime::try_from(updated)?.and_utc(),
+                created_at: from_oracle(created)?,
+                updated_at: from_oracle(updated)?,
             }))
         }
 
         pub fn insert(conn: &Connection, record: &Sample) -> Result<()> {
-            let created = OracleTimestamp::from(record.created_at.naive_utc());
-            let updated = OracleTimestamp::from(record.updated_at.naive_utc());
+            let created = to_oracle(record.created_at);
+            let updated = to_oracle(record.updated_at);
             conn.execute(
                 "INSERT INTO ORA$PTT_SAMPLE (id, name, created_at, updated_at) VALUES (:1, :2, :3, :4)",
                 &[&record.id, &record.name, &created, &updated],
@@ -105,7 +140,7 @@ mod sample {
         }
 
         pub fn update(conn: &Connection, record: &Sample) -> Result<()> {
-            let updated = OracleTimestamp::from(record.updated_at.naive_utc());
+            let updated = to_oracle(record.updated_at);
             conn.execute(
                 "UPDATE ORA$PTT_SAMPLE SET name = :1, updated_at = :2 WHERE id = :3",
                 &[&record.name, &updated, &record.id],
@@ -120,8 +155,7 @@ mod sample {
     }
 
     fn sample() -> entity::Sample {
-        use chrono::TimeZone as _;
-        let time = chrono::Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let time = jiff::Timestamp::from_second(1_704_067_200).unwrap();
         entity::Sample {
             id: 1,
             name: "sample".into(),
@@ -181,7 +215,7 @@ mod sample {
             let mut sample = sample();
             repository::insert(&conn, &sample)?;
             sample.name = "updated".into();
-            sample.updated_at += chrono::Duration::seconds(1);
+            sample.updated_at += jiff::SignedDuration::from_secs(1);
 
             repository::update(&conn, &sample)?;
 

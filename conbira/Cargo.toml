@@ -15,13 +15,14 @@ path = "src/cli/main.rs"
 anyhow = "1"
 axum = "0.8.9"
 clap = { version = "4", features = ["derive"] }
-chrono = "0.4"
+jiff = "0.2"
+jiff-sqlx = { version = "0.2", features = ["postgres"] }
 dotenvy = "0.15"
 espr = { path = "../espr" }
 espr-derive = { path = "../espr-derive" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
-sqlx = { version = "0.9.0", features = ["chrono", "postgres", "runtime-tokio"] }
+sqlx = { version = "0.9.0", features = ["postgres", "runtime-tokio"] }
 tokio = { version = "1.54.1", features = ["full"] }
 tower-http = { version = "0.7.1", features = ["trace"] }
 tracing = "0.1.44"

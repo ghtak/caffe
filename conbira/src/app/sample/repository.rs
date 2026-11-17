@@ -24,8 +24,8 @@ pub async fn insert(handle: &mut Handle<'_>, sample: &Sample) -> Result<()> {
     )
     .bind(sample.id)
     .bind(&sample.name)
-    .bind(sample.created_at)
-    .bind(sample.updated_at)
+    .bind(jiff_sqlx::Timestamp::from(sample.created_at))
+    .bind(jiff_sqlx::Timestamp::from(sample.updated_at))
     .execute(handle.conn())
     .await
     .map_err(|error| {
@@ -41,7 +41,7 @@ pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<()> {
     sqlx::query("UPDATE conbira_sample SET name = $2, updated_at = $3 WHERE id = $1")
         .bind(sample.id)
         .bind(&sample.name)
-        .bind(sample.updated_at)
+        .bind(jiff_sqlx::Timestamp::from(sample.updated_at))
         .execute(handle.conn())
         .await
         .map_err(|error| {
@@ -96,7 +96,7 @@ mod tests {
     async fn inserts_reads_updates_and_deletes_sample() -> anyhow::Result<()> {
         let mut connection = setup().await?;
         let mut handle = connection.handle();
-        let created_at = chrono::DateTime::from_timestamp(1_700_000_000, 0).unwrap();
+        let created_at = jiff::Timestamp::from_second(1_700_000_000).unwrap();
         let mut sample = Sample {
             id: 42,
             name: "first".into(),
@@ -133,7 +133,7 @@ mod tests {
 
         // 수정한 이름과 수정 시각이 반영되고 생성 시각은 유지된다.
         sample.name = "updated".into();
-        sample.updated_at = created_at + chrono::Duration::seconds(60);
+        sample.updated_at = created_at + jiff::SignedDuration::from_secs(60);
         update(&mut handle, &sample).await?;
         assert_eq!(find_by_id(&mut handle, sample.id).await?, Some(sample));
 

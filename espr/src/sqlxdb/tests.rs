@@ -47,14 +47,14 @@ pub mod sample {
     }
 
     pub mod entity {
-        use chrono::Utc;
-
         #[derive(Debug, PartialEq, sqlx::FromRow)]
         pub struct Sample {
             pub id: i64,
             pub name: String,
-            pub created_at: chrono::DateTime<Utc>,
-            pub updated_at: chrono::DateTime<Utc>,
+            #[sqlx(try_from = "jiff_sqlx::Timestamp")]
+            pub created_at: jiff::Timestamp,
+            #[sqlx(try_from = "jiff_sqlx::Timestamp")]
+            pub updated_at: jiff::Timestamp,
         }
     }
 
@@ -83,8 +83,8 @@ pub mod sample {
             )
             .bind(record.id)
             .bind(&record.name)
-            .bind(record.created_at)
-            .bind(record.updated_at)
+            .bind(jiff_sqlx::Timestamp::from(record.created_at))
+            .bind(jiff_sqlx::Timestamp::from(record.updated_at))
             .execute(handle.conn())
             .await?;
             Ok(())
@@ -97,7 +97,7 @@ pub mod sample {
             sqlx::query("UPDATE sample SET name = $2, updated_at = $3 WHERE id = $1")
                 .bind(record.id)
                 .bind(&record.name)
-                .bind(record.updated_at)
+                .bind(jiff_sqlx::Timestamp::from(record.updated_at))
                 .execute(handle.conn())
                 .await?;
             Ok(())
@@ -113,9 +113,7 @@ pub mod sample {
     }
 
     fn sample() -> entity::Sample {
-        use chrono::TimeZone as _;
-
-        let time = chrono::Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let time = jiff::Timestamp::from_second(1_704_067_200).unwrap();
         entity::Sample {
             id: 1,
             name: "sample".into(),
@@ -148,7 +146,7 @@ pub mod sample {
         let mut sample = sample();
         repository::insert(&mut conn.handle(), &sample).await?;
         sample.name = "updated".into();
-        sample.updated_at += chrono::Duration::seconds(1);
+        sample.updated_at += jiff::SignedDuration::from_secs(1);
 
         repository::update(&mut conn.handle(), &sample).await?;
 
