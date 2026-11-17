@@ -7,6 +7,8 @@ use tower_http::trace::TraceLayer;
 use crate::Error;
 use crate::app::Container;
 
+pub mod response;
+
 pub fn router(container: Arc<Container>) -> crate::Result<axum::Router> {
     let router = axum::Router::new().route("/api/health", get(|| async { "ok" }));
 

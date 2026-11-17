@@ -574,8 +574,10 @@ dependencies = [
  "dotenvy",
  "espr",
  "serde",
+ "serde_json",
  "sqlx",
  "tokio",
+ "tower",
  "tower-http",
  "tracing",
 ]
