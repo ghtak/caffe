@@ -1,0 +1,18 @@
+@httpServer = http://127.0.0.1:18080
+
+### 샘플 생성
+# @name createSample
+POST {{httpServer}}/api/sample
+Content-Type: application/json
+
+{
+  "name": "sample"
+}
+
+### 생성 요청 실행 후 응답의 ID로 샘플 수정
+PUT {{httpServer}}/api/sample/{{createSample.response.body.$.data.id}}
+Content-Type: application/json
+
+{
+  "name": "updated sample"
+}

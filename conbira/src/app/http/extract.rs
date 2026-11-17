@@ -1,9 +1,36 @@
-use axum::extract::{FromRequest, Json, Request};
+use axum::extract::{FromRequest, FromRequestParts, Json, Path, Request};
+use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use serde::de::DeserializeOwned;
 
 use super::response::ApiResponse;
 use crate::{Code, Error};
+
+/// 공통 API 오류 응답을 사용하는 경로 파라미터.
+pub struct ApiPath<T>(pub T);
+
+impl<S, T> FromRequestParts<S> for ApiPath<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned + Send,
+{
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let Path(value) = Path::<T>::from_request_parts(parts, state)
+            .await
+            .map_err(|error| {
+                let mapped = if error.status().is_server_error() {
+                    Error::internal("Internal server error")
+                } else {
+                    Error::new(Code::InvalidRequest, "Invalid request path")
+                };
+                let error = mapped.at("http.extract.path").cause(error);
+                ApiResponse::from(error).into_response()
+            })?;
+        Ok(Self(value))
+    }
+}
 
 /// 공통 API 오류 응답을 사용하는 JSON 요청 본문.
 pub struct ApiJson<T>(pub T);
@@ -39,13 +66,13 @@ mod tests {
     use axum::Router;
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
-    use axum::routing::post;
+    use axum::routing::{get, post};
     use espr_derive::Validate;
     use serde::Deserialize;
     use serde_json::json;
     use tower::ServiceExt;
 
-    use super::ApiJson;
+    use super::{ApiJson, ApiPath};
 
     #[derive(Deserialize, Validate)]
     struct Input {
@@ -53,6 +80,54 @@ mod tests {
     }
 
     async fn handler(ApiJson(input): ApiJson<Input>) -> String { input.value.to_string() }
+
+    #[tokio::test]
+    async fn path_extracts_valid_id_and_returns_common_error_for_invalid_id() {
+        let router = Router::new().route(
+            "/{id}",
+            get(|ApiPath(id): ApiPath<i64>| async move { id.to_string() }),
+        );
+
+        let response = router
+            .clone()
+            .oneshot(Request::get("/42").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        // 숫자 ID가 핸들러에 전달된다.
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            &to_bytes(response.into_body(), 4096).await.unwrap()[..],
+            b"42"
+        );
+
+        let response = router
+            .oneshot(Request::get("/invalid").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        // 변환할 수 없는 ID는 공통 오류 응답을 반환한다.
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            json!({"code": "INVALID_REQUEST", "message": "Invalid request path"})
+        );
+    }
+
+    #[tokio::test]
+    async fn path_configuration_errors_return_internal_error() {
+        let router = Router::new().route("/", get(|ApiPath(_): ApiPath<i64>| async { "ok" }));
+        let response = router
+            .oneshot(Request::get("/").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        // 서버의 경로 설정 오류는 클라이언트 요청 오류로 취급하지 않는다.
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            json!({"code": "INTERNAL", "message": "Internal server error"})
+        );
+    }
 
     #[derive(Deserialize)]
     struct CheckedInput {

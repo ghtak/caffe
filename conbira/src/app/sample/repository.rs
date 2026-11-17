@@ -17,7 +17,6 @@ pub async fn insert(handle: &mut Handle<'_>, sample: &NewSample) -> Result<Sampl
     .internal("Failed to insert sample", "sample.repository.insert")
 }
 
-#[allow(dead_code)]
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Sample>> {
     sqlx::query_as::<_, Sample>(
         "SELECT id, name, created_at, updated_at FROM conbira_sample WHERE id = $1",
@@ -28,17 +27,15 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Sampl
     .internal("Failed to find sample", "sample.repository.find_by_id")
 }
 
-#[allow(dead_code)]
-pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<()> {
-    sqlx::query(
-        "UPDATE conbira_sample SET name = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<Option<Sample>> {
+    sqlx::query_as::<_, Sample>(
+        "UPDATE conbira_sample SET name = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, name, created_at, updated_at",
     )
     .bind(sample.id)
     .bind(&sample.name)
-    .execute(handle.conn())
+    .fetch_optional(handle.conn())
     .await
-    .internal("Failed to update sample", "sample.repository.update")?;
-    Ok(())
+    .internal("Failed to update sample", "sample.repository.update")
 }
 
 #[allow(dead_code)]
@@ -126,9 +123,10 @@ mod tests {
             .execute(handle.conn())
             .await?;
         sample.updated_at = old_timestamp;
-        update(&mut handle, &sample).await?;
+        let returned = update(&mut handle, &sample).await?.unwrap();
         let id = sample.id;
         let updated = find_by_id(&mut handle, id).await?.unwrap();
+        assert_eq!(returned, updated);
         assert_eq!(updated.name, "updated");
         assert_eq!(updated.created_at, sample.created_at);
         assert!(updated.updated_at > old_timestamp);
@@ -136,6 +134,8 @@ mod tests {
         // 삭제 후 해당 ID는 더 이상 조회되지 않는다.
         delete(&mut handle, id).await?;
         assert_eq!(find_by_id(&mut handle, id).await?, None);
+        // 존재하지 않는 ID의 수정은 결과를 반환하지 않는다.
+        assert_eq!(update(&mut handle, &sample).await?, None);
         Ok(())
     }
 }
