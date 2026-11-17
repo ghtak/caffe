@@ -34,6 +34,6 @@ pub mod usecase {
             .internal("Failed to acquire sample connection", "sample.read")?;
         repository::find_by_id(&mut connection.handle(), id)
             .await?
-            .ok_or_else(|| Error::new(Code::InvalidRequest, "Sample not found").at("sample.read"))
+            .ok_or_else(|| Error::new(Code::NotFound, "Sample not found").at("sample.read"))
     }
 }

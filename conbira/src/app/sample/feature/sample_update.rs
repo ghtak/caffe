@@ -54,12 +54,10 @@ pub mod usecase {
         let mut handle = connection.handle();
         let mut sample = repository::find_by_id(&mut handle, command.id)
             .await?
-            .ok_or_else(|| {
-                Error::new(Code::InvalidRequest, "Sample not found").at("sample.update")
-            })?;
+            .ok_or_else(|| Error::new(Code::NotFound, "Sample not found").at("sample.update"))?;
         sample.name = command.name;
         repository::update(&mut handle, &sample)
             .await?
-            .ok_or_else(|| Error::new(Code::InvalidRequest, "Sample not found").at("sample.update"))
+            .ok_or_else(|| Error::new(Code::NotFound, "Sample not found").at("sample.update"))
     }
 }

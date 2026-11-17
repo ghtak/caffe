@@ -85,6 +85,7 @@ fn error_mapping(code: Code) -> (StatusCode, &'static str) {
         Code::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL"),
         Code::InvalidConfiguration => (StatusCode::INTERNAL_SERVER_ERROR, "INVALID_CONFIGURATION"),
         Code::InvalidRequest => (StatusCode::BAD_REQUEST, "INVALID_REQUEST"),
+        Code::NotFound => (StatusCode::NOT_FOUND, "NOT_FOUND"),
     }
 }
 
@@ -208,6 +209,7 @@ mod tests {
                 StatusCode::BAD_REQUEST,
                 "INVALID_REQUEST",
             ),
+            (Code::NotFound, StatusCode::NOT_FOUND, "NOT_FOUND"),
         ] {
             let error = Error::new(code, "공개 오류 메시지")
                 .at("secret location")
