@@ -65,7 +65,8 @@ mod tests {
 
     #[test]
     fn loads_test_config_from_toml() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/config.toml");
+        let path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+            .join("tests/fixtures/config.toml");
         let config: TestConfig = load(path, None).unwrap();
 
         assert_eq!(config.sample.id, 42);
@@ -94,7 +95,8 @@ mod tests {
 
     #[test]
     fn requires_config_file() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/missing.toml");
+        let path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+            .join("tests/fixtures/missing.toml");
         let result = load::<TestConfig>(path, None);
 
         assert!(matches!(result, Err(Error::ConfigError(_))));
