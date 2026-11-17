@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use axum::http::StatusCode;
 use axum::routing::get;
 use espr::validate::Validate;
 use tower_http::trace::TraceLayer;
@@ -11,9 +12,9 @@ pub mod extract;
 pub mod response;
 
 pub fn router(container: Arc<Container>) -> crate::Result<axum::Router> {
-    let router = axum::Router::new().route("/api/health", get(|| async { "ok" }));
-
-    let router = router.nest("/api/sample", super::sample::router());
+    let router = axum::Router::new()
+        .route("/api/health", get(|| async { StatusCode::OK }))
+        .nest("/api/sample", super::sample::router());
 
     let router = match &container.config.http.static_files {
         Some(static_files) => {
