@@ -1,10 +1,39 @@
-use axum::extract::{FromRequest, FromRequestParts, Json, Path, Request};
+use axum::extract::{FromRequest, FromRequestParts, Json, Path, Query, Request};
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use serde::de::DeserializeOwned;
 
 use super::response::ApiResponse;
 use crate::{Code, Error};
+
+/// 공통 API 오류 응답을 사용하는 쿼리 파라미터.
+pub struct ApiQuery<T>(pub T);
+
+impl<S, T> FromRequestParts<S> for ApiQuery<T>
+where
+    S: Send + Sync,
+    T: DeserializeOwned + espr::validate::Validate,
+    T::Error: Into<Error>,
+{
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let Query(value) = Query::<T>::from_request_parts(parts, state)
+            .await
+            .map_err(|error| {
+                ApiResponse::from(
+                    Error::new(Code::InvalidRequest, "Invalid request query")
+                        .at("http.extract.query")
+                        .cause(error),
+                )
+                .into_response()
+            })?;
+        value
+            .validate()
+            .map_err(|error| ApiResponse::from(error.into()).into_response())?;
+        Ok(Self(value))
+    }
+}
 
 /// 공통 API 오류 응답을 사용하는 경로 파라미터.
 pub struct ApiPath<T>(pub T);
@@ -72,7 +101,7 @@ mod tests {
     use serde_json::json;
     use tower::ServiceExt;
 
-    use super::{ApiJson, ApiPath};
+    use super::{ApiJson, ApiPath, ApiQuery};
 
     #[derive(Deserialize, Validate)]
     struct Input {
@@ -80,6 +109,29 @@ mod tests {
     }
 
     async fn handler(ApiJson(input): ApiJson<Input>) -> String { input.value.to_string() }
+
+    #[tokio::test]
+    async fn invalid_query_returns_common_error_response() {
+        #[derive(Deserialize, Validate)]
+        struct Search {
+            page: u32,
+        }
+        let router = Router::new().route(
+            "/",
+            get(|ApiQuery(query): ApiQuery<Search>| async move { query.page.to_string() }),
+        );
+        let response = router
+            .oneshot(Request::get("/?page=invalid").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        // 숫자가 아닌 페이지는 공통 요청 오류를 반환한다.
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            json!({"code": "INVALID_REQUEST", "message": "Invalid request query"})
+        );
+    }
 
     #[tokio::test]
     async fn path_extracts_valid_id_and_returns_common_error_for_invalid_id() {
@@ -146,6 +198,25 @@ mod tests {
             }
             Ok(())
         }
+    }
+
+    #[tokio::test]
+    async fn query_validation_failure_returns_request_error() {
+        let router = Router::new().route(
+            "/",
+            get(|ApiQuery(_): ApiQuery<CheckedInput>| async { "ok" }),
+        );
+        let response = router
+            .oneshot(Request::get("/?name=").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        // 쿼리 검증 오류의 코드와 공개 메시지가 응답에 전달된다.
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            json!({"code": "INVALID_REQUEST", "message": "Name is required"})
+        );
     }
 
     #[tokio::test]

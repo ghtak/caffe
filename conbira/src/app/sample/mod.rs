@@ -9,10 +9,12 @@ pub fn router() -> axum::Router<Arc<Container>> {
     axum::Router::new()
         .route(
             "/",
-            axum::routing::post(feature::sample_create::endpoint::handler),
+            axum::routing::post(feature::sample_create::endpoint::handler)
+                .get(feature::sample_search::endpoint::handler),
         )
         .route(
             "/{id}",
-            axum::routing::put(feature::sample_update::endpoint::handler),
+            axum::routing::put(feature::sample_update::endpoint::handler)
+                .get(feature::sample_read::endpoint::handler),
         )
 }

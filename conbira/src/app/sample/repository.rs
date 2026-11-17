@@ -27,6 +27,34 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Sampl
     .internal("Failed to find sample", "sample.repository.find_by_id")
 }
 
+pub struct Criteria<'a> {
+    pub name: Option<&'a str>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+pub async fn search(handle: &mut Handle<'_>, criteria: &Criteria<'_>) -> Result<Vec<Sample>> {
+    let mut query = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT id, name, created_at, updated_at FROM conbira_sample",
+    );
+    if let Some(name) = criteria.name {
+        query
+            .push(" WHERE strpos(name, ")
+            .push_bind(name)
+            .push(") > 0");
+    }
+    query
+        .push(" ORDER BY id LIMIT ")
+        .push_bind(criteria.limit)
+        .push(" OFFSET ")
+        .push_bind(criteria.offset);
+    query
+        .build_query_as::<Sample>()
+        .fetch_all(handle.conn())
+        .await
+        .internal("Failed to search samples", "sample.repository.search")
+}
+
 pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<Option<Sample>> {
     sqlx::query_as::<_, Sample>(
         "UPDATE conbira_sample SET name = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, name, created_at, updated_at",
@@ -90,6 +118,70 @@ mod tests {
         assert!(sample.id > 0);
         assert_eq!(sample.name, "created sample");
         assert_eq!(sample.created_at, sample.updated_at);
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[ignore = "requires CONBIRA_TEST_DATABASE_URL"]
+    async fn searches_literal_names_in_id_order_with_limit_and_offset() -> anyhow::Result<()> {
+        let mut connection = setup().await?;
+        let mut handle = connection.handle();
+        for name in ["a%first", "other", "a%second", "afirst"] {
+            insert(&mut handle, &NewSample { name: name.into() }).await?;
+        }
+
+        let first = search(
+            &mut handle,
+            &Criteria {
+                name: Some("a%"),
+                limit: 1,
+                offset: 0,
+            },
+        )
+        .await?;
+        let second = search(
+            &mut handle,
+            &Criteria {
+                name: Some("a%"),
+                limit: 1,
+                offset: 1,
+            },
+        )
+        .await?;
+        // 퍼센트는 와일드카드가 아닌 문자로 취급하고 ID 순서로 페이지를 나눈다.
+        assert_eq!(
+            first.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+            ["a%first"]
+        );
+        assert_eq!(
+            second.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+            ["a%second"]
+        );
+        assert!(
+            search(
+                &mut handle,
+                &Criteria {
+                    name: Some("missing"),
+                    limit: 2,
+                    offset: 0
+                }
+            )
+            .await?
+            .is_empty()
+        );
+        assert_eq!(
+            search(
+                &mut handle,
+                &Criteria {
+                    name: None,
+                    limit: 5,
+                    offset: 0
+                }
+            )
+            .await?
+            .len(),
+            4
+        );
         Ok(())
     }
 
