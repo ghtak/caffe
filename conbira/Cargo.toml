@@ -15,7 +15,7 @@ path = "src/cli/main.rs"
 anyhow = "1"
 axum = "0.8.9"
 clap = { version = "4", features = ["derive"] }
-jiff = "0.2"
+jiff = { version = "0.2", features = ["serde"] }
 jiff-sqlx = { version = "0.2", features = ["postgres"] }
 dotenvy = "0.15"
 espr = { path = "../espr" }

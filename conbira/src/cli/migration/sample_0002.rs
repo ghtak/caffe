@@ -25,10 +25,11 @@ impl Migration for InsertSamples {
                     .cause(error)
             })?;
             sqlx::query(
-                "INSERT INTO conbira_sample (id, name, created_at, updated_at)
-                 SELECT id, 'sample ' || id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                 FROM generate_series(1, 10) AS id
-                 ON CONFLICT (id) DO NOTHING",
+                "INSERT INTO conbira_sample (name)
+                 SELECT 'sample ' || n FROM generate_series(1, 10) AS n
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM conbira_sample WHERE name = 'sample ' || n
+                 )",
             )
             .execute(connection.handle().conn())
             .await
