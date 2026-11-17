@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use conbira::config::Config;
+use conbira::error::ResultExt as _;
 use conbira::{Error, Result};
 
 use crate::{migration, option};
@@ -61,22 +62,16 @@ fn generate_tls(config: &Config, names: &[String]) -> Result<()> {
         .at("cli.generate_tls")
     })?;
     create_parent_directories(&[&tls.cert_path, &tls.key_path])?;
-    espr::tls::generate(tls, names).map_err(|error| {
-        Error::internal("Failed to generate TLS certificate")
-            .at("cli.generate_tls")
-            .cause(error)
-    })?;
+    espr::tls::generate(tls, names)
+        .internal("Failed to generate TLS certificate", "cli.generate_tls")?;
     Ok(())
 }
 
 fn generate_ed25519(config: &Config) -> Result<()> {
     let keys = &config.jwt.ed25519;
     create_parent_directories(&[&keys.key_path, &keys.public_key_path])?;
-    espr::jwt::ed25519::generate(keys).map_err(|error| {
-        Error::internal("Failed to generate Ed25519 keys")
-            .at("cli.generate_ed25519")
-            .cause(error)
-    })?;
+    espr::jwt::ed25519::generate(keys)
+        .internal("Failed to generate Ed25519 keys", "cli.generate_ed25519")?;
     Ok(())
 }
 
@@ -86,11 +81,10 @@ fn create_parent_directories(paths: &[&Path]) -> Result<()> {
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
         {
-            std::fs::create_dir_all(parent).map_err(|error| {
-                Error::internal("Failed to create parent directory")
-                    .at("cli.create_parent_directories")
-                    .cause(error)
-            })?;
+            std::fs::create_dir_all(parent).internal(
+                "Failed to create parent directory",
+                "cli.create_parent_directories",
+            )?;
         }
     }
     Ok(())

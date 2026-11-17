@@ -9,6 +9,7 @@ use std::pin::Pin;
 
 use conbira::Error;
 use conbira::config::Config;
+use conbira::error::ResultExt as _;
 use espr::sqlxdb::Database;
 use sqlx::Postgres;
 
@@ -60,31 +61,25 @@ fn collect(
     let mut tasks: Vec<_> = migrations.into_iter().map(MigrationTask::Code).collect();
     for directory in directories {
         let directory = directory.as_ref();
-        let entries = std::fs::read_dir(directory).map_err(|error| {
-            Error::internal(format!(
-                "Failed to read migration directory {}",
-                directory.display()
-            ))
-            .at("cli.migration.collect")
-            .cause(error)
-        })?;
+        let entries = std::fs::read_dir(directory).internal(
+            format!("Failed to read migration directory {}", directory.display()),
+            "cli.migration.collect",
+        )?;
         for entry in entries {
-            let entry = entry.map_err(|error| {
-                Error::internal(format!("Failed to read entry in {}", directory.display()))
-                    .at("cli.migration.collect")
-                    .cause(error)
-            })?;
+            let entry = entry.internal(
+                format!("Failed to read entry in {}", directory.display()),
+                "cli.migration.collect",
+            )?;
             let path = entry.path();
             if path.extension().is_none_or(|ext| ext != "sql") {
                 continue;
             }
             if !entry
                 .file_type()
-                .map_err(|error| {
-                    Error::internal(format!("Failed to inspect {}", path.display()))
-                        .at("cli.migration.collect")
-                        .cause(error)
-                })?
+                .internal(
+                    format!("Failed to inspect {}", path.display()),
+                    "cli.migration.collect",
+                )?
                 .is_file()
             {
                 return Err(Error::internal(format!(
@@ -144,13 +139,10 @@ pub(crate) async fn run(
     migrations: Vec<Box<dyn Migration>>,
 ) -> conbira::Result<()> {
     let tasks = collect(directories, migrations)?;
-    let database = Database::<Postgres>::new(&config.database)
-        .await
-        .map_err(|error| {
-            Error::internal("Failed to initialize migration database")
-                .at("cli.migration.run")
-                .cause(error)
-        })?;
+    let database = Database::<Postgres>::new(&config.database).await.internal(
+        "Failed to initialize migration database",
+        "cli.migration.run",
+    )?;
     let total = tasks.len();
     println!("Running {total} migration(s)");
     for task in tasks {
@@ -163,32 +155,23 @@ pub(crate) async fn run(
         let result: conbira::Result<()> = async {
             match task {
                 MigrationTask::Sql(migration) => {
-                    let sql = std::fs::read_to_string(&migration.path).map_err(|error| {
-                        Error::internal(format!(
-                            "Failed to read migration {}",
-                            migration.path.display()
-                        ))
-                        .at("cli.migration.run")
-                        .cause(error)
-                    })?;
-                    let mut connection = database.conn().await.map_err(|error| {
-                        Error::internal("Failed to acquire migration connection")
-                            .at("cli.migration.run")
-                            .cause(error)
-                    })?;
+                    let sql = std::fs::read_to_string(&migration.path).internal(
+                        format!("Failed to read migration {}", migration.path.display()),
+                        "cli.migration.run",
+                    )?;
+                    let mut connection = database.conn().await.internal(
+                        "Failed to acquire migration connection",
+                        "cli.migration.run",
+                    )?;
                     // The SQL file is the migration itself, not interpolated
                     // user data.
                     sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
                         .execute(connection.handle().conn())
                         .await
-                        .map_err(|error| {
-                            Error::internal(format!(
-                                "Failed to execute migration {}",
-                                migration.path.display()
-                            ))
-                            .at("cli.migration.run")
-                            .cause(error)
-                        })?;
+                        .internal(
+                            format!("Failed to execute migration {}", migration.path.display()),
+                            "cli.migration.run",
+                        )?;
                 }
                 MigrationTask::Code(migration) => migration.run(&database).await?,
             }

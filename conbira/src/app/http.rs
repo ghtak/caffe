@@ -4,8 +4,8 @@ use axum::routing::get;
 use espr::validate::Validate;
 use tower_http::trace::TraceLayer;
 
-use crate::Error;
 use crate::app::Container;
+use crate::error::ResultExt as _;
 
 pub mod extract;
 pub mod response;
@@ -17,11 +17,10 @@ pub fn router(container: Arc<Container>) -> crate::Result<axum::Router> {
 
     let router = match &container.config.http.static_files {
         Some(static_files) => {
-            static_files.validate().map_err(|e| {
-                Error::internal("static files validation failed")
-                    .at("http.router.static_files")
-                    .cause(e)
-            })?;
+            static_files.validate().internal(
+                "Failed to validate static files",
+                "http.router.static_files",
+            )?;
             router.merge(static_files.as_router())
         }
         None => router,

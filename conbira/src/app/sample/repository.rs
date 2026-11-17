@@ -1,6 +1,7 @@
+use crate::Result;
 use crate::app::container::db::Handle;
 use crate::app::sample::entity::Sample;
-use crate::{Error, Result};
+use crate::error::ResultExt as _;
 
 pub struct NewSample {
     pub name: String,
@@ -13,11 +14,7 @@ pub async fn insert(handle: &mut Handle<'_>, sample: &NewSample) -> Result<Sampl
     .bind(&sample.name)
     .fetch_one(handle.conn())
     .await
-    .map_err(|error| {
-        Error::internal("Failed to insert sample")
-            .at("sample.repository.insert")
-            .cause(error)
-    })
+    .internal("Failed to insert sample", "sample.repository.insert")
 }
 
 #[allow(dead_code)]
@@ -28,11 +25,7 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Sampl
     .bind(id)
     .fetch_optional(handle.conn())
     .await
-    .map_err(|error| {
-        Error::internal("Failed to find sample")
-            .at("sample.repository.find_by_id")
-            .cause(error)
-    })
+    .internal("Failed to find sample", "sample.repository.find_by_id")
 }
 
 #[allow(dead_code)]
@@ -44,11 +37,7 @@ pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<()> {
     .bind(&sample.name)
     .execute(handle.conn())
     .await
-    .map_err(|error| {
-        Error::internal("Failed to update sample")
-            .at("sample.repository.update")
-            .cause(error)
-    })?;
+    .internal("Failed to update sample", "sample.repository.update")?;
     Ok(())
 }
 
@@ -58,11 +47,7 @@ pub async fn delete(handle: &mut Handle<'_>, id: i64) -> Result<()> {
         .bind(id)
         .execute(handle.conn())
         .await
-        .map_err(|error| {
-            Error::internal("Failed to delete sample")
-                .at("sample.repository.delete")
-                .cause(error)
-        })?;
+        .internal("Failed to delete sample", "sample.repository.delete")?;
     Ok(())
 }
 

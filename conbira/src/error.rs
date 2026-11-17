@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 
 /// 클라이언트가 오류를 구분하고 처리하는 기준.
@@ -9,7 +10,7 @@ pub enum Code {
 }
 
 impl Error {
-    pub fn new(code: Code, message: impl Into<String>) -> Self {
+    pub fn new(code: Code, message: impl Into<Cow<'static, str>>) -> Self {
         Self {
             code,
             message: message.into(),
@@ -18,7 +19,9 @@ impl Error {
         }
     }
 
-    pub fn internal(message: impl Into<String>) -> Self { Self::new(Code::Internal, message) }
+    pub fn internal(message: impl Into<Cow<'static, str>>) -> Self {
+        Self::new(Code::Internal, message)
+    }
 
     pub fn at(mut self, at: &'static str) -> Self {
         self.at = Some(at);
@@ -41,7 +44,7 @@ impl Error {
 #[derive(Debug)]
 pub struct Error {
     pub code: Code,
-    pub message: String,
+    pub message: Cow<'static, str>,
     pub at: Option<&'static str>,
     pub cause: Option<anyhow::Error>,
 }
@@ -72,3 +75,33 @@ impl From<std::convert::Infallible> for Error {
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub trait ResultExt<T> {
+    fn internal(self, message: impl Into<Cow<'static, str>>, at: &'static str) -> crate::Result<T>;
+    fn invalid_request(
+        self,
+        message: impl Into<Cow<'static, str>>,
+        at: &'static str,
+    ) -> crate::Result<T>;
+}
+
+impl<T, E> ResultExt<T> for std::result::Result<T, E>
+where
+    E: Into<anyhow::Error>,
+{
+    fn internal(self, message: impl Into<Cow<'static, str>>, at: &'static str) -> crate::Result<T> {
+        self.map_err(|error| Error::internal(message.into()).at(at).cause(error))
+    }
+
+    fn invalid_request(
+        self,
+        message: impl Into<Cow<'static, str>>,
+        at: &'static str,
+    ) -> crate::Result<T> {
+        self.map_err(|error| {
+            Error::new(Code::InvalidRequest, message.into())
+                .at(at)
+                .cause(error)
+        })
+    }
+}

@@ -98,7 +98,7 @@ impl From<Error> for ApiResponse<()> {
             "HTTP request failed"
         );
         let (status, code) = error_mapping(error.code);
-        Self::error(status, code, error.message)
+        Self::error(status, code, error.message.into())
     }
 }
 

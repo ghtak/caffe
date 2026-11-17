@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use crate::error::ResultExt as _;
+
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
     pub trace: espr::tracing::Config,
@@ -21,10 +23,7 @@ impl Config {
                 .at("config.load.env")
                 .cause(error)),
         }?;
-        espr::config::load(path, Some("CONBIRA")).map_err(|error| {
-            crate::Error::internal("Failed to load configuration")
-                .at("config.load")
-                .cause(error)
-        })
+        espr::config::load(path, Some("CONBIRA"))
+            .internal("Failed to load configuration", "config.load")
     }
 }
