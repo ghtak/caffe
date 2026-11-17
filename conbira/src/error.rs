@@ -17,9 +17,7 @@ impl Error {
         }
     }
 
-    pub fn internal(message: impl Into<String>) -> Self {
-        Self::new(Code::Internal, message)
-    }
+    pub fn internal(message: impl Into<String>) -> Self { Self::new(Code::Internal, message) }
 
     pub fn at(mut self, at: &'static str) -> Self {
         self.at = Some(at);

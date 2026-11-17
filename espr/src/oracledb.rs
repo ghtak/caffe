@@ -49,7 +49,8 @@ impl Database {
     /// Run database work on a blocking thread using the shared pool.
     /// Acquire connections and commit or roll back transactions inside the
     /// closure. Dropping a connection rolls back any pending transaction.
-    /// Once started, the blocking closure continues even if its future is dropped.
+    /// Once started, the blocking closure continues even if its future is
+    /// dropped.
     pub async fn interact<F, T>(&self, f: F) -> Result<T>
     where
         F: FnOnce(&oracledb::Pool) -> Result<T> + Send + 'static,
@@ -57,8 +58,8 @@ impl Database {
     {
         let pool = Arc::clone(&self.pool);
         tokio::task::spawn_blocking(move || f(&pool))
-        .await
-        .map_err(anyhow::Error::new)?
+            .await
+            .map_err(anyhow::Error::new)?
     }
 }
 

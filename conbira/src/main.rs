@@ -48,7 +48,7 @@ async fn main() -> conbira::Result<()> {
             .cause(error)
     })?;
 
-    let _shutdown = guard.shutdown().await.map_err(|error| {
+    guard.shutdown().await.map_err(|error| {
         Error::internal("Failed to shut down tracing")
             .at("main.tracing.shutdown")
             .cause(error)

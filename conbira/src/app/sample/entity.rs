@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, sqlx::FromRow)]
 pub struct Sample {
     pub id: i64,

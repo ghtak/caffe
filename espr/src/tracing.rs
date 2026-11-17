@@ -47,13 +47,9 @@ pub(crate) fn extract_trace_context(headers: &HeaderMap) -> opentelemetry::Conte
 struct HeaderExtractor<'a>(&'a HeaderMap);
 
 impl Extractor for HeaderExtractor<'_> {
-    fn get(&self, key: &str) -> Option<&str> {
-        self.0.get(key)?.to_str().ok()
-    }
+    fn get(&self, key: &str) -> Option<&str> { self.0.get(key)?.to_str().ok() }
 
-    fn keys(&self) -> Vec<&str> {
-        self.0.keys().map(HeaderName::as_str).collect()
-    }
+    fn keys(&self) -> Vec<&str> { self.0.keys().map(HeaderName::as_str).collect() }
 }
 
 struct HeaderInjector<'a>(&'a mut HeaderMap);
@@ -102,9 +98,7 @@ fn default_buffered_lines_limit() -> usize {
     tracing_appender::non_blocking::DEFAULT_BUFFERED_LINES_LIMIT
 }
 
-fn default_lossy() -> bool {
-    true
-}
+fn default_lossy() -> bool { true }
 
 #[must_use = "keep this guard alive until application shutdown"]
 pub struct TracingGuard {

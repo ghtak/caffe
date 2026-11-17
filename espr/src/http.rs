@@ -136,7 +136,7 @@ impl Server {
             result = &mut server => {
                 result.context("server terminated unexpectedly")?;
             }
-            () = shutdown_signal(address.clone()) => {
+            () = shutdown_signal(address) => {
                 handle.graceful_shutdown(Some(Duration::from_secs(30)));
                 server.await.context("server shutdown failed")?;
             }

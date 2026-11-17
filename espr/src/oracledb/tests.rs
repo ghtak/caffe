@@ -36,8 +36,9 @@ async fn connects_to_database() -> Result<()> {
 }
 
 mod sample {
-    use super::*;
     use oracledb::{Connection, OracleTimestamp};
+
+    use super::*;
 
     fn setup(conn: &Connection) -> Result<()> {
         conn.execute(
@@ -70,7 +71,8 @@ mod sample {
     }
 
     mod repository {
-        use super::{Connection, OracleTimestamp, entity::Sample};
+        use super::entity::Sample;
+        use super::{Connection, OracleTimestamp};
         use crate::Result;
 
         pub fn find_by_id(conn: &Connection, id: i64) -> Result<Option<Sample>> {
@@ -224,7 +226,8 @@ mod sample {
             let stored = repository::find_by_id(&conn, sample.id)?;
             assert_eq!(stored.as_ref(), Some(&sample));
 
-            // Update and roll back, then verify the committed record is unchanged.
+            // Update and roll back, then verify the committed record is
+            // unchanged.
             sample.name = "rolled back".into();
             repository::update(&conn, &sample)?;
             let changed = repository::find_by_id(&conn, sample.id)?;

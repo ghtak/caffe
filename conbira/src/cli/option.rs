@@ -10,7 +10,8 @@ pub(crate) struct CliOptions {
     #[command(subcommand)]
     pub command: Option<Command>,
 
-    /// Generate a self-signed certificate for the given DNS names or IP addresses.
+    /// Generate a self-signed certificate for the given DNS names or IP
+    /// addresses.
     #[arg(long, num_args = 1.., conflicts_with = "generate_ed25519")]
     pub generate_tls: Option<Vec<String>>,
 

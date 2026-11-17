@@ -2,6 +2,7 @@ use crate::app::container::db::Handle;
 use crate::app::sample::entity::Sample;
 use crate::{Error, Result};
 
+#[allow(dead_code)]
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Sample>> {
     sqlx::query_as::<_, Sample>(
         "SELECT id, name, created_at, updated_at FROM conbira_sample WHERE id = $1",
@@ -16,6 +17,7 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Sampl
     })
 }
 
+#[allow(dead_code)]
 pub async fn insert(handle: &mut Handle<'_>, sample: &Sample) -> Result<()> {
     sqlx::query(
         "INSERT INTO conbira_sample (id, name, created_at, updated_at) VALUES ($1, $2, $3, $4)",
@@ -34,6 +36,7 @@ pub async fn insert(handle: &mut Handle<'_>, sample: &Sample) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<()> {
     sqlx::query("UPDATE conbira_sample SET name = $2, updated_at = $3 WHERE id = $1")
         .bind(sample.id)
@@ -49,6 +52,7 @@ pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn delete(handle: &mut Handle<'_>, id: i64) -> Result<()> {
     sqlx::query("DELETE FROM conbira_sample WHERE id = $1")
         .bind(id)

@@ -106,9 +106,7 @@ impl<DB: sqlx::Database> Tx<'_, DB> {
 }
 
 impl<DB: sqlx::Database> Handle<'_, DB> {
-    pub fn conn(&mut self) -> &mut DB::Connection {
-        self.inner
-    }
+    pub fn conn(&mut self) -> &mut DB::Connection { self.inner }
 }
 
 #[cfg(test)]

@@ -14,7 +14,11 @@ pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
     } = options;
     if let Some(option::Command::Migration { directories }) = command {
         if tls_names.is_some() || ed25519_requested {
-            return Err(Error::new(conbira::Code::InvalidConfiguration, "Migration cannot be combined with key generation").at("cli.run"));
+            return Err(Error::new(
+                conbira::Code::InvalidConfiguration,
+                "Migration cannot be combined with key generation",
+            )
+            .at("cli.run"));
         }
         let config = Config::load(&common.config, common.env_file.as_deref())?;
         return migration::run(&config, &directories, code_migrations()).await;
@@ -42,7 +46,8 @@ pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
     }
 }
 
-/// Register code migration implementations here; their `order()` determines execution order.
+/// Register code migration implementations here; their `order()` determines
+/// execution order.
 fn code_migrations() -> Vec<Box<dyn migration::Migration>> {
     vec![Box::new(migration::sample_0002::InsertSamples)]
 }

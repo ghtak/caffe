@@ -10,13 +10,9 @@ use super::{Migration, Order};
 pub(crate) struct InsertSamples;
 
 impl Migration for InsertSamples {
-    fn order(&self) -> Order {
-        2
-    }
+    fn order(&self) -> Order { 2 }
 
-    fn name(&self) -> &'static str {
-        "insert sample data"
-    }
+    fn name(&self) -> &'static str { "insert sample data" }
 
     fn run<'a>(
         &'a self,

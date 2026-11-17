@@ -12,7 +12,8 @@ pub struct Options {
     #[arg(long)]
     pub env_file: Option<PathBuf>,
 
-    /// Generate a self-signed certificate for the given DNS names or IP addresses.
+    /// Generate a self-signed certificate for the given DNS names or IP
+    /// addresses.
     #[arg(long, num_args = 1..)]
     pub generate_tls: Option<Vec<String>>,
 }

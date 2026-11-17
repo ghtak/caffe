@@ -23,9 +23,7 @@ pub(crate) type Order = u64;
 pub(crate) trait Migration {
     fn order(&self) -> Order;
 
-    fn name(&self) -> &'static str {
-        std::any::type_name::<Self>()
-    }
+    fn name(&self) -> &'static str { std::any::type_name::<Self>() }
 
     fn run<'a>(
         &'a self,
@@ -178,8 +176,8 @@ pub(crate) async fn run(
                             .at("cli.migration.run")
                             .cause(error)
                     })?;
-                    // The SQL file is the migration itself, not interpolated user
-                    // data.
+                    // The SQL file is the migration itself, not interpolated
+                    // user data.
                     sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
                         .execute(connection.handle().conn())
                         .await
@@ -214,9 +212,7 @@ mod tests {
     struct Code(Order);
 
     impl Migration for Code {
-        fn order(&self) -> Order {
-            self.0
-        }
+        fn order(&self) -> Order { self.0 }
         fn run<'a>(
             &'a self,
             _: &'a Database<Postgres>,
