@@ -10,6 +10,12 @@ default:
 fmt:
     cargo +nightly fmt --all
 
+# 워크스페이스 서식 및 clippy 검사
+[group: 'workspace']
+check:
+    cargo +nightly fmt --all -- --check
+    cargo clippy --workspace --all-targets --locked -- -D warnings
+
 # 워크스페이스의 기본 테스트 실행 (ignored 제외)
 [group: 'workspace']
 test:

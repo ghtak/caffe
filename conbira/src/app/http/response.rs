@@ -97,7 +97,13 @@ fn error_mapping(code: Code) -> (StatusCode, &'static str) {
 
 impl From<Error> for ApiResponse<()> {
     fn from(error: Error) -> Self {
-        tracing::error!(error = %error, "HTTP request failed");
+        tracing::error!(
+            error.code = ?error.code,
+            error.message = %error.message,
+            error.at = error.at,
+            error.cause = error.cause.as_ref().map(|cause| format!("{cause:#}")),
+            "HTTP request failed"
+        );
         let (status, code) = error_mapping(error.code);
         Self::error(status, code, error.message)
     }
