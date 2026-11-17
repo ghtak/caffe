@@ -5,7 +5,12 @@ ansi = true
 [trace.file]
 filter = "trace"
 directory = "var/log"
-filename_prefix = "espr-cli"
+filename_prefix = "conbira"
+
+[database]
+# Set CONBIRA_DATABASE__URL in .env or the environment.
+url = ""
+max_connections = 5
 
 [http]
 bind_addr = "127.0.0.1:18080"

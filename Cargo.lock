@@ -572,6 +572,7 @@ dependencies = [
  "dotenvy",
  "espr",
  "serde",
+ "sqlx",
  "tokio",
  "tower-http",
  "tracing",

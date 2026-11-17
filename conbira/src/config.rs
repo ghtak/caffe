@@ -3,6 +3,7 @@ use std::path::Path;
 #[derive(serde::Deserialize, Debug, Clone)]
 pub struct Config {
     pub trace: espr::tracing::Config,
+    pub database: espr::sqlxdb::Config,
     pub https: Option<espr::http::Config>,
     pub jwt: Option<espr::jwt::Config>,
 }
@@ -17,6 +18,6 @@ impl Config {
             }
             Err(error) => Err(espr::Error::Internal(error.into())),
         }?;
-        espr::config::load(path, None)
+        espr::config::load(path, Some("CONBIRA"))
     }
 }
