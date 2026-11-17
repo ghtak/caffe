@@ -3,3 +3,7 @@
 
 ### health
 GET {{httpServer}}/api/health
+
+
+### sample
+POST {{httpServer}}/api/sample
