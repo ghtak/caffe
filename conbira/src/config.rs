@@ -4,8 +4,9 @@ use std::path::Path;
 pub struct Config {
     pub trace: espr::tracing::Config,
     pub database: espr::sqlxdb::Config,
-    pub https: Option<espr::http::Config>,
-    pub jwt: Option<espr::jwt::Config>,
+    pub cache: espr::cache::Config,
+    pub http: espr::http::Config,
+    pub jwt: espr::jwt::Config,
 }
 
 impl Config {

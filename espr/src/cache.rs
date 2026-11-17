@@ -57,10 +57,16 @@ impl Cache {
             .runtime(deadpool_redis::Runtime::Tokio1)
             .build()
             .map_err(|error| Error::Internal(anyhow::Error::new(error)))?;
-        let mut conn = pool.get().await?;
+        let cache = Self { pool };
+        cache.ping().await?;
+        Ok(cache)
+    }
+
+    /// Checks that a pooled connection can reach the cache server.
+    pub async fn ping(&self) -> Result<()> {
+        let mut conn = self.pool.get().await?;
         redis::cmd("PING").query_async::<String>(&mut conn).await?;
-        drop(conn);
-        Ok(Self { pool })
+        Ok(())
     }
 
     /// Returns `None` when the key is absent or expired.
@@ -178,6 +184,7 @@ mod tests {
     #[ignore = "requires a Redis or Valkey test server"]
     async fn stores_and_reads_values() -> Result<()> {
         let cache = Cache::new(&config()).await?;
+        cache.ping().await?;
         let key = format!("espr:test:{}:values", std::process::id());
 
         let missing: Option<String> = cache.get(&key).await?;

@@ -33,6 +33,23 @@ async fn main() -> conbira::Result<()> {
         tracing::info!(value, "database connection test succeeded");
     }
 
+    container.cache.ping().await.map_err(|error| {
+        Error::internal("Failed to check cache connection")
+            .at("main.cache.check")
+            .cause(error)
+    })?;
+    tracing::info!("cache connection test succeeded");
+
+    container
+        .http_server
+        .run(axum::Router::new().route("/api/health", axum::routing::get(|| async { "ok" })))
+        .await
+        .map_err(|error| {
+            Error::internal("Failed to run http server")
+                .at("main.http.run")
+                .cause(error)
+        })?;
+
     let _shutdown = guard.shutdown().await.map_err(|error| {
         Error::internal("Failed to shut down tracing")
             .at("main.tracing.shutdown")

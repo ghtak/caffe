@@ -34,17 +34,13 @@ pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
 }
 
 fn generate_tls(config: &Config, names: &[String]) -> Result<()> {
-    let tls = config
-        .https
-        .as_ref()
-        .and_then(|https| https.tls.as_ref())
-        .ok_or_else(|| {
-            Error::new(
-                conbira::Code::InvalidConfiguration,
-                "HTTPS TLS configuration is required",
-            )
-            .at("cli.generate_tls")
-        })?;
+    let tls = config.http.tls.as_ref().ok_or_else(|| {
+        Error::new(
+            conbira::Code::InvalidConfiguration,
+            "HTTP TLS configuration is required",
+        )
+        .at("cli.generate_tls")
+    })?;
     create_parent_directories(&[&tls.cert_path, &tls.key_path])?;
     espr::tls::generate(tls, names).map_err(|error| {
         Error::internal("Failed to generate TLS certificate")
@@ -55,17 +51,7 @@ fn generate_tls(config: &Config, names: &[String]) -> Result<()> {
 }
 
 fn generate_ed25519(config: &Config) -> Result<()> {
-    let keys = &config
-        .jwt
-        .as_ref()
-        .ok_or_else(|| {
-            Error::new(
-                conbira::Code::InvalidConfiguration,
-                "JWT Ed25519 configuration is required",
-            )
-            .at("cli.generate_ed25519")
-        })?
-        .ed25519;
+    let keys = &config.jwt.ed25519;
     create_parent_directories(&[&keys.key_path, &keys.public_key_path])?;
     espr::jwt::ed25519::generate(keys).map_err(|error| {
         Error::internal("Failed to generate Ed25519 keys")

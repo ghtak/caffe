@@ -10,17 +10,18 @@ filename_prefix = "conbira"
 [database]
 # Set CONBIRA_DATABASE__URL in .env or the environment.
 url = ""
-max_connections = 5
+max_connections = 8
+
+[cache]
+# Set CONBIRA_CACHE__URL in .env or the environment.
+url = ""
+max_connections = 8
+connect_timeout_ms = 1000
+response_timeout_ms = 1000
+pool_wait_timeout_ms = 200
 
 [http]
 bind_addr = "127.0.0.1:18080"
-
-[https]
-bind_addr = "127.0.0.1:18443"
-
-[https.tls]
-cert_path = "var/cert/cert.pem"
-key_path = "var/cert/key.pem"
 
 [jwt]
 issuer = "conbira"

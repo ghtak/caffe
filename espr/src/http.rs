@@ -86,7 +86,7 @@ pub struct Server {
 }
 
 impl Server {
-    pub async fn new(config: Config) -> crate::Result<Self> {
+    pub async fn new(config: &Config) -> crate::Result<Self> {
         let tls_config = match &config.tls {
             Some(tls) => Some(
                 RustlsConfig::from_pem_file(&tls.cert_path, &tls.key_path)
@@ -96,7 +96,10 @@ impl Server {
             None => None,
         };
 
-        Ok(Self { config, tls_config })
+        Ok(Self {
+            config: config.clone(),
+            tls_config,
+        })
     }
 
     pub async fn run(&self, app: axum::Router) -> crate::Result<()> {
