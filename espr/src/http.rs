@@ -46,7 +46,10 @@ pub struct StaticFiles {
 }
 
 impl StaticFiles {
-    pub fn as_router(&self) -> axum::Router {
+    pub fn as_router<S>(&self) -> axum::Router<S>
+    where
+        S: Clone + Send + Sync + 'static,
+    {
         axum::Router::new().nest_service(
             &self.url_prefix,
             tower_http::services::ServeDir::new(&self.directory),
