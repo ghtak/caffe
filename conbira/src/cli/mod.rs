@@ -3,14 +3,22 @@ use std::path::Path;
 use conbira::config::Config;
 use conbira::{Error, Result};
 
-use crate::option;
+use crate::{migration, option};
 
 pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
     let option::CliOptions {
         common,
+        command,
         generate_tls: tls_names,
         generate_ed25519: ed25519_requested,
     } = options;
+    if let Some(option::Command::Migration { directories }) = command {
+        if tls_names.is_some() || ed25519_requested {
+            return Err(Error::new(conbira::Code::InvalidConfiguration, "Migration cannot be combined with key generation").at("cli.run"));
+        }
+        let config = Config::load(&common.config, common.env_file.as_deref())?;
+        return migration::run(&config, &directories, code_migrations()).await;
+    }
     match (tls_names, ed25519_requested) {
         (Some(names), _) => {
             let config = Config::load(&common.config, common.env_file.as_deref())?;
@@ -23,6 +31,7 @@ pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
         (None, false) => {
             for example in [
                 "Examples:",
+                "  conbira-cli migration dir01 dir02     Run migrations",
                 "  conbira-cli --generate-tls localhost  Generate a TLS certificate and private key",
                 "  conbira-cli --generate-ed25519        Generate an Ed25519 key pair for JWT signing",
             ] {
@@ -31,6 +40,11 @@ pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// Register code migration implementations here; their `order()` determines execution order.
+fn code_migrations() -> Vec<Box<dyn migration::Migration>> {
+    vec![Box::new(migration::sample_0002::InsertSamples)]
 }
 
 fn generate_tls(config: &Config, names: &[String]) -> Result<()> {

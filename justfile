@@ -54,6 +54,12 @@ conbira-app:
 conbira-cli:
     cargo run -p conbira --bin conbira-cli
 
+# 기본 migrations 디렉터리의 마이그레이션 실행
+[group: 'conbira']
+[working-directory: 'conbira']
+conbira-cli-migration:
+    cargo run -p conbira --bin conbira-cli -- migration migrations
+
 # 설정된 경로에 localhost용 TLS 인증서와 키 생성
 [group: 'conbira']
 [working-directory: 'conbira']
