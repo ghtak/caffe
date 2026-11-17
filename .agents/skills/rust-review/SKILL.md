@@ -13,7 +13,7 @@ description: 러스트 코드 변경을 리뷰하고 요구사항·계약, 정�
 
 1. **컨텍스트 확인:** 비교 기준(Base)과 대상 커밋, 변경 목적·계약, 영향받는 호출자 및 데이터 흐름 파악. 비교 기준과 대상 커밋, Rust·Cargo 버전, 실행 플랫폼과 검사에 사용한 feature를 기록. 변경과 관련된 지원 feature·플랫폼은 추가 검사하고 실행하지 못한 조합은 사유와 함께 미확인 범위에 기록.
 2. **정적 검사(Deterministic):** 아래 명령을 순서대로 실행. `fmt` 또는 `clippy` 실패 시 결과와 수정 방향을 보고하고 리뷰 중단. 실행하지 않은 검사와 품질 점수·리스크는 `미평가`로 표시.
-   - `cargo fmt --all -- --check` (종료 코드 0)
+   - `cargo +nightly fmt --all -- --check` (종료 코드 0)
    - `cargo clippy --workspace --all-targets --locked -- -D warnings` (종료 코드 0, 경고 없음)
    - `cargo audit` (종료 코드·advisory를 알림으로 기록, 리뷰 차단 안 함)
 3. **테스트 실행:** `cargo test --workspace --locked` 실행. 실패한 테스트의 이름·원인·영향과 수정 방향을 기록. ignored 테스트와 외부 서비스가 필요한 테스트의 실행 여부를 확인하고, 관련 테스트를 실행하지 못했다면 사유와 미확인 범위를 기록. 변경과 관련된 추가 feature·플랫폼 조합도 테스트하고 실행하지 못한 조합은 사유를 기록.
