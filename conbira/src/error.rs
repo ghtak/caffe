@@ -5,6 +5,7 @@ use std::fmt;
 pub enum Code {
     Internal,
     InvalidConfiguration,
+    InvalidRequest,
 }
 
 impl Error {

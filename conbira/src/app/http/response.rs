@@ -1,11 +1,3 @@
-//! JSON API 응답 계약.
-//!
-//! 성공 응답은 상태 200과 코드 `OK`를 사용한다. 결과가 없으면 `data`를
-//! 생략한다. `Internal`과 `InvalidConfiguration`은 각각 `INTERNAL`,
-//! `INVALID_CONFIGURATION` 코드와 상태 500을 사용한다.
-//! 오류의 `message`는 클라이언트에 공개하며, `at`과 `cause`는 로그에만
-//! 기록한다.
-
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
@@ -92,6 +84,7 @@ fn error_mapping(code: Code) -> (StatusCode, &'static str) {
     match code {
         Code::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL"),
         Code::InvalidConfiguration => (StatusCode::INTERNAL_SERVER_ERROR, "INVALID_CONFIGURATION"),
+        Code::InvalidRequest => (StatusCode::BAD_REQUEST, "INVALID_REQUEST"),
     }
 }
 
@@ -199,16 +192,29 @@ mod tests {
 
     #[tokio::test]
     async fn errors_include_their_message_without_location_or_cause() {
-        for (code, public_code) in [
-            (Code::Internal, "INTERNAL"),
-            (Code::InvalidConfiguration, "INVALID_CONFIGURATION"),
+        for (code, status, public_code) in [
+            (
+                Code::Internal,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL",
+            ),
+            (
+                Code::InvalidConfiguration,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INVALID_CONFIGURATION",
+            ),
+            (
+                Code::InvalidRequest,
+                StatusCode::BAD_REQUEST,
+                "INVALID_REQUEST",
+            ),
         ] {
             let error = Error::new(code, "공개 오류 메시지")
                 .at("secret location")
                 .cause(anyhow::anyhow!("secret cause"));
             let response = ApiResponse::from(error).into_response();
-            // 오류 메시지를 반환하고 위치와 원인은 제외한다.
-            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            // 코드에 맞는 상태와 공개 메시지를 반환하고 위치와 원인은 제외한다.
+            assert_eq!(response.status(), status);
             assert_eq!(
                 body(response).await,
                 json!({"code": public_code, "message": "공개 오류 메시지"})

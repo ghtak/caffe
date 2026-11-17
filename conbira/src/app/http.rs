@@ -7,6 +7,7 @@ use tower_http::trace::TraceLayer;
 use crate::Error;
 use crate::app::Container;
 
+pub mod extract;
 pub mod response;
 
 pub fn router(container: Arc<Container>) -> crate::Result<axum::Router> {

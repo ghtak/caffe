@@ -1,14 +1,13 @@
 pub mod endpoint {
-    use axum::Json;
-    use axum::extract::rejection::JsonRejection;
     use serde::Deserialize;
 
+    use crate::app::http::extract::ApiJson;
     use crate::app::http::response::{ApiResponse, ApiResult};
 
     #[derive(Debug, Deserialize)]
     pub struct CreateRequest {}
 
-    pub async fn handler(_cmd: Result<Json<CreateRequest>, JsonRejection>) -> ApiResult<()> {
+    pub async fn handler(ApiJson(_request): ApiJson<CreateRequest>) -> ApiResult<()> {
         Ok(ApiResponse::empty())
     }
 }
