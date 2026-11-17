@@ -1,22 +1,15 @@
 // Espresso con birra
-mod conbira;
-mod option;
-
 use clap::Parser;
+use conbira::config::Config;
+use conbira::{app, option};
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> espr::Result<()> {
     let options = option::Options::parse();
-    match dotenvy::from_path(options.env_file.unwrap_or_else(|| ".env".into())) {
-        Ok(_) => Ok(()),
-        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-    }?;
-    let config: conbira::Config = espr::config::load(&options.config, None)?;
+    let config = Config::load(&options.config, options.env_file.as_deref())?;
     let guard = espr::tracing::initialize(&config.trace)?;
+    let _container = app::Container::new(&config).await?;
 
-    let _container = conbira::Container::new(&config).await?;
-
-    guard.shutdown().await?;
+    let _shutdown = guard.shutdown().await?;
     Ok(())
 }
