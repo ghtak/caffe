@@ -73,7 +73,8 @@ mod tests {
 
     async fn setup() -> anyhow::Result<espr::sqlxdb::Conn<sqlx::Postgres>> {
         let database = Database::new(&espr::sqlxdb::Config {
-            url: std::env::var("CONBIRA_TEST_DATABASE_URL")?,
+            url: std::env::var("CONBIRA_TEST_DATABASE_URL")
+                .unwrap_or_else(|_| "postgres://tlab:tlab@192.168.1.20:15432/tlab".to_string()),
             max_connections: 1,
         })
         .await?;
