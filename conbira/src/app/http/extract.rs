@@ -11,7 +11,8 @@ pub struct ApiJson<T>(pub T);
 impl<S, T> FromRequest<S> for ApiJson<T>
 where
     S: Send + Sync,
-    T: DeserializeOwned,
+    T: DeserializeOwned + espr::validate::Validate,
+    T::Error: Into<Error>,
 {
     type Rejection = Response;
 
@@ -24,6 +25,11 @@ where
                     .cause(error);
                 ApiResponse::from(error).into_response()
             })?;
+
+        value
+            .validate()
+            .map_err(|error| ApiResponse::from(error.into()).into_response())?;
+
         Ok(Self(value))
     }
 }
@@ -34,18 +40,59 @@ mod tests {
     use axum::body::{Body, to_bytes};
     use axum::http::{Request, StatusCode};
     use axum::routing::post;
+    use espr_derive::Validate;
     use serde::Deserialize;
     use serde_json::json;
     use tower::ServiceExt;
 
     use super::ApiJson;
 
-    #[derive(Deserialize)]
+    #[derive(Deserialize, Validate)]
     struct Input {
         value: u32,
     }
 
     async fn handler(ApiJson(input): ApiJson<Input>) -> String { input.value.to_string() }
+
+    #[derive(Deserialize)]
+    struct CheckedInput {
+        name: String,
+    }
+
+    impl espr::validate::Validate for CheckedInput {
+        type Error = crate::Error;
+
+        fn validate(&self) -> Result<(), Self::Error> {
+            if self.name.is_empty() {
+                return Err(crate::Error::new(
+                    crate::Code::InvalidRequest,
+                    "Name is required",
+                ));
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn validation_failure_returns_request_error() {
+        let router = Router::new().route(
+            "/",
+            post(|ApiJson(_): ApiJson<CheckedInput>| async { "ok" }),
+        );
+        let request = Request::post("/")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"name":""}"#))
+            .unwrap();
+
+        let response = router.oneshot(request).await.unwrap();
+        // 검증 오류의 코드와 공개 메시지가 응답에 전달된다.
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
+            json!({"code": "INVALID_REQUEST", "message": "Name is required"})
+        );
+    }
 
     #[tokio::test]
     async fn valid_json_is_extracted_for_the_handler() {

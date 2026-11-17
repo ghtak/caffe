@@ -66,4 +66,9 @@ impl std::error::Error for Error {
     }
 }
 
+// Validate 검증 대응
+impl From<std::convert::Infallible> for Error {
+    fn from(value: std::convert::Infallible) -> Self { match value {} }
+}
+
 pub type Result<T> = std::result::Result<T, Error>;

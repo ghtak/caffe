@@ -18,6 +18,7 @@ clap = { version = "4", features = ["derive"] }
 chrono = "0.4"
 dotenvy = "0.15"
 espr = { path = "../espr" }
+espr-derive = { path = "../espr-derive" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
 sqlx = { version = "0.9.0", features = ["chrono", "postgres", "runtime-tokio"] }

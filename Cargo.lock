@@ -573,6 +573,7 @@ dependencies = [
  "clap",
  "dotenvy",
  "espr",
+ "espr-derive",
  "serde",
  "serde_json",
  "sqlx",
@@ -937,6 +938,7 @@ dependencies = [
  "chrono",
  "config",
  "deadpool-redis",
+ "espr-derive",
  "jsonwebtoken",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -974,6 +976,14 @@ dependencies = [
  "tokio",
  "tower-http",
  "tracing",
+]
+
+[[package]]
+name = "espr-derive"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

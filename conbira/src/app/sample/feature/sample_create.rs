@@ -1,10 +1,11 @@
 pub mod endpoint {
+    use espr_derive::Validate;
     use serde::Deserialize;
 
     use crate::app::http::extract::ApiJson;
     use crate::app::http::response::{ApiResponse, ApiResult};
 
-    #[derive(Debug, Deserialize)]
+    #[derive(Debug, Deserialize, Validate)]
     pub struct CreateRequest {}
 
     pub async fn handler(ApiJson(_request): ApiJson<CreateRequest>) -> ApiResult<()> {
