@@ -141,7 +141,7 @@ impl Server {
 
     pub async fn reload_tls(&self) -> crate::Result<()> {
         let Some(tls_config) = &self.tls_config else {
-            return Err(crate::Error::IllegalState("TLS is not enabled".into()));
+            return Err(crate::Error::InvalidState("TLS is not enabled".into()));
         };
 
         let Some(cfg) = &self.config.tls else {

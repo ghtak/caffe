@@ -1,10 +1,11 @@
 use std::path::Path;
 
 use conbira::config::Config;
+use conbira::{Error, Result};
 
 use crate::option;
 
-pub(crate) async fn run(options: option::CliOptions) -> espr::Result<()> {
+pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
     let option::CliOptions {
         common,
         generate_tls: tls_names,
@@ -32,39 +33,59 @@ pub(crate) async fn run(options: option::CliOptions) -> espr::Result<()> {
     }
 }
 
-fn generate_tls(config: &Config, names: &[String]) -> espr::Result<()> {
+fn generate_tls(config: &Config, names: &[String]) -> Result<()> {
     let tls = config
         .https
         .as_ref()
         .and_then(|https| https.tls.as_ref())
         .ok_or_else(|| {
-            espr::Error::InvalidParameter("HTTPS TLS configuration is required".into())
+            Error::new(
+                conbira::Code::InvalidConfiguration,
+                "HTTPS TLS configuration is required",
+            )
+            .at("cli.generate_tls")
         })?;
     create_parent_directories(&[&tls.cert_path, &tls.key_path])?;
-    espr::tls::generate(tls, names)?;
+    espr::tls::generate(tls, names).map_err(|error| {
+        Error::internal("Failed to generate TLS certificate")
+            .at("cli.generate_tls")
+            .cause(error)
+    })?;
     Ok(())
 }
 
-fn generate_ed25519(config: &Config) -> espr::Result<()> {
+fn generate_ed25519(config: &Config) -> Result<()> {
     let keys = &config
         .jwt
         .as_ref()
         .ok_or_else(|| {
-            espr::Error::InvalidParameter("JWT Ed25519 configuration is required".into())
+            Error::new(
+                conbira::Code::InvalidConfiguration,
+                "JWT Ed25519 configuration is required",
+            )
+            .at("cli.generate_ed25519")
         })?
         .ed25519;
     create_parent_directories(&[&keys.key_path, &keys.public_key_path])?;
-    espr::jwt::ed25519::generate(keys)?;
+    espr::jwt::ed25519::generate(keys).map_err(|error| {
+        Error::internal("Failed to generate Ed25519 keys")
+            .at("cli.generate_ed25519")
+            .cause(error)
+    })?;
     Ok(())
 }
 
-fn create_parent_directories(paths: &[&Path]) -> std::io::Result<()> {
+fn create_parent_directories(paths: &[&Path]) -> Result<()> {
     for path in paths {
         if let Some(parent) = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
         {
-            std::fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent).map_err(|error| {
+                Error::internal("Failed to create parent directory")
+                    .at("cli.create_parent_directories")
+                    .cause(error)
+            })?;
         }
     }
     Ok(())

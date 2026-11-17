@@ -3,23 +3,40 @@ use std::sync::Arc;
 // Espresso con birra
 use clap::Parser;
 use conbira::config::Config;
-use conbira::{app, option};
+use conbira::{Error, app, option};
 
 #[tokio::main]
-async fn main() -> espr::Result<()> {
+async fn main() -> conbira::Result<()> {
     let options = option::Options::parse();
     let config = Config::load(&options.config, options.env_file.as_deref())?;
-    let guard = espr::tracing::initialize(&config.trace)?;
+    let guard = espr::tracing::initialize(&config.trace).map_err(|error| {
+        Error::internal("Failed to initialize tracing")
+            .at("main.tracing.initialize")
+            .cause(error)
+    })?;
     let container = Arc::new(app::Container::new(&config).await?);
 
     {
-        let mut conn = container.db.conn().await?;
+        let mut conn = container.db.conn().await.map_err(|error| {
+            Error::internal("Failed to connect to database")
+                .at("main.database.connect")
+                .cause(error)
+        })?;
         let value: i32 = sqlx::query_scalar("SELECT 1")
             .fetch_one(conn.handle().conn())
-            .await?;
+            .await
+            .map_err(|error| {
+                Error::internal("Failed to check database connection")
+                    .at("main.database.check")
+                    .cause(error)
+            })?;
         tracing::info!(value, "database connection test succeeded");
     }
 
-    let _shutdown = guard.shutdown().await?;
+    let _shutdown = guard.shutdown().await.map_err(|error| {
+        Error::internal("Failed to shut down tracing")
+            .at("main.tracing.shutdown")
+            .cause(error)
+    })?;
     Ok(())
 }

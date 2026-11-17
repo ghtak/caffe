@@ -12,8 +12,12 @@ pub struct Container {
 }
 
 impl Container {
-    pub async fn new(config: &Config) -> espr::Result<Self> {
-        let db = db::Database::new(&config.database).await?;
+    pub async fn new(config: &Config) -> crate::Result<Self> {
+        let db = db::Database::new(&config.database).await.map_err(|error| {
+            crate::Error::internal("Failed to initialize database")
+                .at("app.container.new")
+                .cause(error)
+        })?;
 
         Ok(Self {
             config: config.clone(),

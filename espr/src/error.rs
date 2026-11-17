@@ -8,8 +8,8 @@ pub enum Error {
     #[error("invalid parameter: {0}")]
     InvalidParameter(Cow<'static, str>),
 
-    #[error("illegal state: {0}")]
-    IllegalState(Cow<'static, str>),
+    #[error("invalid state: {0}")]
+    InvalidState(Cow<'static, str>),
 
     #[error("not found: {0}")]
     NotFound(Cow<'static, str>),

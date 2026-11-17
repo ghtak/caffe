@@ -14,7 +14,7 @@ pub(super) fn configure(
     config: &Config,
 ) -> crate::Result<TracerProviderBuilder> {
     tokio::runtime::Handle::try_current()
-        .map_err(|_| crate::Error::IllegalState("OTLP exporter requires a Tokio runtime".into()))?;
+        .map_err(|_| crate::Error::InvalidState("OTLP exporter requires a Tokio runtime".into()))?;
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_endpoint(&config.endpoint)
@@ -25,15 +25,18 @@ pub(super) fn configure(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use opentelemetry::trace::{Span as _, Tracer as _, TracerProvider as _};
+    use opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::{
+        TraceService, TraceServiceServer,
+    };
     use opentelemetry_proto::tonic::collector::trace::v1::{
         ExportTraceServiceRequest, ExportTraceServiceResponse,
-        trace_service_server::{TraceService, TraceServiceServer},
     };
     use opentelemetry_sdk::trace::SdkTracerProvider;
     use tokio::sync::mpsc;
     use tokio_stream::wrappers::TcpListenerStream;
+
+    use super::*;
 
     struct Collector(mpsc::UnboundedSender<ExportTraceServiceRequest>);
 

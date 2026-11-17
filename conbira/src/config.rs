@@ -9,15 +9,21 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(path: &Path, env_file: Option<&Path>) -> espr::Result<Self> {
+    pub fn load(path: &Path, env_file: Option<&Path>) -> crate::Result<Self> {
         let env_file = env_file.unwrap_or_else(|| Path::new(".env"));
         match dotenvy::from_path(env_file) {
             Ok(_) => Ok(()),
             Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
                 Ok(())
             }
-            Err(error) => Err(espr::Error::Internal(error.into())),
+            Err(error) => Err(crate::Error::internal("Failed to load environment file")
+                .at("config.load.env")
+                .cause(error)),
         }?;
-        espr::config::load(path, Some("CONBIRA"))
+        espr::config::load(path, Some("CONBIRA")).map_err(|error| {
+            crate::Error::internal("Failed to load configuration")
+                .at("config.load")
+                .cause(error)
+        })
     }
 }
