@@ -58,14 +58,14 @@ impl PasswordHashService {
                     crate::Error::new(crate::Code::Busy, "Password hashing is busy")
                         .at(crate::here!())
                 })?
-                .internal("Password hash limiter is closed", crate::here!())?;
+                .map_err_internal("Password hash limiter is closed", crate::here!())?;
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
             operation()
         })
         .await
-        .internal("Password hash task failed", crate::here!())?
-        .internal("Password hash operation failed", crate::here!())
+        .map_err_internal("Password hash task failed", crate::here!())?
+        .map_err_internal("Password hash operation failed", crate::here!())
     }
 }
 

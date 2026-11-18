@@ -101,7 +101,7 @@ pub mod usecase {
         .await?;
         tx.commit()
             .await
-            .internal("Failed to commit user creation", crate::here!())?;
+            .map_err_internal("Failed to commit user creation", crate::here!())?;
 
         Ok(UserInfo {
             id: user.id,

@@ -30,7 +30,7 @@ impl Migration for InsertSamples {
             )
             .execute(connection.handle().conn())
             .await
-            .internal("Failed to insert sample data", conbira::here!())?;
+            .map_err_internal("Failed to insert sample data", conbira::here!())?;
             Ok(())
         })
     }

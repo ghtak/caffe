@@ -134,7 +134,7 @@ pub mod usecase {
         let claims = UserClaims::new(user.id, user.status).try_into()?;
         let access = jwt_token_service
             .issue(&user.id.to_string(), claims)
-            .internal("Failed to issue access token", crate::here!())?;
+            .map_err_internal("Failed to issue access token", crate::here!())?;
 
         let refresh = {
             let mut tx = db.begin_tx(crate::here!()).await?;
@@ -143,7 +143,7 @@ pub mod usecase {
                 .await?;
             tx.commit()
                 .await
-                .internal("Failed to commit login", crate::here!())?;
+                .map_err_internal("Failed to commit login", crate::here!())?;
             refresh
         };
 

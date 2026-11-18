@@ -14,7 +14,7 @@ pub async fn insert(handle: &mut Handle<'_>, sample: &NewSample) -> Result<Sampl
     .bind(&sample.name)
     .fetch_one(handle.conn())
     .await
-    .internal("Failed to insert sample", crate::here!())
+    .map_err_internal("Failed to insert sample", crate::here!())
 }
 
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Sample>> {
@@ -24,7 +24,7 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Sampl
     .bind(id)
     .fetch_optional(handle.conn())
     .await
-    .internal("Failed to find sample", crate::here!())
+    .map_err_internal("Failed to find sample", crate::here!())
 }
 
 pub struct Criteria<'a> {
@@ -52,7 +52,7 @@ pub async fn search(handle: &mut Handle<'_>, criteria: &Criteria<'_>) -> Result<
         .build_query_as::<Sample>()
         .fetch_all(handle.conn())
         .await
-        .internal("Failed to search samples", crate::here!())
+        .map_err_internal("Failed to search samples", crate::here!())
 }
 
 pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<Option<Sample>> {
@@ -63,7 +63,7 @@ pub async fn update(handle: &mut Handle<'_>, sample: &Sample) -> Result<Option<S
     .bind(&sample.name)
     .fetch_optional(handle.conn())
     .await
-    .internal("Failed to update sample", crate::here!())
+    .map_err_internal("Failed to update sample", crate::here!())
 }
 
 #[allow(dead_code)]
@@ -72,7 +72,7 @@ pub async fn delete(handle: &mut Handle<'_>, id: i64) -> Result<()> {
         .bind(id)
         .execute(handle.conn())
         .await
-        .internal("Failed to delete sample", crate::here!())?;
+        .map_err_internal("Failed to delete sample", crate::here!())?;
     Ok(())
 }
 

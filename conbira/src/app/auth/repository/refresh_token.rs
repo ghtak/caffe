@@ -58,7 +58,7 @@ pub async fn insert(handle: &mut Handle<'_>, token: &NewRefreshToken) -> Result<
     .fetch_one(handle.conn())
     .await
     .map(Into::into)
-    .internal("Failed to insert refresh token", crate::here!())
+    .map_err_internal("Failed to insert refresh token", crate::here!())
 }
 
 pub async fn find_by_hash(handle: &mut Handle<'_>, hash: &str) -> Result<Option<RefreshToken>> {
@@ -71,7 +71,7 @@ pub async fn find_by_hash(handle: &mut Handle<'_>, hash: &str) -> Result<Option<
     .fetch_optional(handle.conn())
     .await
     .map(|row| row.map(Into::into))
-    .internal("Failed to find refresh token", crate::here!())
+    .map_err_internal("Failed to find refresh token", crate::here!())
 }
 
 /// READ COMMITTED 트랜잭션에서 모든 계열 변경은 동일한 잠금을 먼저 획득해야
@@ -80,7 +80,7 @@ pub async fn lock_family(handle: &mut Handle<'_>, family_id: uuid::Uuid) -> Resu
     let isolation: String = sqlx::query_scalar("SHOW transaction_isolation")
         .fetch_one(handle.conn())
         .await
-        .internal("Failed to inspect transaction isolation", crate::here!())?;
+        .map_err_internal("Failed to inspect transaction isolation", crate::here!())?;
     if isolation != "read committed" {
         return Err(crate::Error::internal(
             "Refresh token operations require READ COMMITTED isolation",
@@ -91,7 +91,7 @@ pub async fn lock_family(handle: &mut Handle<'_>, family_id: uuid::Uuid) -> Resu
         .bind(family_id.to_string())
         .execute(handle.conn())
         .await
-        .internal("Failed to lock refresh token family", crate::here!())?;
+        .map_err_internal("Failed to lock refresh token family", crate::here!())?;
     Ok(())
 }
 
@@ -108,7 +108,7 @@ pub async fn revoke_family(
     .bind(reason)
     .execute(handle.conn())
     .await
-    .internal("Failed to revoke refresh token family", crate::here!())?;
+    .map_err_internal("Failed to revoke refresh token family", crate::here!())?;
     Ok(())
 }
 
@@ -126,7 +126,7 @@ pub async fn find_by_hash_for_update(
     .fetch_optional(handle.conn())
     .await
     .map(|row| row.map(Into::into))
-    .internal("Failed to lock refresh token", crate::here!())
+    .map_err_internal("Failed to lock refresh token", crate::here!())
 }
 
 pub async fn find_by_family_id(
@@ -142,7 +142,7 @@ pub async fn find_by_family_id(
     .fetch_all(handle.conn())
     .await
     .map(|rows| rows.into_iter().map(Into::into).collect())
-    .internal("Failed to find refresh token family", crate::here!())
+    .map_err_internal("Failed to find refresh token family", crate::here!())
 }
 
 pub async fn update(handle: &mut Handle<'_>, token: &RefreshToken) -> Result<Option<RefreshToken>> {
@@ -160,7 +160,7 @@ pub async fn update(handle: &mut Handle<'_>, token: &RefreshToken) -> Result<Opt
     .fetch_optional(handle.conn())
     .await
     .map(|row| row.map(Into::into))
-    .internal("Failed to update refresh token", crate::here!())
+    .map_err_internal("Failed to update refresh token", crate::here!())
 }
 
 #[cfg(test)]

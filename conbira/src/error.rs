@@ -80,8 +80,12 @@ impl From<std::convert::Infallible> for Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 pub trait ResultExt<T> {
-    fn internal(self, message: impl Into<Cow<'static, str>>, at: &'static str) -> crate::Result<T>;
-    fn invalid_request(
+    fn map_err_internal(
+        self,
+        message: impl Into<Cow<'static, str>>,
+        at: &'static str,
+    ) -> crate::Result<T>;
+    fn map_err_invalid_request(
         self,
         message: impl Into<Cow<'static, str>>,
         at: &'static str,
@@ -92,11 +96,15 @@ impl<T, E> ResultExt<T> for std::result::Result<T, E>
 where
     E: Into<anyhow::Error>,
 {
-    fn internal(self, message: impl Into<Cow<'static, str>>, at: &'static str) -> crate::Result<T> {
+    fn map_err_internal(
+        self,
+        message: impl Into<Cow<'static, str>>,
+        at: &'static str,
+    ) -> crate::Result<T> {
         self.map_err(|error| Error::internal(message.into()).at(at).cause(error))
     }
 
-    fn invalid_request(
+    fn map_err_invalid_request(
         self,
         message: impl Into<Cow<'static, str>>,
         at: &'static str,

@@ -41,7 +41,7 @@ impl TryFrom<UserClaims> for Map<String, Value> {
         use crate::error::ResultExt as _;
 
         let value = serde_json::to_value(claims)
-            .internal("Failed to serialize user claims", crate::here!())?;
+            .map_err_internal("Failed to serialize user claims", crate::here!())?;
 
         match value {
             Value::Object(map) => Ok(map),

@@ -26,6 +26,6 @@ impl Config {
                 .cause(error)),
         }?;
         espr::config::load(path, Some("CONBIRA"))
-            .internal("Failed to load configuration", crate::here!())
+            .map_err_internal("Failed to load configuration", crate::here!())
     }
 }

@@ -75,10 +75,10 @@ async fn user_create_local(
     request.validate()?;
     let db = Database::new(&config.database)
         .await
-        .internal("Failed to initialize database", conbira::here!())?;
+        .map_err_internal("Failed to initialize database", conbira::here!())?;
     let password_hasher = Arc::new(
         espr::hash::argon2::Hasher::new(&config.argon2)
-            .internal("Failed to initialize password hasher", conbira::here!())?,
+            .map_err_internal("Failed to initialize password hasher", conbira::here!())?,
     );
     let password_service = conbira::app::auth::service::password_hash::PasswordHashService::new(
         password_hasher,
@@ -86,7 +86,7 @@ async fn user_create_local(
     )?;
     let user = create_local::usecase::execute(&db, &password_service, request.into()).await?;
     let output = serde_json::to_string(&user)
-        .internal("Failed to serialize created user", conbira::here!())?;
+        .map_err_internal("Failed to serialize created user", conbira::here!())?;
     println!("{output}");
     Ok(())
 }
@@ -107,7 +107,7 @@ fn generate_tls(config: &Config, names: &[String]) -> Result<()> {
     })?;
     create_parent_directories(&[&tls.cert_path, &tls.key_path])?;
     espr::tls::generate(tls, names)
-        .internal("Failed to generate TLS certificate", conbira::here!())?;
+        .map_err_internal("Failed to generate TLS certificate", conbira::here!())?;
     Ok(())
 }
 
@@ -115,7 +115,7 @@ fn generate_ed25519(config: &Config) -> Result<()> {
     let keys = &config.jwt.ed25519;
     create_parent_directories(&[&keys.key_path, &keys.public_key_path])?;
     espr::jwt::ed25519::generate(keys)
-        .internal("Failed to generate Ed25519 keys", conbira::here!())?;
+        .map_err_internal("Failed to generate Ed25519 keys", conbira::here!())?;
     Ok(())
 }
 
@@ -126,7 +126,7 @@ fn create_parent_directories(paths: &[&Path]) -> Result<()> {
             .filter(|parent| !parent.as_os_str().is_empty())
         {
             std::fs::create_dir_all(parent)
-                .internal("Failed to create parent directory", conbira::here!())?;
+                .map_err_internal("Failed to create parent directory", conbira::here!())?;
         }
     }
     Ok(())

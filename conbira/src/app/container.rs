@@ -24,19 +24,19 @@ impl Container {
     pub async fn new(config: &Config) -> crate::Result<Self> {
         let db = db::Database::new(&config.database)
             .await
-            .internal("Failed to initialize database", crate::here!())?;
+            .map_err_internal("Failed to initialize database", crate::here!())?;
 
         let cache = cache::Cache::new(&config.cache)
             .await
-            .internal("Failed to initialize cache", crate::here!())?;
+            .map_err_internal("Failed to initialize cache", crate::here!())?;
 
         let http_server = espr::http::Server::new(&config.http)
             .await
-            .internal("Failed to initialize http", crate::here!())?;
+            .map_err_internal("Failed to initialize http", crate::here!())?;
 
         let password_hasher = std::sync::Arc::new(
             espr::hash::argon2::Hasher::new(&config.argon2)
-                .internal("Failed to initialize password hasher", crate::here!())?,
+                .map_err_internal("Failed to initialize password hasher", crate::here!())?,
         );
         let password_hash_service =
             crate::app::auth::service::password_hash::PasswordHashService::new(
@@ -48,7 +48,7 @@ impl Container {
             .await?;
 
         let jwt_token_service = espr::jwt::TokenService::new(&config.jwt)
-            .internal("Failed to initialize jwt", crate::here!())?;
+            .map_err_internal("Failed to initialize jwt", crate::here!())?;
 
         let refresh_token_service =
             crate::app::auth::service::refresh_token::RefreshTokenService::new(
@@ -79,12 +79,12 @@ impl DatabaseExt for db::Database {
     async fn acquire_conn(&self, at: &'static str) -> crate::Result<sqlxdb::Conn<sqlx::Postgres>> {
         self.conn()
             .await
-            .internal("Failed to get db connection", at)
+            .map_err_internal("Failed to get db connection", at)
     }
 
     async fn begin_tx(&self, at: &'static str) -> crate::Result<sqlxdb::Tx<sqlx::Postgres>> {
         self.tx()
             .await
-            .internal("Failed to begin db transaction", at)
+            .map_err_internal("Failed to begin db transaction", at)
     }
 }

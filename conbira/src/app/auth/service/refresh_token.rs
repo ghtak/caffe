@@ -143,7 +143,7 @@ impl RefreshTokenService {
         let mut bytes = [0u8; 32];
         OsRng
             .try_fill_bytes(&mut bytes)
-            .internal("Failed to generate refresh token", crate::here!())?;
+            .map_err_internal("Failed to generate refresh token", crate::here!())?;
         let token = URL_SAFE_NO_PAD.encode(bytes);
         let stored = refresh_token::insert(
             handle,
@@ -194,7 +194,7 @@ fn add_seconds(now: jiff::Timestamp, seconds: u64) -> crate::Result<jiff::Timest
             .at(crate::here!())
         })?;
     now.checked_add(jiff::SignedDuration::from_secs(seconds))
-        .internal("Invalid refresh token expiration", crate::here!())
+        .map_err_internal("Invalid refresh token expiration", crate::here!())
 }
 
 #[cfg(test)]

@@ -62,12 +62,12 @@ fn collect(
     let mut tasks: Vec<_> = migrations.into_iter().map(MigrationTask::Code).collect();
     for directory in directories {
         let directory = directory.as_ref();
-        let entries = std::fs::read_dir(directory).internal(
+        let entries = std::fs::read_dir(directory).map_err_internal(
             format!("Failed to read migration directory {}", directory.display()),
             conbira::here!(),
         )?;
         for entry in entries {
-            let entry = entry.internal(
+            let entry = entry.map_err_internal(
                 format!("Failed to read entry in {}", directory.display()),
                 conbira::here!(),
             )?;
@@ -77,7 +77,7 @@ fn collect(
             }
             if !entry
                 .file_type()
-                .internal(
+                .map_err_internal(
                     format!("Failed to inspect {}", path.display()),
                     conbira::here!(),
                 )?
@@ -142,7 +142,7 @@ pub(crate) async fn run(
     let tasks = collect(directories, migrations)?;
     let database = Database::<Postgres>::new(&config.database)
         .await
-        .internal("Failed to initialize migration database", conbira::here!())?;
+        .map_err_internal("Failed to initialize migration database", conbira::here!())?;
     let total = tasks.len();
     println!("Running {total} migration(s)");
     for task in tasks {
@@ -155,7 +155,7 @@ pub(crate) async fn run(
         let result: conbira::Result<()> = async {
             match task {
                 MigrationTask::Sql(migration) => {
-                    let sql = std::fs::read_to_string(&migration.path).internal(
+                    let sql = std::fs::read_to_string(&migration.path).map_err_internal(
                         format!("Failed to read migration {}", migration.path.display()),
                         conbira::here!(),
                     )?;
@@ -165,7 +165,7 @@ pub(crate) async fn run(
                     sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
                         .execute(connection.handle().conn())
                         .await
-                        .internal(
+                        .map_err_internal(
                             format!("Failed to execute migration {}", migration.path.display()),
                             conbira::here!(),
                         )?;

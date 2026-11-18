@@ -16,7 +16,7 @@ pub async fn insert(handle: &mut Handle<'_>, user: &NewUser) -> Result<User> {
     .bind(&user.nickname)
     .fetch_one(handle.conn())
     .await
-    .internal("Failed to insert user", crate::here!())
+    .map_err_internal("Failed to insert user", crate::here!())
 }
 
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<User>> {
@@ -28,7 +28,7 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<User>
     .bind(id)
     .fetch_optional(handle.conn())
     .await
-    .internal("Failed to find user", crate::here!())
+    .map_err_internal("Failed to find user", crate::here!())
 }
 
 pub async fn update(handle: &mut Handle<'_>, user: &User) -> Result<Option<User>> {
@@ -43,7 +43,7 @@ pub async fn update(handle: &mut Handle<'_>, user: &User) -> Result<Option<User>
     .bind(user.status)
     .fetch_optional(handle.conn())
     .await
-    .internal("Failed to update user", crate::here!())
+    .map_err_internal("Failed to update user", crate::here!())
 }
 
 #[cfg(test)]
