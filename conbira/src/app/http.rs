@@ -14,7 +14,8 @@ pub mod response;
 pub fn router(container: Arc<Container>) -> crate::Result<axum::Router> {
     let router = axum::Router::new()
         .route("/api/health", get(|| async { StatusCode::OK }))
-        .nest("/api/sample", super::sample::router());
+        .nest("/api/sample", super::sample::router())
+        .nest("/api/auth", super::auth::router());
 
     let router = match &container.config.http.static_files {
         Some(static_files) => {

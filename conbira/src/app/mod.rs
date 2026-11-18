@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-mod auth;
+pub mod auth;
 mod container;
 pub mod http;
 mod sample;

@@ -9,6 +9,7 @@ pub struct Config {
     pub cache: espr::cache::Config,
     pub http: espr::http::Config,
     pub jwt: espr::jwt::Config,
+    pub argon2: espr::hash::argon2::Config,
 }
 
 impl Config {

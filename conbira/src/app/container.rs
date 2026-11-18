@@ -15,6 +15,7 @@ pub struct Container {
     pub cache: espr::cache::Cache,
     pub http_server: espr::http::Server,
     pub jwt_token_service: espr::jwt::TokenService,
+    pub password_hasher: std::sync::Arc<espr::hash::argon2::Hasher>,
 }
 
 impl Container {
@@ -34,12 +35,18 @@ impl Container {
         let jwt_token_service = espr::jwt::TokenService::new(&config.jwt)
             .internal("Failed to initialize jwt", "app.container.new")?;
 
+        let password_hasher = std::sync::Arc::new(
+            espr::hash::argon2::Hasher::new(&config.argon2)
+                .internal("Failed to initialize password hasher", "app.container.new")?,
+        );
+
         Ok(Self {
             config: config.clone(),
             db,
             cache,
             http_server,
             jwt_token_service,
+            password_hasher,
         })
     }
 }
