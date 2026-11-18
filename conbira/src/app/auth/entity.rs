@@ -47,3 +47,17 @@ pub struct Identity {
     #[sqlx(try_from = "jiff_sqlx::Timestamp")]
     pub updated_at: jiff::Timestamp,
 }
+
+#[derive(PartialEq)]
+pub struct RefreshToken {
+    pub id: i64,
+    pub user_id: i64,
+    pub family_id: uuid::Uuid,
+    pub token_hash: String,
+    pub expires_at: jiff::Timestamp,
+    pub family_expires_at: jiff::Timestamp,
+    pub used_at: Option<jiff::Timestamp>,
+    pub revoked_at: Option<jiff::Timestamp>,
+    pub revoke_reason: Option<String>,
+    pub created_at: jiff::Timestamp,
+}
