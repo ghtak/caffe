@@ -17,6 +17,12 @@ pub struct Claims {
     pub user: Map<String, Value>,
 }
 
+/// 발급된 JWT와 JWT의 `exp`에 해당하는 만료 시각.
+pub struct IssuedToken {
+    pub token: String,
+    pub expires_at: jiff::Timestamp,
+}
+
 /// JWT issuer, intended audience and access token lifetime.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
@@ -87,7 +93,7 @@ impl TokenService {
         Ok(service)
     }
 
-    pub fn issue(&self, subject: &str, user: Map<String, Value>) -> crate::Result<String> {
+    pub fn issue(&self, subject: &str, user: Map<String, Value>) -> crate::Result<IssuedToken> {
         if subject.is_empty() {
             return Err(crate::Error::InvalidParameter(
                 "subject must not be empty".into(),
@@ -101,6 +107,9 @@ impl TokenService {
                     "access token expiration exceeds supported range".into(),
                 )
             })?;
+        let expires_at = jiff::Timestamp::from_second(exp).map_err(|_| {
+            crate::Error::InvalidParameter("access token expiration exceeds supported range".into())
+        })?;
         let claims = Claims {
             sub: subject.into(),
             iss: self.config.issuer.clone(),
@@ -109,9 +118,11 @@ impl TokenService {
             exp,
             user,
         };
-        jsonwebtoken::encode(&Header::new(Algorithm::EdDSA), &claims, &self.encoding_key)
-            .context("failed to issue JWT")
-            .map_err(crate::Error::from)
+        let token =
+            jsonwebtoken::encode(&Header::new(Algorithm::EdDSA), &claims, &self.encoding_key)
+                .context("failed to issue JWT")
+                .map_err(crate::Error::from)?;
+        Ok(IssuedToken { token, expires_at })
     }
 
     pub fn verify(&self, token: &str) -> crate::Result<Claims> {
@@ -154,8 +165,8 @@ mod tests {
         let user = serde_json::from_value(serde_json::json!({"name": "Kim"})).unwrap();
         let before = jiff::Timestamp::now().as_second();
 
-        let token = service.issue("user-1", user).unwrap();
-        let claims = service.verify(&token).unwrap();
+        let issued = service.issue("user-1", user).unwrap();
+        let claims = service.verify(&issued.token).unwrap();
 
         let after = jiff::Timestamp::now().as_second();
         assert_eq!(claims.sub, "user-1");
@@ -164,13 +175,24 @@ mod tests {
         assert_eq!(claims.user["name"], "Kim");
         assert!((before..=after).contains(&claims.iat));
         assert_eq!(claims.exp - claims.iat, 900);
+        // 발급 결과의 만료 시각은 서명된 JWT의 exp와 일치한다.
+        assert_eq!(issued.expires_at.as_second(), claims.exp);
 
-        let (header, _) = token.split_once('.').unwrap();
-        let (_, signature) = token.rsplit_once('.').unwrap();
+        let (header, _) = issued.token.split_once('.').unwrap();
+        let (_, signature) = issued.token.rsplit_once('.').unwrap();
         let tampered = format!("{header}.e30.{signature}");
         assert!(matches!(
             service.verify(&tampered),
             Err(crate::Error::Validation(_))
+        ));
+
+        let mut long_lived = config.clone();
+        long_lived.access_token_ttl_seconds = jiff::Timestamp::MAX.as_second() as u64;
+        let service = TokenService::new(&long_lived).unwrap();
+        // Timestamp의 표현 범위를 벗어나는 만료 시각은 발급 오류로 처리한다.
+        assert!(matches!(
+            service.issue("user-1", Default::default()),
+            Err(crate::Error::InvalidParameter(_))
         ));
 
         std::fs::remove_dir_all(dir).unwrap();
