@@ -77,7 +77,7 @@ pub mod usecase {
         pub password: String,
     }
 
-    pub struct LoginResult {
+    pub struct Output {
         pub access_token: String,
         pub refresh_token: String,
         pub user: crate::app::auth::entity::UserInfo,
@@ -90,7 +90,7 @@ pub mod usecase {
         jwt_token_service: &espr::jwt::TokenService,
         refresh_token_service: &RefreshTokenService,
         command: Command,
-    ) -> crate::Result<LoginResult> {
+    ) -> crate::Result<Output> {
         let invalid = || {
             crate::Error::new(
                 crate::Code::Unauthorized,
@@ -159,7 +159,7 @@ pub mod usecase {
         tx.commit()
             .await
             .internal("Failed to commit login", "auth.user_login_local")?;
-        Ok(LoginResult {
+        Ok(Output {
             access_token: access.token,
             refresh_token: refresh.token,
             user: crate::app::auth::entity::UserInfo {
