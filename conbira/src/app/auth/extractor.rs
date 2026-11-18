@@ -6,9 +6,38 @@ use axum::http::{HeaderMap, HeaderValue, header};
 use axum::response::{IntoResponse, Response};
 
 use crate::app::Container;
+use crate::app::auth::claims::{AuthClaims, UserClaims};
 
-/// 요청에 포함된 액세스 토큰의 검증된 클레임.
-pub struct AuthClaims(pub espr::jwt::Claims);
+impl FromRequestParts<Arc<Container>> for UserClaims {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<Container>,
+    ) -> Result<Self, Self::Rejection> {
+        <Self as OptionalFromRequestParts<Arc<Container>>>::from_request_parts(parts, state)
+            .await?
+            .ok_or_else(|| bearer_rejection("Authentication required", "auth.extractor"))
+    }
+}
+
+impl OptionalFromRequestParts<Arc<Container>> for UserClaims {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<Container>,
+    ) -> Result<Option<Self>, Self::Rejection> {
+        let claims = <AuthClaims as OptionalFromRequestParts<Arc<Container>>>::from_request_parts(
+            parts, state,
+        )
+        .await?;
+        claims
+            .map(UserClaims::try_from)
+            .transpose()
+            .map_err(|_| bearer_rejection("Invalid access token", "auth.extractor"))
+    }
+}
 
 impl FromRequestParts<Arc<Container>> for AuthClaims {
     type Rejection = Response;
@@ -76,7 +105,8 @@ mod tests {
 
     use axum::http::{HeaderMap, HeaderValue, header};
 
-    use super::{AuthClaims, extract_claims};
+    use super::extract_claims;
+    use crate::app::auth::claims::AuthClaims;
 
     #[test]
     fn optional_claims_can_be_used_as_a_handler_extractor() {

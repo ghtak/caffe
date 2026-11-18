@@ -2,6 +2,9 @@ use serde_json::{Map, Value};
 
 use crate::app::auth::entity::UserStatus;
 
+/// 요청에 포함된 액세스 토큰의 검증된 클레임.
+pub struct AuthClaims(pub espr::jwt::Claims);
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct UserClaims {
     pub id: i64,
@@ -10,6 +13,25 @@ pub struct UserClaims {
 
 impl UserClaims {
     pub fn new(id: i64, status: UserStatus) -> Self { Self { id, status } }
+}
+
+impl TryFrom<AuthClaims> for UserClaims {
+    type Error = crate::Error;
+
+    fn try_from(AuthClaims(claims): AuthClaims) -> crate::Result<Self> {
+        let user: Self = serde_json::from_value(Value::Object(claims.user)).map_err(|error| {
+            crate::Error::new(crate::Code::Unauthorized, "Invalid user claims")
+                .at("auth.claims")
+                .cause(error)
+        })?;
+        if claims.sub != user.id.to_string() {
+            return Err(
+                crate::Error::new(crate::Code::Unauthorized, "Invalid user claims")
+                    .at("auth.claims"),
+            );
+        }
+        Ok(user)
+    }
 }
 
 impl TryFrom<UserClaims> for Map<String, Value> {
