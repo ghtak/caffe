@@ -7,6 +7,7 @@ pub enum Code {
     Internal,
     InvalidConfiguration,
     InvalidRequest,
+    Unauthorized,
     NotFound,
 }
 

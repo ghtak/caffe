@@ -1,4 +1,5 @@
 use espr::cache;
+use espr::hash::PasswordHasher as _;
 
 use crate::config::Config;
 use crate::error::ResultExt;
@@ -15,6 +16,7 @@ pub struct Container {
     pub cache: espr::cache::Cache,
     pub http_server: espr::http::Server,
     pub password_hasher: std::sync::Arc<espr::hash::argon2::Hasher>,
+    pub dummy_password_hash: String,
     pub jwt_token_service: espr::jwt::TokenService,
     pub refresh_token_service: crate::app::auth::service::RefreshTokenService,
 }
@@ -37,6 +39,15 @@ impl Container {
             espr::hash::argon2::Hasher::new(&config.argon2)
                 .internal("Failed to initialize password hasher", "app.container.new")?,
         );
+        let dummy_hasher = std::sync::Arc::clone(&password_hasher);
+        let dummy_password_hash =
+            tokio::task::spawn_blocking(move || dummy_hasher.hash("dummy login password"))
+                .await
+                .internal(
+                    "Failed to run dummy password hashing task",
+                    "app.container.new",
+                )?
+                .internal("Failed to hash dummy password", "app.container.new")?;
 
         let jwt_token_service = espr::jwt::TokenService::new(&config.jwt)
             .internal("Failed to initialize jwt", "app.container.new")?;
@@ -50,6 +61,7 @@ impl Container {
             cache,
             http_server,
             password_hasher,
+            dummy_password_hash,
             jwt_token_service,
             refresh_token_service,
         })

@@ -16,8 +16,13 @@ pub use feature::user_create_local;
 use crate::app::Container;
 
 pub fn router() -> axum::Router<Arc<Container>> {
-    axum::Router::new().route(
-        "/user/local",
-        axum::routing::post(feature::user_create_local::endpoint::handler),
-    )
+    axum::Router::new()
+        .route(
+            "/user/local",
+            axum::routing::post(feature::user_create_local::endpoint::handler),
+        )
+        .route(
+            "/login/local",
+            axum::routing::post(feature::user_login_local::endpoint::handler),
+        )
 }
