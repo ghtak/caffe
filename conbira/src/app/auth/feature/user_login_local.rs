@@ -90,12 +90,11 @@ pub mod usecase {
         refresh_token_service: &RefreshTokenService,
         command: Command,
     ) -> crate::Result<Output> {
-        let invalid = || {
+        let unauthorized = || {
             crate::Error::new(
                 crate::Code::Unauthorized,
                 "Invalid credentials or user status",
             )
-            .at(crate::here!())
         };
         let email = command.email.trim().to_ascii_lowercase();
 
@@ -116,9 +115,9 @@ pub mod usecase {
                 .as_ref()
                 .is_none_or(|identity| identity.password_hash.is_none())
         {
-            return Err(invalid());
+            return Err(unauthorized().at(crate::here!()));
         }
-        let identity = identity.ok_or_else(invalid)?;
+        let identity = identity.ok_or_else(|| unauthorized().at(crate::here!()))?;
         let user = {
             let mut connection = db.acquire_conn(crate::here!()).await?;
             user::find_by_id(&mut connection.handle(), identity.user_id)
@@ -128,7 +127,7 @@ pub mod usecase {
                 })?
         };
         if !matches!(user.status, UserStatus::Registered | UserStatus::Active) {
-            return Err(invalid());
+            return Err(unauthorized().at(crate::here!()));
         }
 
         let claims = UserClaims::new(user.id, user.status).try_into()?;
