@@ -1,3 +1,10 @@
 pub mod identity;
+pub mod permission;
 pub mod refresh_token;
+pub mod role;
+pub mod role_permission;
 pub mod user;
+pub mod user_role;
+
+#[cfg(test)]
+mod rbac_tests;
