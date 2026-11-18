@@ -28,7 +28,7 @@ impl PasswordHashService {
                 crate::Code::InvalidConfiguration,
                 "Invalid password hash concurrency or wait timeout",
             )
-            .at("auth.password_hash.config"));
+            .at(crate::here!()));
         }
         Ok(Self {
             hasher,
@@ -56,16 +56,16 @@ impl PasswordHashService {
                 .await
                 .map_err(|_| {
                     crate::Error::new(crate::Code::Busy, "Password hashing is busy")
-                        .at("auth.password_hash")
+                        .at(crate::here!())
                 })?
-                .internal("Password hash limiter is closed", "auth.password_hash")?;
+                .internal("Password hash limiter is closed", crate::here!())?;
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
             operation()
         })
         .await
-        .internal("Password hash task failed", "auth.password_hash")?
-        .internal("Password hash operation failed", "auth.password_hash")
+        .internal("Password hash task failed", crate::here!())?
+        .internal("Password hash operation failed", crate::here!())
     }
 }
 

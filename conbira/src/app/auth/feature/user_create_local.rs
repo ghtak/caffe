@@ -18,7 +18,7 @@ impl espr::validate::Validate for Input {
                 crate::Code::InvalidRequest,
                 "Nickname, email and password are required",
             )
-            .at("auth.user_create_local"));
+            .at(crate::here!()));
         }
         Ok(())
     }
@@ -63,6 +63,7 @@ pub mod endpoint {
 }
 
 pub mod usecase {
+    use crate::app::DatabaseExt as _;
     use crate::app::auth::entity::{Provider, UserInfo};
     use crate::app::auth::repository::{identity, user};
     use crate::app::auth::service::password_hash::PasswordHashService;
@@ -84,10 +85,7 @@ pub mod usecase {
         let email = command.email.trim().to_ascii_lowercase();
         let password_hash = password_hasher.hash(command.password).await?;
 
-        let mut tx = db
-            .tx()
-            .await
-            .internal("Failed to begin user creation", "auth.user_create_local")?;
+        let mut tx = db.begin_tx(crate::here!()).await?;
         let mut handle = tx.handle();
         let user = user::insert(&mut handle, &user::NewUser { nickname }).await?;
         identity::insert(
@@ -103,7 +101,7 @@ pub mod usecase {
         .await?;
         tx.commit()
             .await
-            .internal("Failed to commit user creation", "auth.user_create_local")?;
+            .internal("Failed to commit user creation", crate::here!())?;
 
         Ok(UserInfo {
             id: user.id,

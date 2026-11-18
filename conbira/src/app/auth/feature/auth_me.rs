@@ -8,7 +8,7 @@ pub async fn handler(
     claims: Option<AuthClaims>,
 ) -> Result<ApiResponse<espr::jwt::Claims>, Response> {
     let AuthClaims(claims) =
-        claims.ok_or_else(|| bearer_rejection("Authentication required", "auth.me"))?;
+        claims.ok_or_else(|| bearer_rejection("Authentication required", crate::here!()))?;
     Ok(ApiResponse::new(claims))
 }
 

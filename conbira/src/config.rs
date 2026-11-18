@@ -22,10 +22,10 @@ impl Config {
                 Ok(())
             }
             Err(error) => Err(crate::Error::internal("Failed to load environment file")
-                .at("config.load.env")
+                .at(crate::here!())
                 .cause(error)),
         }?;
         espr::config::load(path, Some("CONBIRA"))
-            .internal("Failed to load configuration", "config.load")
+            .internal("Failed to load configuration", crate::here!())
     }
 }

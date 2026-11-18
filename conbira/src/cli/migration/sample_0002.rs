@@ -1,6 +1,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
+use conbira::app::DatabaseExt as _;
 use conbira::error::ResultExt as _;
 use espr::sqlxdb::Database;
 use sqlx::Postgres;
@@ -19,10 +20,7 @@ impl Migration for InsertSamples {
         database: &'a Database<Postgres>,
     ) -> Pin<Box<dyn Future<Output = conbira::Result<()>> + Send + 'a>> {
         Box::pin(async move {
-            let mut connection = database.conn().await.internal(
-                "Failed to acquire sample migration connection",
-                "cli.migration.sample_0002",
-            )?;
+            let mut connection = database.acquire_conn(conbira::here!()).await?;
             sqlx::query(
                 "INSERT INTO conbira_sample (name)
                  SELECT 'sample ' || n FROM generate_series(1, 10) AS n
@@ -32,7 +30,7 @@ impl Migration for InsertSamples {
             )
             .execute(connection.handle().conn())
             .await
-            .internal("Failed to insert sample data", "cli.migration.sample_0002")?;
+            .internal("Failed to insert sample data", conbira::here!())?;
             Ok(())
         })
     }

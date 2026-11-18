@@ -22,7 +22,7 @@ pub mod endpoint {
                     crate::Code::InvalidRequest,
                     "Email and password are required",
                 )
-                .at("auth.user_login_local"));
+                .at(crate::here!()));
             }
             Ok(())
         }
@@ -95,12 +95,12 @@ pub mod usecase {
                 crate::Code::Unauthorized,
                 "Invalid credentials or user status",
             )
-            .at("auth.user_login_local")
+            .at(crate::here!())
         };
         let email = command.email.trim().to_ascii_lowercase();
 
         let identity = {
-            let mut connection = db.acquire_conn("auth.user_login_local").await?;
+            let mut connection = db.acquire_conn(crate::here!()).await?;
             identity::find_local_by_email(&mut connection.handle(), &email).await?
         };
 
@@ -120,12 +120,11 @@ pub mod usecase {
         }
         let identity = identity.ok_or_else(invalid)?;
         let user = {
-            let mut connection = db.acquire_conn("auth.user_login_local").await?;
+            let mut connection = db.acquire_conn(crate::here!()).await?;
             user::find_by_id(&mut connection.handle(), identity.user_id)
                 .await?
                 .ok_or_else(|| {
-                    crate::Error::internal("User for identity not found")
-                        .at("auth.user_login_local")
+                    crate::Error::internal("User for identity not found").at(crate::here!())
                 })?
         };
         if !matches!(user.status, UserStatus::Registered | UserStatus::Active) {
@@ -135,16 +134,16 @@ pub mod usecase {
         let claims = UserClaims::new(user.id, user.status).try_into()?;
         let access = jwt_token_service
             .issue(&user.id.to_string(), claims)
-            .internal("Failed to issue access token", "auth.user_login_local")?;
+            .internal("Failed to issue access token", crate::here!())?;
 
         let refresh = {
-            let mut tx = db.begin_tx("auth.user_login_local").await?;
+            let mut tx = db.begin_tx(crate::here!()).await?;
             let refresh = refresh_token_service
                 .issue(&mut tx.handle(), user.id)
                 .await?;
             tx.commit()
                 .await
-                .internal("Failed to commit login", "auth.user_login_local")?;
+                .internal("Failed to commit login", crate::here!())?;
             refresh
         };
 

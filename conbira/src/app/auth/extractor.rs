@@ -17,7 +17,7 @@ impl FromRequestParts<Arc<Container>> for UserClaims {
     ) -> Result<Self, Self::Rejection> {
         <Self as OptionalFromRequestParts<Arc<Container>>>::from_request_parts(parts, state)
             .await?
-            .ok_or_else(|| bearer_rejection("Authentication required", "auth.extractor"))
+            .ok_or_else(|| bearer_rejection("Authentication required", crate::here!()))
     }
 }
 
@@ -35,7 +35,7 @@ impl OptionalFromRequestParts<Arc<Container>> for UserClaims {
         claims
             .map(UserClaims::try_from)
             .transpose()
-            .map_err(|_| bearer_rejection("Invalid access token", "auth.extractor"))
+            .map_err(|_| bearer_rejection("Invalid access token", crate::here!()))
     }
 }
 
@@ -48,7 +48,7 @@ impl FromRequestParts<Arc<Container>> for AuthClaims {
     ) -> Result<Self, Self::Rejection> {
         <Self as OptionalFromRequestParts<Arc<Container>>>::from_request_parts(parts, state)
             .await?
-            .ok_or_else(|| bearer_rejection("Authentication required", "auth.extractor"))
+            .ok_or_else(|| bearer_rejection("Authentication required", crate::here!()))
     }
 }
 
@@ -61,7 +61,7 @@ impl OptionalFromRequestParts<Arc<Container>> for AuthClaims {
     ) -> Result<Option<Self>, Self::Rejection> {
         extract_claims(&parts.headers, &state.jwt_token_service)
             .map(|claims| claims.map(Self))
-            .map_err(|()| bearer_rejection("Invalid access token", "auth.extractor"))
+            .map_err(|()| bearer_rejection("Invalid access token", crate::here!()))
     }
 }
 

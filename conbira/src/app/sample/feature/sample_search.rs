@@ -53,10 +53,10 @@ pub mod endpoint {
 }
 
 pub mod usecase {
+    use crate::app::DatabaseExt as _;
     use crate::app::container::db::Database;
     use crate::app::sample::entity::Sample;
     use crate::app::sample::repository;
-    use crate::error::ResultExt as _;
     use crate::{Code, Error};
 
     pub struct Query {
@@ -73,14 +73,11 @@ pub mod usecase {
     pub async fn execute(db: &Database, query: Query) -> crate::Result<SearchResult> {
         if query.page == 0 || !(1..=100).contains(&query.page_size) {
             return Err(
-                Error::new(Code::InvalidRequest, "Invalid page or page size").at("sample.search"),
+                Error::new(Code::InvalidRequest, "Invalid page or page size").at(crate::here!()),
             );
         }
         let offset = i64::from(query.page - 1) * i64::from(query.page_size);
-        let mut connection = db
-            .conn()
-            .await
-            .internal("Failed to acquire sample connection", "sample.search")?;
+        let mut connection = db.acquire_conn(crate::here!()).await?;
         let mut items = repository::search(
             &mut connection.handle(),
             &repository::Criteria {

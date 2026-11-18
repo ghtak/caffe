@@ -97,7 +97,7 @@ impl RefreshTokenService {
         refresh_token::update(handle, &record)
             .await?
             .ok_or_else(|| {
-                crate::Error::internal("Refresh token disappeared").at("auth.refresh_token.rotate")
+                crate::Error::internal("Refresh token disappeared").at(crate::here!())
             })?;
         let expires_at = add_seconds(now, self.config.ttl_seconds)?.min(record.family_expires_at);
         let issued = self
@@ -141,10 +141,9 @@ impl RefreshTokenService {
         family_expires_at: jiff::Timestamp,
     ) -> crate::Result<IssuedRefreshToken> {
         let mut bytes = [0u8; 32];
-        OsRng.try_fill_bytes(&mut bytes).internal(
-            "Failed to generate refresh token",
-            "auth.refresh_token.issue",
-        )?;
+        OsRng
+            .try_fill_bytes(&mut bytes)
+            .internal("Failed to generate refresh token", crate::here!())?;
         let token = URL_SAFE_NO_PAD.encode(bytes);
         let stored = refresh_token::insert(
             handle,
@@ -170,7 +169,7 @@ fn require_transaction(handle: &mut Handle<'_>) -> crate::Result<()> {
     if !handle.conn().is_in_transaction() {
         return Err(
             crate::Error::internal("Refresh token operation requires a transaction")
-                .at("auth.refresh_token.transaction"),
+                .at(crate::here!()),
         );
     }
     Ok(())
@@ -192,13 +191,10 @@ fn add_seconds(now: jiff::Timestamp, seconds: u64) -> crate::Result<jiff::Timest
                 crate::Code::InvalidConfiguration,
                 "Invalid refresh token lifetime",
             )
-            .at("auth.refresh_token.config")
+            .at(crate::here!())
         })?;
     now.checked_add(jiff::SignedDuration::from_secs(seconds))
-        .internal(
-            "Invalid refresh token expiration",
-            "auth.refresh_token.config",
-        )
+        .internal("Invalid refresh token expiration", crate::here!())
 }
 
 #[cfg(test)]

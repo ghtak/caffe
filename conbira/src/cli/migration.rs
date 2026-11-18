@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
 use conbira::Error;
+use conbira::app::DatabaseExt as _;
 use conbira::config::Config;
 use conbira::error::ResultExt as _;
 use espr::sqlxdb::Database;
@@ -63,12 +64,12 @@ fn collect(
         let directory = directory.as_ref();
         let entries = std::fs::read_dir(directory).internal(
             format!("Failed to read migration directory {}", directory.display()),
-            "cli.migration.collect",
+            conbira::here!(),
         )?;
         for entry in entries {
             let entry = entry.internal(
                 format!("Failed to read entry in {}", directory.display()),
-                "cli.migration.collect",
+                conbira::here!(),
             )?;
             let path = entry.path();
             if path.extension().is_none_or(|ext| ext != "sql") {
@@ -78,7 +79,7 @@ fn collect(
                 .file_type()
                 .internal(
                     format!("Failed to inspect {}", path.display()),
-                    "cli.migration.collect",
+                    conbira::here!(),
                 )?
                 .is_file()
             {
@@ -86,7 +87,7 @@ fn collect(
                     "Migration is not a regular file: {}",
                     path.display()
                 ))
-                .at("cli.migration.collect"));
+                .at(conbira::here!()));
             }
             let order = parse_order(&path)?;
             tasks.push(MigrationTask::Sql(SqlMigration { order, path }));
@@ -97,7 +98,7 @@ fn collect(
         if pair[0].order() == pair[1].order() {
             return Err(
                 Error::internal(format!("Duplicate migration order: {}", pair[0].order()))
-                    .at("cli.migration.collect"),
+                    .at(conbira::here!()),
             );
         }
     }
@@ -123,7 +124,7 @@ fn parse_order(path: &Path) -> conbira::Result<Order> {
             "Invalid migration filename: {} (expected 0001_name.sql)",
             path.display()
         ))
-        .at("cli.migration.collect")
+        .at(conbira::here!())
     })
 }
 
@@ -139,10 +140,9 @@ pub(crate) async fn run(
     migrations: Vec<Box<dyn Migration>>,
 ) -> conbira::Result<()> {
     let tasks = collect(directories, migrations)?;
-    let database = Database::<Postgres>::new(&config.database).await.internal(
-        "Failed to initialize migration database",
-        "cli.migration.run",
-    )?;
+    let database = Database::<Postgres>::new(&config.database)
+        .await
+        .internal("Failed to initialize migration database", conbira::here!())?;
     let total = tasks.len();
     println!("Running {total} migration(s)");
     for task in tasks {
@@ -157,12 +157,9 @@ pub(crate) async fn run(
                 MigrationTask::Sql(migration) => {
                     let sql = std::fs::read_to_string(&migration.path).internal(
                         format!("Failed to read migration {}", migration.path.display()),
-                        "cli.migration.run",
+                        conbira::here!(),
                     )?;
-                    let mut connection = database.conn().await.internal(
-                        "Failed to acquire migration connection",
-                        "cli.migration.run",
-                    )?;
+                    let mut connection = database.acquire_conn(conbira::here!()).await?;
                     // The SQL file is the migration itself, not interpolated
                     // user data.
                     sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
@@ -170,7 +167,7 @@ pub(crate) async fn run(
                         .await
                         .internal(
                             format!("Failed to execute migration {}", migration.path.display()),
-                            "cli.migration.run",
+                            conbira::here!(),
                         )?;
                 }
                 MigrationTask::Code(migration) => migration.run(&database).await?,

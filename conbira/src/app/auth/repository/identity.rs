@@ -26,10 +26,7 @@ pub async fn insert(handle: &mut Handle<'_>, identity: &NewIdentity) -> Result<I
     .bind(&identity.password_hash)
     .fetch_one(handle.conn())
     .await
-    .internal(
-        "Failed to insert identity",
-        "auth.repository.identity.insert",
-    )
+    .internal("Failed to insert identity", crate::here!())
 }
 
 pub async fn find_by_provider_subject(
@@ -49,7 +46,7 @@ pub async fn find_by_provider_subject(
     .await
     .internal(
         "Failed to find identity by provider and subject",
-        "auth.repository.identity.find_by_provider_subject",
+        crate::here!(),
     )
 }
 
@@ -63,10 +60,7 @@ pub async fn find_local_by_email(handle: &mut Handle<'_>, email: &str) -> Result
     .bind(email)
     .fetch_optional(handle.conn())
     .await
-    .internal(
-        "Failed to find local identity by email",
-        "auth.repository.identity.find_local_by_email",
-    )
+    .internal("Failed to find local identity by email", crate::here!())
 }
 
 pub async fn find_by_user_id(handle: &mut Handle<'_>, user_id: i64) -> Result<Vec<Identity>> {
@@ -80,10 +74,7 @@ pub async fn find_by_user_id(handle: &mut Handle<'_>, user_id: i64) -> Result<Ve
     .bind(user_id)
     .fetch_all(handle.conn())
     .await
-    .internal(
-        "Failed to find identities by user",
-        "auth.repository.identity.find_by_user_id",
-    )
+    .internal("Failed to find identities by user", crate::here!())
 }
 
 pub async fn update(handle: &mut Handle<'_>, identity: &Identity) -> Result<Option<Identity>> {
@@ -99,10 +90,7 @@ pub async fn update(handle: &mut Handle<'_>, identity: &Identity) -> Result<Opti
     .bind(&identity.password_hash)
     .fetch_optional(handle.conn())
     .await
-    .internal(
-        "Failed to update identity",
-        "auth.repository.identity.update",
-    )
+    .internal("Failed to update identity", crate::here!())
 }
 
 #[cfg(test)]

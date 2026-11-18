@@ -31,20 +31,17 @@ pub mod endpoint {
 }
 
 pub mod usecase {
+    use crate::app::DatabaseExt as _;
     use crate::app::container::db::Database;
     use crate::app::sample::entity::Sample;
     use crate::app::sample::repository::{self, NewSample};
-    use crate::error::ResultExt as _;
 
     pub struct Command {
         pub name: String,
     }
 
     pub async fn execute(db: &Database, command: Command) -> crate::Result<Sample> {
-        let mut connection = db
-            .conn()
-            .await
-            .internal("Failed to acquire sample connection", "sample.create")?;
+        let mut connection = db.acquire_conn(crate::here!()).await?;
         let mut handle = connection.handle();
         let sample = NewSample { name: command.name };
         repository::insert(&mut handle, &sample).await

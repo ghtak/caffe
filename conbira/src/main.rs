@@ -11,7 +11,7 @@ async fn main() -> conbira::Result<()> {
     let options = option::Options::parse();
     let config = Config::load(&options.config, options.env_file.as_deref())?;
     let guard = espr::tracing::initialize(&config.trace)
-        .internal("Failed to initialize tracing", "main.tracing.initialize")?;
+        .internal("Failed to initialize tracing", conbira::here!())?;
 
     let container = Arc::new(app::Container::new(&config).await?);
 
@@ -21,12 +21,12 @@ async fn main() -> conbira::Result<()> {
         .http_server
         .run(router)
         .await
-        .internal("Failed to run http server", "main.http.run")?;
+        .internal("Failed to run http server", conbira::here!())?;
 
     guard
         .shutdown()
         .await
-        .internal("Failed to shut down tracing", "main.tracing.shutdown")?;
+        .internal("Failed to shut down tracing", conbira::here!())?;
 
     Ok(())
 }

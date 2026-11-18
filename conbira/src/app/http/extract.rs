@@ -23,7 +23,7 @@ where
             .map_err(|error| {
                 ApiResponse::from(
                     Error::new(Code::InvalidRequest, "Invalid request query")
-                        .at("http.extract.query")
+                        .at(crate::here!())
                         .cause(error),
                 )
                 .into_response()
@@ -54,7 +54,7 @@ where
                 } else {
                     Error::new(Code::InvalidRequest, "Invalid request path")
                 };
-                let error = mapped.at("http.extract.path").cause(error);
+                let error = mapped.at(crate::here!()).cause(error);
                 ApiResponse::from(error).into_response()
             })?;
         Ok(Self(value))
@@ -77,7 +77,7 @@ where
             .await
             .map_err(|error| {
                 let error = Error::new(Code::InvalidRequest, "Invalid request body")
-                    .at("http.extract.json")
+                    .at(crate::here!())
                     .cause(error);
                 ApiResponse::from(error).into_response()
             })?;

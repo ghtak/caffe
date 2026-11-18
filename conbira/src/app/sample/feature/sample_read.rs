@@ -21,19 +21,16 @@ pub mod endpoint {
 }
 
 pub mod usecase {
+    use crate::app::DatabaseExt as _;
     use crate::app::container::db::Database;
     use crate::app::sample::entity::Sample;
     use crate::app::sample::repository;
-    use crate::error::ResultExt as _;
     use crate::{Code, Error};
 
     pub async fn execute(db: &Database, id: i64) -> crate::Result<Sample> {
-        let mut connection = db
-            .conn()
-            .await
-            .internal("Failed to acquire sample connection", "sample.read")?;
+        let mut connection = db.acquire_conn(crate::here!()).await?;
         repository::find_by_id(&mut connection.handle(), id)
             .await?
-            .ok_or_else(|| Error::new(Code::NotFound, "Sample not found").at("sample.read"))
+            .ok_or_else(|| Error::new(Code::NotFound, "Sample not found").at(crate::here!()))
     }
 }

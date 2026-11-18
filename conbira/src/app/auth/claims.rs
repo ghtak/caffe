@@ -21,13 +21,13 @@ impl TryFrom<AuthClaims> for UserClaims {
     fn try_from(AuthClaims(claims): AuthClaims) -> crate::Result<Self> {
         let user: Self = serde_json::from_value(Value::Object(claims.user)).map_err(|error| {
             crate::Error::new(crate::Code::Unauthorized, "Invalid user claims")
-                .at("auth.claims")
+                .at(crate::here!())
                 .cause(error)
         })?;
         if claims.sub != user.id.to_string() {
             return Err(
                 crate::Error::new(crate::Code::Unauthorized, "Invalid user claims")
-                    .at("auth.claims"),
+                    .at(crate::here!()),
             );
         }
         Ok(user)
@@ -41,11 +41,11 @@ impl TryFrom<UserClaims> for Map<String, Value> {
         use crate::error::ResultExt as _;
 
         let value = serde_json::to_value(claims)
-            .internal("Failed to serialize user claims", "auth.claims")?;
+            .internal("Failed to serialize user claims", crate::here!())?;
 
         match value {
             Value::Object(map) => Ok(map),
-            _ => Err(crate::Error::internal("User claims must be an object").at("auth.claims")),
+            _ => Err(crate::Error::internal("User claims must be an object").at(crate::here!())),
         }
     }
 }

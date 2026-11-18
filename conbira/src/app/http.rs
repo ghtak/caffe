@@ -19,10 +19,9 @@ pub fn router(container: Arc<Container>) -> crate::Result<axum::Router> {
 
     let router = match &container.config.http.static_files {
         Some(static_files) => {
-            static_files.validate().internal(
-                "Failed to validate static files",
-                "http.router.static_files",
-            )?;
+            static_files
+                .validate()
+                .internal("Failed to validate static files", crate::here!())?;
             router.merge(static_files.as_router())
         }
         None => router,
