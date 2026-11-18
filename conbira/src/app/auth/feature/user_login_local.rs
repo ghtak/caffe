@@ -41,7 +41,7 @@ pub mod endpoint {
     ) -> ApiResult<LoginResponse> {
         let tokens = super::usecase::execute(
             &container.db,
-            Arc::clone(&container.password_hasher),
+            &container.password_hash_service,
             &container.dummy_password_hash,
             &container.jwt_token_service,
             &container.refresh_token_service,
@@ -62,13 +62,12 @@ pub mod endpoint {
 }
 
 pub mod usecase {
-    use std::sync::Arc;
-
-    use espr::hash::PasswordHasher as _;
-
+    use crate::app::DatabaseExt;
+    use crate::app::auth::claims::UserClaims;
     use crate::app::auth::entity::UserStatus;
     use crate::app::auth::repository::{identity, user};
-    use crate::app::auth::service::RefreshTokenService;
+    use crate::app::auth::service::password_hash::PasswordHashService;
+    use crate::app::auth::service::refresh_token::RefreshTokenService;
     use crate::app::container::db::Database;
     use crate::error::ResultExt as _;
 
@@ -85,7 +84,7 @@ pub mod usecase {
 
     pub async fn execute(
         db: &Database,
-        password_hasher: Arc<espr::hash::argon2::Hasher>,
+        password_hasher: &PasswordHashService,
         dummy_password_hash: &str,
         jwt_token_service: &espr::jwt::TokenService,
         refresh_token_service: &RefreshTokenService,
@@ -99,25 +98,19 @@ pub mod usecase {
             .at("auth.user_login_local")
         };
         let email = command.email.trim().to_ascii_lowercase();
-        let mut connection = db
-            .conn()
-            .await
-            .internal("Failed to connect to database", "auth.user_login_local")?;
-        let identity = identity::find_local_by_email(&mut connection.handle(), &email).await?;
+
+        let identity = {
+            let mut connection = db.acquire_conn("auth.user_login_local").await?;
+            identity::find_local_by_email(&mut connection.handle(), &email).await?
+        };
+
         let hash = identity
             .as_ref()
             .and_then(|identity| identity.password_hash.as_deref())
             .unwrap_or(dummy_password_hash)
             .to_owned();
-        drop(connection);
-        let valid =
-            tokio::task::spawn_blocking(move || password_hasher.verify(&command.password, &hash))
-                .await
-                .internal(
-                    "Failed to run password verification task",
-                    "auth.user_login_local",
-                )?
-                .internal("Failed to verify password", "auth.user_login_local")?;
+
+        let valid = password_hasher.verify(command.password, hash).await?;
         if !valid
             || identity
                 .as_ref()
@@ -126,39 +119,35 @@ pub mod usecase {
             return Err(invalid());
         }
         let identity = identity.ok_or_else(invalid)?;
-        let mut connection = db
-            .conn()
-            .await
-            .internal("Failed to connect to database", "auth.user_login_local")?;
-        let user = user::find_by_id(&mut connection.handle(), identity.user_id)
-            .await?
-            .ok_or_else(|| {
-                crate::Error::internal("User for identity not found").at("auth.user_login_local")
-            })?;
+        let user = {
+            let mut connection = db.acquire_conn("auth.user_login_local").await?;
+            user::find_by_id(&mut connection.handle(), identity.user_id)
+                .await?
+                .ok_or_else(|| {
+                    crate::Error::internal("User for identity not found")
+                        .at("auth.user_login_local")
+                })?
+        };
         if !matches!(user.status, UserStatus::Registered | UserStatus::Active) {
             return Err(invalid());
         }
-        drop(connection);
-        let mut claims = serde_json::Map::new();
-        claims.insert("id".into(), user.id.into());
-        claims.insert(
-            "status".into(),
-            serde_json::to_value(user.status)
-                .internal("Failed to serialize user status", "auth.user_login_local")?,
-        );
+
+        let claims = UserClaims::new(user.id, user.status).try_into()?;
         let access = jwt_token_service
             .issue(&user.id.to_string(), claims)
             .internal("Failed to issue access token", "auth.user_login_local")?;
-        let mut tx = db
-            .tx()
-            .await
-            .internal("Failed to begin login", "auth.user_login_local")?;
-        let refresh = refresh_token_service
-            .issue(&mut tx.handle(), user.id)
-            .await?;
-        tx.commit()
-            .await
-            .internal("Failed to commit login", "auth.user_login_local")?;
+
+        let refresh = {
+            let mut tx = db.begin_tx("auth.user_login_local").await?;
+            let refresh = refresh_token_service
+                .issue(&mut tx.handle(), user.id)
+                .await?;
+            tx.commit()
+                .await
+                .internal("Failed to commit login", "auth.user_login_local")?;
+            refresh
+        };
+
         Ok(Output {
             access_token: access.token,
             refresh_token: refresh.token,
@@ -213,15 +202,24 @@ mod tests {
             ed25519: keys,
         })?;
         std::fs::remove_dir_all(dir)?;
-        let refresh = auth::service::RefreshTokenService::new(auth::Config {
-            refresh_token_ttl_seconds: 3600,
-            refresh_token_family_ttl_seconds: 7200,
-        });
+        let refresh = auth::service::refresh_token::RefreshTokenService::new(
+            auth::service::refresh_token::Config {
+                ttl_seconds: 3600,
+                family_ttl_seconds: 7200,
+            },
+        );
         let hasher = Arc::new(espr::hash::argon2::Hasher::new(&Default::default())?);
+        let password_service = crate::app::auth::service::password_hash::PasswordHashService::new(
+            Arc::clone(&hasher),
+            &crate::app::auth::service::password_hash::Config {
+                max_concurrency: 4,
+                wait_timeout_seconds: 5,
+            },
+        )?;
         let dummy_hash = hasher.hash("dummy login password")?;
         let user = user_create_local::usecase::execute(
             &db,
-            Arc::clone(&hasher),
+            &password_service,
             user_create_local::usecase::Command {
                 nickname: "Alice".into(),
                 email: "alice@example.com".into(),
@@ -239,7 +237,7 @@ mod tests {
             drop(connection);
             let result = execute(
                 &db,
-                Arc::clone(&hasher),
+                &password_service,
                 &dummy_hash,
                 &jwt,
                 &refresh,
@@ -283,7 +281,7 @@ mod tests {
         ] {
             let result = execute(
                 &db,
-                Arc::clone(&hasher),
+                &password_service,
                 &dummy_hash,
                 &jwt,
                 &refresh,
@@ -298,7 +296,7 @@ mod tests {
         // 더미 해시가 잘못되면 없는 계정도 검증 오류를 반환한다.
         let result = execute(
             &db,
-            Arc::clone(&hasher),
+            &password_service,
             "invalid hash",
             &jwt,
             &refresh,

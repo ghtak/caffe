@@ -1,5 +1,4 @@
-use espr::cache;
-use espr::hash::PasswordHasher as _;
+use espr::{cache, sqlxdb};
 
 use crate::config::Config;
 use crate::error::ResultExt;
@@ -15,10 +14,10 @@ pub struct Container {
     pub db: db::Database,
     pub cache: espr::cache::Cache,
     pub http_server: espr::http::Server,
-    pub password_hasher: std::sync::Arc<espr::hash::argon2::Hasher>,
+    pub password_hash_service: crate::app::auth::service::password_hash::PasswordHashService,
     pub dummy_password_hash: String,
     pub jwt_token_service: espr::jwt::TokenService,
-    pub refresh_token_service: crate::app::auth::service::RefreshTokenService,
+    pub refresh_token_service: crate::app::auth::service::refresh_token::RefreshTokenService,
 }
 
 impl Container {
@@ -39,31 +38,51 @@ impl Container {
             espr::hash::argon2::Hasher::new(&config.argon2)
                 .internal("Failed to initialize password hasher", "app.container.new")?,
         );
-        let dummy_hasher = std::sync::Arc::clone(&password_hasher);
-        let dummy_password_hash =
-            tokio::task::spawn_blocking(move || dummy_hasher.hash("dummy login password"))
-                .await
-                .internal(
-                    "Failed to run dummy password hashing task",
-                    "app.container.new",
-                )?
-                .internal("Failed to hash dummy password", "app.container.new")?;
+        let password_hash_service =
+            crate::app::auth::service::password_hash::PasswordHashService::new(
+                password_hasher,
+                &config.auth.password_hash,
+            )?;
+        let dummy_password_hash = password_hash_service
+            .hash("dummy login password".into())
+            .await?;
 
         let jwt_token_service = espr::jwt::TokenService::new(&config.jwt)
             .internal("Failed to initialize jwt", "app.container.new")?;
 
         let refresh_token_service =
-            crate::app::auth::service::RefreshTokenService::new(config.auth.clone());
+            crate::app::auth::service::refresh_token::RefreshTokenService::new(
+                config.auth.refresh_token.clone(),
+            );
 
         Ok(Self {
             config: config.clone(),
             db,
             cache,
             http_server,
-            password_hasher,
+            password_hash_service,
             dummy_password_hash,
             jwt_token_service,
             refresh_token_service,
         })
+    }
+}
+
+#[async_trait::async_trait]
+pub trait DatabaseExt {
+    async fn acquire_conn(&self, at: &'static str) -> crate::Result<sqlxdb::Conn<sqlx::Postgres>>;
+    async fn begin_tx(&self, at: &'static str) -> crate::Result<sqlxdb::Tx<sqlx::Postgres>>;
+}
+
+#[async_trait::async_trait]
+impl DatabaseExt for db::Database {
+    async fn acquire_conn(&self, at: &'static str) -> crate::Result<sqlxdb::Conn<sqlx::Postgres>> {
+        self.conn()
+            .await
+            .internal("Failed to get db connection", at)
+    }
+
+    async fn begin_tx(&self, at: &'static str) -> crate::Result<sqlxdb::Tx<sqlx::Postgres>> {
+        self.tx().await.internal("Failed to get db transaction", at)
     }
 }

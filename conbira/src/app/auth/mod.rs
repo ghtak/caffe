@@ -1,3 +1,4 @@
+pub mod claims;
 pub mod entity;
 pub mod extractor;
 pub mod repository;
@@ -5,8 +6,8 @@ pub mod service;
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct Config {
-    pub refresh_token_ttl_seconds: u64,
-    pub refresh_token_family_ttl_seconds: u64,
+    pub refresh_token: service::refresh_token::Config,
+    pub password_hash: service::password_hash::Config,
 }
 
 mod feature;

@@ -80,7 +80,11 @@ async fn user_create_local(
         "Failed to initialize password hasher",
         "cli.user_create_local",
     )?);
-    let user = create_local::usecase::execute(&db, password_hasher, request.into()).await?;
+    let password_service = conbira::app::auth::service::password_hash::PasswordHashService::new(
+        password_hasher,
+        &config.auth.password_hash,
+    )?;
+    let user = create_local::usecase::execute(&db, &password_service, request.into()).await?;
     let output = serde_json::to_string(&user)
         .internal("Failed to serialize created user", "cli.user_create_local")?;
     println!("{output}");

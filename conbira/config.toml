@@ -29,9 +29,13 @@ iterations = 2
 parallelism = 1
 output_len = 32
 
-[auth]
-refresh_token_ttl_seconds = 604800
-refresh_token_family_ttl_seconds = 604800
+[auth.refresh_token]
+ttl_seconds = 604800
+family_ttl_seconds = 604800
+
+[auth.password_hash]
+max_concurrency = 4
+wait_timeout_seconds = 5
 
 [jwt]
 issuer = "conbira"

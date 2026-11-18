@@ -54,7 +54,7 @@ pub mod endpoint {
     ) -> ApiResult<CreateResponse> {
         let user = super::usecase::execute(
             &container.db,
-            Arc::clone(&container.password_hasher),
+            &container.password_hash_service,
             request.into(),
         )
         .await?;
@@ -63,12 +63,9 @@ pub mod endpoint {
 }
 
 pub mod usecase {
-    use std::sync::Arc;
-
-    use espr::hash::PasswordHasher as _;
-
     use crate::app::auth::entity::{Provider, UserInfo};
     use crate::app::auth::repository::{identity, user};
+    use crate::app::auth::service::password_hash::PasswordHashService;
     use crate::app::container::db::Database;
     use crate::error::ResultExt as _;
 
@@ -80,19 +77,12 @@ pub mod usecase {
 
     pub async fn execute(
         db: &Database,
-        password_hasher: Arc<espr::hash::argon2::Hasher>,
+        password_hasher: &PasswordHashService,
         command: Command,
     ) -> crate::Result<UserInfo> {
         let nickname = command.nickname.trim().to_owned();
         let email = command.email.trim().to_ascii_lowercase();
-        let password_hash =
-            tokio::task::spawn_blocking(move || password_hasher.hash(&command.password))
-                .await
-                .internal(
-                    "Failed to run password hashing task",
-                    "auth.user_create_local.hash_task",
-                )?
-                .internal("Failed to hash password", "auth.user_create_local.hash")?;
+        let password_hash = password_hasher.hash(command.password).await?;
 
         let mut tx = db
             .tx()
@@ -190,9 +180,16 @@ mod tests {
         drop(connection);
 
         let hasher = Arc::new(espr::hash::argon2::Hasher::new(&Default::default())?);
+        let password_service = crate::app::auth::service::password_hash::PasswordHashService::new(
+            Arc::clone(&hasher),
+            &crate::app::auth::service::password_hash::Config {
+                max_concurrency: 4,
+                wait_timeout_seconds: 5,
+            },
+        )?;
         let result = execute(
             &db,
-            Arc::clone(&hasher),
+            &password_service,
             Command {
                 nickname: "Alice".into(),
                 email: " Alice@Example.com ".into(),
@@ -224,7 +221,7 @@ mod tests {
         assert!(
             execute(
                 &db,
-                Arc::clone(&hasher),
+                &password_service,
                 Command {
                     nickname: "Duplicate".into(),
                     email: "alice@example.com".into(),

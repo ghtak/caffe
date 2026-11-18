@@ -4,10 +4,15 @@ use rand_core::{OsRng, RngCore as _};
 use sha2::{Digest as _, Sha256};
 use sqlx::Connection as _;
 
-use crate::app::auth::Config;
 use crate::app::auth::repository::refresh_token::{self, NewRefreshToken};
 use crate::app::container::db::Handle;
 use crate::error::ResultExt as _;
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Config {
+    pub ttl_seconds: u64,
+    pub family_ttl_seconds: u64,
+}
 
 /// 인증 방식과 사용자 상태 판단을 제외한 refresh token 수명 관리.
 pub struct RefreshTokenService {
@@ -40,9 +45,8 @@ impl RefreshTokenService {
     ) -> crate::Result<IssuedRefreshToken> {
         require_transaction(handle)?;
         let now = jiff::Timestamp::now();
-        let family_expires_at = add_seconds(now, self.config.refresh_token_family_ttl_seconds)?;
-        let expires_at =
-            add_seconds(now, self.config.refresh_token_ttl_seconds)?.min(family_expires_at);
+        let family_expires_at = add_seconds(now, self.config.family_ttl_seconds)?;
+        let expires_at = add_seconds(now, self.config.ttl_seconds)?.min(family_expires_at);
         self.insert(
             handle,
             user_id,
@@ -95,8 +99,7 @@ impl RefreshTokenService {
             .ok_or_else(|| {
                 crate::Error::internal("Refresh token disappeared").at("auth.refresh_token.rotate")
             })?;
-        let expires_at =
-            add_seconds(now, self.config.refresh_token_ttl_seconds)?.min(record.family_expires_at);
+        let expires_at = add_seconds(now, self.config.ttl_seconds)?.min(record.family_expires_at);
         let issued = self
             .insert(
                 handle,
@@ -205,8 +208,8 @@ mod tests {
 
     fn service() -> RefreshTokenService {
         RefreshTokenService::new(Config {
-            refresh_token_ttl_seconds: 3600,
-            refresh_token_family_ttl_seconds: 7200,
+            ttl_seconds: 3600,
+            family_ttl_seconds: 7200,
         })
     }
 
@@ -214,8 +217,8 @@ mod tests {
         let db = Database::new(&crate::test_support::database_config(1)).await?;
         let mut conn = db.conn().await?;
         for migration in [
-            include_str!("../../../migrations/0010_user.sql"),
-            include_str!("../../../migrations/0011_refresh_token.sql"),
+            include_str!("../../../../migrations/0010_user.sql"),
+            include_str!("../../../../migrations/0011_refresh_token.sql"),
         ] {
             let sql = migration.replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
             sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
@@ -383,8 +386,8 @@ mod tests {
                     .await?;
             }
             for migration in [
-                include_str!("../../../migrations/0010_user.sql"),
-                include_str!("../../../migrations/0011_refresh_token.sql"),
+                include_str!("../../../../migrations/0010_user.sql"),
+                include_str!("../../../../migrations/0011_refresh_token.sql"),
             ] {
                 sqlx::raw_sql(migration)
                     .execute(first.handle().conn())
