@@ -1,0 +1,43 @@
+@httpServer = http://127.0.0.1:18080
+@password = local-test-password
+
+### 로컬 사용자 생성: 요청마다 고유 이메일 사용
+# @name createLocalUser
+POST {{httpServer}}/api/auth/user/local
+Content-Type: application/json
+
+{
+  "nickname": "local test user",
+  "email": "local-{{$guid}}@example.com",
+  "password": "{{password}}"
+}
+
+### 생성 요청 실행 후 반환된 이메일로 로그인
+# @name loginLocalUser
+POST {{httpServer}}/api/auth/login/local
+Content-Type: application/json
+
+{
+  "email": "{{createLocalUser.response.body.$.data.email}}",
+  "password": "{{password}}"
+}
+
+### 로그인 후 액세스 토큰의 클레임 조회
+GET {{httpServer}}/api/auth/me
+Authorization: Bearer {{loginLocalUser.response.body.$.data.access_token}}
+
+### 인증 정보 없는 요청은 401
+GET {{httpServer}}/api/auth/me
+
+### 유효하지 않은 토큰은 401
+GET {{httpServer}}/api/auth/me
+Authorization: Bearer invalid-token
+
+### 잘못된 비밀번호로 로그인 실패
+POST {{httpServer}}/api/auth/login/local
+Content-Type: application/json
+
+{
+  "email": "{{createLocalUser.response.body.$.data.email}}",
+  "password": "wrong-password"
+}

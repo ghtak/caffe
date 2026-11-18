@@ -1,4 +1,5 @@
 pub mod entity;
+pub mod extractor;
 pub mod repository;
 pub mod service;
 
@@ -17,6 +18,7 @@ use crate::app::Container;
 
 pub fn router() -> axum::Router<Arc<Container>> {
     axum::Router::new()
+        .route("/me", axum::routing::get(feature::auth_me::handler))
         .route(
             "/user/local",
             axum::routing::post(feature::user_create_local::endpoint::handler),
