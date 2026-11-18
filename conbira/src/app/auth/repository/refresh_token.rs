@@ -80,6 +80,53 @@ pub async fn find_by_hash(handle: &mut Handle<'_>, hash: &str) -> Result<Option<
     )
 }
 
+/// READ COMMITTED 트랜잭션에서 모든 계열 변경은 동일한 잠금을 먼저 획득해야
+/// 한다.
+pub async fn lock_family(handle: &mut Handle<'_>, family_id: uuid::Uuid) -> Result<()> {
+    let isolation: String = sqlx::query_scalar("SHOW transaction_isolation")
+        .fetch_one(handle.conn())
+        .await
+        .internal(
+            "Failed to inspect transaction isolation",
+            "auth.repository.refresh_token.lock_family",
+        )?;
+    if isolation != "read committed" {
+        return Err(crate::Error::internal(
+            "Refresh token operations require READ COMMITTED isolation",
+        )
+        .at("auth.repository.refresh_token.lock_family"));
+    }
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 1357911))")
+        .bind(family_id.to_string())
+        .execute(handle.conn())
+        .await
+        .internal(
+            "Failed to lock refresh token family",
+            "auth.repository.refresh_token.lock_family",
+        )?;
+    Ok(())
+}
+
+pub async fn revoke_family(
+    handle: &mut Handle<'_>,
+    family_id: uuid::Uuid,
+    reason: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE conbira_refresh_tokens SET revoked_at = CURRENT_TIMESTAMP, revoke_reason = $2
+         WHERE family_id = $1 AND used_at IS NULL AND revoked_at IS NULL",
+    )
+    .bind(family_id)
+    .bind(reason)
+    .execute(handle.conn())
+    .await
+    .internal(
+        "Failed to revoke refresh token family",
+        "auth.repository.refresh_token.revoke_family",
+    )?;
+    Ok(())
+}
+
 /// 트랜잭션의 handle을 전달해야 잠금이 트랜잭션 종료까지 유지된다.
 pub async fn find_by_hash_for_update(
     handle: &mut Handle<'_>,

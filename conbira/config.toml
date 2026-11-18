@@ -29,6 +29,10 @@ iterations = 2
 parallelism = 1
 output_len = 32
 
+[auth]
+refresh_token_ttl_seconds = 604800
+refresh_token_family_ttl_seconds = 604800
+
 [jwt]
 issuer = "conbira"
 audience = "conbira"

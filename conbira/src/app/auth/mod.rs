@@ -1,5 +1,12 @@
 pub mod entity;
 pub mod repository;
+pub mod service;
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Config {
+    pub refresh_token_ttl_seconds: u64,
+    pub refresh_token_family_ttl_seconds: u64,
+}
 
 mod feature;
 use std::sync::Arc;
