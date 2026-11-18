@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use axum::extract::OptionalFromRequestParts;
+use axum::extract::{FromRequestParts, OptionalFromRequestParts};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, HeaderValue, header};
 use axum::response::{IntoResponse, Response};
@@ -9,6 +9,19 @@ use crate::app::Container;
 
 /// 요청에 포함된 액세스 토큰의 검증된 클레임.
 pub struct AuthClaims(pub espr::jwt::Claims);
+
+impl FromRequestParts<Arc<Container>> for AuthClaims {
+    type Rejection = Response;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<Container>,
+    ) -> Result<Self, Self::Rejection> {
+        <Self as OptionalFromRequestParts<Arc<Container>>>::from_request_parts(parts, state)
+            .await?
+            .ok_or_else(|| bearer_rejection("Authentication required", "auth.extractor"))
+    }
+}
 
 impl OptionalFromRequestParts<Arc<Container>> for AuthClaims {
     type Rejection = Response;

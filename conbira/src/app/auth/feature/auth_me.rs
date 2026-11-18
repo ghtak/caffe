@@ -73,17 +73,42 @@ mod tests {
         espr::jwt::ed25519::generate(&config.jwt.ed25519)?;
         let container = Arc::new(crate::app::Container::new(&config).await?);
         std::fs::remove_dir_all(dir)?;
-        let router = crate::app::http::router(container)?;
-        for authorization in [None, Some("Bearer invalid")] {
-            let mut request = Request::builder().uri("/api/auth/me");
-            if let Some(value) = authorization {
-                request = request.header(header::AUTHORIZATION, value);
+        let token = container
+            .jwt_token_service
+            .issue("test-user", Default::default())?
+            .token;
+        async fn required(AuthClaims(claims): AuthClaims) -> String { claims.sub }
+        let router = crate::app::http::router(Arc::clone(&container))?.route(
+            "/required",
+            axum::routing::get(required).with_state(container),
+        );
+        for path in ["/api/auth/me", "/required"] {
+            for authorization in [None, Some("Bearer invalid")] {
+                let mut request = Request::builder().uri(path);
+                if let Some(value) = authorization {
+                    request = request.header(header::AUTHORIZATION, value);
+                }
+                let response = router.clone().oneshot(request.body(Body::empty())?).await?;
+                // 선택적 및 필수 추출 경로 모두 인증 실패에 Bearer 챌린지를
+                // 반환한다.
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+                assert_eq!(response.headers()[header::WWW_AUTHENTICATE], "Bearer");
             }
-            let response = router.clone().oneshot(request.body(Body::empty())?).await?;
-            // 두 인증 실패 경로 모두 401과 Bearer 챌린지를 반환한다.
-            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
-            assert_eq!(response.headers()[header::WWW_AUTHENTICATE], "Bearer");
         }
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/required")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())?,
+            )
+            .await?;
+        // 유효한 토큰은 필수 추출기를 통과하고 클레임을 전달한다.
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            to_bytes(response.into_body(), 4096).await?.as_ref(),
+            b"test-user"
+        );
         Ok(())
     }
 }
