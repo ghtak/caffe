@@ -14,6 +14,7 @@ pub struct Container {
     pub db: db::Database,
     pub cache: espr::cache::Cache,
     pub http_server: espr::http::Server,
+    pub jwt_token_service: espr::jwt::TokenService,
 }
 
 impl Container {
@@ -30,11 +31,15 @@ impl Container {
             .await
             .internal("Failed to initialize http", "app.container.new")?;
 
+        let jwt_token_service = espr::jwt::TokenService::new(&config.jwt)
+            .internal("Failed to initialize jwt", "app.container.new")?;
+
         Ok(Self {
             config: config.clone(),
             db,
             cache,
             http_server,
+            jwt_token_service,
         })
     }
 }
