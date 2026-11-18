@@ -19,7 +19,7 @@ check:
 # 워크스페이스의 기본 테스트 실행 (ignored 제외)
 [group: 'workspace']
 test:
-    cargo test --workspace
+    cargo test --workspace --locked
 
 # 기본 테스트 실행 및 표준 출력 표시
 [group: 'workspace']
