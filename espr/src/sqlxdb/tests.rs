@@ -28,9 +28,8 @@ pub mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires a PostgreSQL test database"]
     async fn creates_and_drops_sample_table() -> crate::Result<()> {
-        let db = TestDB::new(&super::test_config()).await?;
+        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
         let mut conn = db.conn().await?;
         setup(&mut conn.handle()).await?;
         let exists: bool = sqlx::query_scalar("SELECT to_regclass('pg_temp.sample') IS NOT NULL")
@@ -123,9 +122,8 @@ pub mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires a PostgreSQL test database"]
     async fn insert_and_find_sample() -> crate::Result<()> {
-        let db = TestDB::new(&super::test_config()).await?;
+        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
         let mut conn = db.conn().await?;
         setup(&mut conn.handle()).await?;
         let sample = sample();
@@ -138,9 +136,8 @@ pub mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires a PostgreSQL test database"]
     async fn update_sample() -> crate::Result<()> {
-        let db = TestDB::new(&super::test_config()).await?;
+        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
         let mut conn = db.conn().await?;
         setup(&mut conn.handle()).await?;
         let mut sample = sample();
@@ -156,9 +153,8 @@ pub mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires a PostgreSQL test database"]
     async fn delete_sample() -> crate::Result<()> {
-        let db = TestDB::new(&super::test_config()).await?;
+        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
         let mut conn = db.conn().await?;
         setup(&mut conn.handle()).await?;
         let sample = sample();
@@ -172,9 +168,8 @@ pub mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires a PostgreSQL test database"]
     async fn transaction_commit_and_rollback() -> crate::Result<()> {
-        let db = TestDB::new(&super::test_config()).await?;
+        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
         let mut conn = db.conn().await?;
         setup(&mut conn.handle()).await?;
         let mut sample = sample();
@@ -201,18 +196,9 @@ pub mod sample {
     }
 }
 
-fn test_config() -> Config {
-    Config {
-        url: std::env::var("ESPR_TEST_DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://tlab:tlab@192.168.1.20:15432/tlab".to_string()),
-        max_connections: 10,
-    }
-}
-
 #[tokio::test]
-#[ignore = "requires a PostgreSQL test database"]
 async fn connects_to_database() -> crate::Result<()> {
-    let db = TestDB::new(&test_config()).await?;
+    let db = TestDB::new(&crate::test_support::database_config(10)).await?;
     let mut conn = db.conn().await?;
     let value: i32 = sqlx::query_scalar("SELECT 1")
         .fetch_one(conn.handle().conn())

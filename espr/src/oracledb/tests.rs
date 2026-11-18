@@ -1,18 +1,8 @@
 use super::*;
 
-fn test_config() -> Config {
-    Config {
-        username: std::env::var("ESPR_TEST_ORACLE_USERNAME").unwrap_or_else(|_| "tlab".into()),
-        password: std::env::var("ESPR_TEST_ORACLE_PASSWORD").unwrap_or_else(|_| "Tlab_123".into()),
-        connect_string: std::env::var("ESPR_TEST_ORACLE_CONNECT_STRING")
-            .unwrap_or_else(|_| "192.168.1.20:11521/FREEPDB1".into()),
-        max_connections: 10,
-    }
-}
-
 #[tokio::test]
 async fn rejects_zero_pool_size() {
-    let mut config = test_config();
+    let mut config = crate::test_support::oracle_config();
     config.max_connections = 0;
     assert!(matches!(
         Database::new(&config).await,
@@ -21,9 +11,8 @@ async fn rejects_zero_pool_size() {
 }
 
 #[tokio::test]
-#[ignore = "requires an Oracle test database"]
 async fn connects_to_database() -> Result<()> {
-    let db = Database::new(&test_config()).await?;
+    let db = Database::new(&crate::test_support::oracle_config()).await?;
     let value = db
         .interact(|pool| {
             let conn = pool.acquire()?;
@@ -165,9 +154,8 @@ mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires an Oracle test database"]
     async fn creates_and_drops_sample_table() -> Result<()> {
-        let db = Database::new(&super::test_config()).await?;
+        let db = Database::new(&crate::test_support::oracle_config()).await?;
         db.interact(|pool| {
             let conn = pool.acquire()?;
             setup(&conn)?;
@@ -188,9 +176,8 @@ mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires an Oracle test database"]
     async fn insert_and_find_sample() -> Result<()> {
-        let db = Database::new(&super::test_config()).await?;
+        let db = Database::new(&crate::test_support::oracle_config()).await?;
         db.interact(|pool| {
             let conn = pool.acquire()?;
             setup(&conn)?;
@@ -206,9 +193,8 @@ mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires an Oracle test database"]
     async fn update_sample() -> Result<()> {
-        let db = Database::new(&super::test_config()).await?;
+        let db = Database::new(&crate::test_support::oracle_config()).await?;
         db.interact(|pool| {
             let conn = pool.acquire()?;
             setup(&conn)?;
@@ -227,9 +213,8 @@ mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires an Oracle test database"]
     async fn delete_sample() -> Result<()> {
-        let db = Database::new(&super::test_config()).await?;
+        let db = Database::new(&crate::test_support::oracle_config()).await?;
         db.interact(|pool| {
             let conn = pool.acquire()?;
             setup(&conn)?;
@@ -246,9 +231,8 @@ mod sample {
     }
 
     #[tokio::test]
-    #[ignore = "requires an Oracle test database"]
     async fn transaction_commit_and_rollback() -> Result<()> {
-        let db = Database::new(&super::test_config()).await?;
+        let db = Database::new(&crate::test_support::oracle_config()).await?;
         db.interact(|pool| {
             let conn = pool.acquire()?;
             setup(&conn)?;

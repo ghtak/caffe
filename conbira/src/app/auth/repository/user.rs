@@ -53,14 +53,8 @@ mod tests {
     use crate::app::container::db::Database;
 
     #[tokio::test]
-    #[ignore = "requires PostgreSQL test database"]
     async fn creates_reads_and_updates_user_with_status_and_timestamps() -> anyhow::Result<()> {
-        let database = Database::new(&espr::sqlxdb::Config {
-            url: std::env::var("CONBIRA_TEST_DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://tlab:tlab@192.168.1.20:15432/tlab".to_string()),
-            max_connections: 1,
-        })
-        .await?;
+        let database = Database::new(&crate::test_support::database_config(1)).await?;
         let mut connection = database.conn().await?;
         let schema = include_str!("../../../../migrations/0010_user.sql")
             .split_once(';')

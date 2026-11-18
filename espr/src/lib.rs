@@ -10,3 +10,6 @@ pub mod jwt;
 pub mod oracledb;
 pub mod sqlxdb;
 pub mod validate;
+
+#[cfg(test)]
+mod test_support;

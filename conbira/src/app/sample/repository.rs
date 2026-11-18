@@ -82,12 +82,7 @@ mod tests {
     use crate::app::container::db::Database;
 
     async fn setup() -> anyhow::Result<espr::sqlxdb::Conn<sqlx::Postgres>> {
-        let database = Database::new(&espr::sqlxdb::Config {
-            url: std::env::var("CONBIRA_TEST_DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://tlab:tlab@192.168.1.20:15432/tlab".to_string()),
-            max_connections: 1,
-        })
-        .await?;
+        let database = Database::new(&crate::test_support::database_config(1)).await?;
         let mut connection = database.conn().await?;
         let schema = include_str!("../../../migrations/0001_sample.sql")
             .replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
@@ -98,7 +93,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires CONBIRA_TEST_DATABASE_URL"]
     async fn creates_sample_with_generated_id_and_server_timestamps() -> anyhow::Result<()> {
         let mut connection = setup().await?;
         let mut handle = connection.handle();
@@ -122,7 +116,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires CONBIRA_TEST_DATABASE_URL"]
     async fn searches_literal_names_in_id_order_with_limit_and_offset() -> anyhow::Result<()> {
         let mut connection = setup().await?;
         let mut handle = connection.handle();
@@ -186,7 +179,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires CONBIRA_TEST_DATABASE_URL"]
     async fn inserts_reads_updates_and_deletes_sample() -> anyhow::Result<()> {
         let mut connection = setup().await?;
         let mut handle = connection.handle();

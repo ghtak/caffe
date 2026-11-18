@@ -124,20 +124,9 @@ impl Cache {
 mod tests {
     use super::*;
 
-    fn config() -> Config {
-        Config {
-            url: std::env::var("ESPR_TEST_CACHE_URL")
-                .unwrap_or_else(|_| "redis://192.168.1.20:16379".into()),
-            max_connections: 2,
-            connect_timeout_ms: 1_000,
-            response_timeout_ms: 1_000,
-            pool_wait_timeout_ms: 1_000,
-        }
-    }
-
     #[tokio::test]
     async fn rejects_zero_pool_size() {
-        let mut config = config();
+        let mut config = crate::test_support::cache_config();
         config.max_connections = 0;
         assert!(matches!(
             Cache::new(&config).await,
@@ -147,7 +136,7 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_zero_timeouts() {
-        let mut config = config();
+        let mut config = crate::test_support::cache_config();
         config.connect_timeout_ms = 0;
         assert!(matches!(
             Cache::new(&config).await,
@@ -181,9 +170,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires a Redis or Valkey test server"]
     async fn stores_and_reads_values() -> Result<()> {
-        let cache = Cache::new(&config()).await?;
+        let cache = Cache::new(&crate::test_support::cache_config()).await?;
         cache.ping().await?;
         let key = format!("espr:test:{}:values", std::process::id());
 
@@ -202,9 +190,8 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "requires a Redis or Valkey test server"]
     async fn expires_values() -> Result<()> {
-        let cache = Cache::new(&config()).await?;
+        let cache = Cache::new(&crate::test_support::cache_config()).await?;
         let key = format!("espr:test:{}:expiry", std::process::id());
 
         cache
