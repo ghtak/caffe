@@ -21,6 +21,20 @@ impl UserClaims {
             permissions,
         }
     }
+
+    pub fn has_permission(&self, code: &str) -> bool {
+        self.permissions.iter().any(|permission| permission == code)
+    }
+
+    /// 빈 목록은 false를 반환한다.
+    pub fn has_any_permission(&self, codes: &[&str]) -> bool {
+        codes.iter().any(|code| self.has_permission(code))
+    }
+
+    /// 빈 목록은 true를 반환한다.
+    pub fn has_all_permissions(&self, codes: &[&str]) -> bool {
+        codes.iter().all(|code| self.has_permission(code))
+    }
 }
 
 impl TryFrom<AuthClaims> for UserClaims {
