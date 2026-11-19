@@ -5,6 +5,7 @@ React, TypeScript, TanStack Router, TanStack Query, Tailwind CSS 기반 프런�
 ```sh
 npm ci
 npm run dev
+npm run lint
 npm run build
 ```
 

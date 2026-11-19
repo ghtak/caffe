@@ -103,6 +103,12 @@ conbira-ui-dev:
 conbira-ui-check:
     npm run typecheck
 
+# 프런트엔드 린트 검사
+[group: 'conbira-ui']
+[working-directory: 'conbira-ui']
+conbira-ui-lint:
+    npm run lint
+
 # 프런트엔드 프로덕션 빌드
 [group: 'conbira-ui']
 [working-directory: 'conbira-ui']
