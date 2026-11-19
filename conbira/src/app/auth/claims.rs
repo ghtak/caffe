@@ -10,17 +10,22 @@ pub struct UserClaims {
     pub id: i64,
     pub status: UserStatus,
     #[serde(default)]
+    pub roles: Vec<String>,
+    #[serde(default)]
     pub permissions: Vec<String>,
 }
 
 impl UserClaims {
-    pub fn new(id: i64, status: UserStatus, permissions: Vec<String>) -> Self {
+    pub fn new(id: i64, status: UserStatus, roles: Vec<String>, permissions: Vec<String>) -> Self {
         Self {
             id,
             status,
+            roles,
             permissions,
         }
     }
+
+    pub fn has_role(&self, code: &str) -> bool { self.roles.iter().any(|role| role == code) }
 
     pub fn has_permission(&self, code: &str) -> bool {
         self.permissions.iter().any(|permission| permission == code)
@@ -86,7 +91,7 @@ mod tests {
 
     #[test]
     fn require_permission_returns_forbidden_with_caller_location() {
-        let claims = UserClaims::new(42, UserStatus::Active, vec!["rbac.read".into()]);
+        let claims = UserClaims::new(42, UserStatus::Active, vec![], vec!["rbac.read".into()]);
         // 보유한 권한은 통과하고, 없는 권한은 호출 위치를 보존해 거부한다.
         assert!(claims.require_permission("rbac.read", "caller").is_ok());
         let error = claims
@@ -105,17 +110,20 @@ mod tests {
             (UserStatus::Withdrawn, "withdrawn"),
         ] {
             let map: Map<String, Value> =
-                UserClaims::new(42, status, vec!["rbac.read".into()]).try_into()?;
+                UserClaims::new(42, status, vec!["user".into()], vec!["rbac.read".into()])
+                    .try_into()?;
             // 토큰에 사용자 ID, 상태와 권한 코드가 포함된다.
             assert_eq!(
                 Value::Object(map.clone()),
-                serde_json::json!({"id": 42, "status": name, "permissions": ["rbac.read"]})
+                serde_json::json!({"id": 42, "status": name, "roles": ["user"], "permissions": ["rbac.read"]})
             );
             let decoded: UserClaims = serde_json::from_value(Value::Object(map))?;
             // 저장된 claim을 동일한 사용자 정보와 권한으로 읽는다.
             assert_eq!(decoded.id, 42);
             assert_eq!(decoded.status, status);
             assert_eq!(decoded.permissions, ["rbac.read"]);
+            assert!(decoded.has_role("user"));
+            assert!(!decoded.has_role("admin"));
         }
         Ok(())
     }
@@ -125,6 +133,12 @@ mod tests {
         let claims: UserClaims =
             serde_json::from_value(serde_json::json!({"id": 42, "status": "active"}))?;
         assert!(claims.permissions.is_empty());
+        assert!(!claims.has_role("user"));
+        let claims: UserClaims = serde_json::from_value(
+            serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.read"]}),
+        )?;
+        assert!(claims.roles.is_empty());
+        assert!(claims.has_permission("rbac.read"));
         Ok(())
     }
 

@@ -69,7 +69,7 @@ pub mod usecase {
     use crate::app::auth::service::password_hash::PasswordHashService;
     use crate::app::auth::service::refresh_token::RefreshTokenService;
     use crate::app::container::db::Database;
-    use crate::app::rbac::repository::permission;
+    use crate::app::rbac::repository::{permission, user_role};
     use crate::error::ResultExt as _;
 
     pub struct Command {
@@ -119,7 +119,7 @@ pub mod usecase {
             return Err(unauthorized().at(crate::here!()));
         }
         let identity = identity.ok_or_else(|| unauthorized().at(crate::here!()))?;
-        let (user, permissions) = {
+        let (user, roles, permissions) = {
             let mut connection = db.acquire_conn(crate::here!()).await?;
             let mut handle = connection.handle();
             let user = user::find_by_id(&mut handle, identity.user_id)
@@ -130,14 +130,19 @@ pub mod usecase {
             if !matches!(user.status, UserStatus::Registered | UserStatus::Active) {
                 return Err(unauthorized().at(crate::here!()));
             }
+            let roles = user_role::list_by_user_id(&mut handle, user.id)
+                .await?
+                .into_iter()
+                .map(|role| role.code)
+                .collect();
             let permissions = permission::find_by_user_id(&mut handle, user.id)
                 .await?
                 .into_iter()
                 .map(|permission| permission.code)
                 .collect();
-            (user, permissions)
+            (user, roles, permissions)
         };
-        let claims = UserClaims::new(user.id, user.status, permissions).try_into()?;
+        let claims = UserClaims::new(user.id, user.status, roles, permissions).try_into()?;
         let access = jwt_token_service
             .issue(&user.id.to_string(), claims)
             .map_err_internal("Failed to issue access token", crate::here!())?;
@@ -269,7 +274,7 @@ mod tests {
                 assert_eq!(claims.sub, user.id.to_string());
                 assert_eq!(
                     claims.user,
-                    serde_json::json!({"id": user.id, "status": status, "permissions": ["rbac.read"]})
+                    serde_json::json!({"id": user.id, "status": status, "roles": ["user"], "permissions": ["rbac.read"]})
                         .as_object()
                         .unwrap()
                         .clone()
@@ -277,6 +282,21 @@ mod tests {
                 assert_eq!(tokens.user.id, user.id);
                 assert_eq!(tokens.user.email, "alice@example.com");
                 assert_eq!(tokens.user.nickname, "Alice");
+                let without_role = execute(
+                    &db,
+                    &password_service,
+                    &dummy_hash,
+                    &jwt,
+                    &refresh,
+                    Command {
+                        email: "alice@example.com".into(),
+                        password: "secret".into(),
+                    },
+                )
+                .await?;
+                let new_claims = jwt.verify(&without_role.access_token)?;
+                assert_eq!(new_claims.user["roles"], serde_json::json!([]));
+                assert_eq!(new_claims.user["permissions"], serde_json::json!([]));
                 let mut connection = db.conn().await?;
                 sqlx::query("INSERT INTO conbira_rbac_user_roles (user_id, role_id) SELECT $1, id FROM conbira_rbac_roles WHERE code = 'user'")
                     .bind(user.id)
@@ -330,7 +350,7 @@ mod tests {
             .fetch_one(connection.handle().conn())
             .await?;
         // 실패한 시도는 refresh token을 추가하지 않는다.
-        assert_eq!(count, 2);
+        assert_eq!(count, 4);
         Ok(())
     }
 }
