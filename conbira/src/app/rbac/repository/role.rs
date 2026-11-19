@@ -12,14 +12,19 @@ pub struct NewRole {
 pub async fn insert(handle: &mut Handle<'_>, value: &NewRole) -> Result<Role> {
     sqlx::query_as::<_, Role>(
         "INSERT INTO conbira_rbac_roles (code, name, description) VALUES ($1, $2, $3)
+         ON CONFLICT (code) DO NOTHING
          RETURNING id, code, name, description",
     )
     .bind(&value.code)
     .bind(&value.name)
     .bind(&value.description)
-    .fetch_one(handle.conn())
+    .fetch_optional(handle.conn())
     .await
-    .map_err_internal("Failed to insert role", crate::here!())
+    .map_err_internal("Failed to insert role", crate::here!())?
+    .ok_or_else(|| {
+        crate::Error::new(crate::Code::InvalidRequest, "Role code already exists")
+            .at(crate::here!())
+    })
 }
 
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Role>> {
@@ -70,6 +75,22 @@ pub async fn delete(handle: &mut Handle<'_>, id: i64) -> Result<bool> {
         .bind(id)
         .execute(handle.conn())
         .await
-        .map_err_internal("Failed to delete role", crate::here!())?;
+        .map_err(|error| {
+            if error
+                .as_database_error()
+                .is_some_and(|e| e.is_foreign_key_violation())
+            {
+                crate::Error::new(
+                    crate::Code::InvalidRequest,
+                    "Role is assigned to a user or permission",
+                )
+                .at(crate::here!())
+                .cause(error)
+            } else {
+                crate::Error::internal("Failed to delete role")
+                    .at(crate::here!())
+                    .cause(error)
+            }
+        })?;
     Ok(result.rows_affected() > 0)
 }

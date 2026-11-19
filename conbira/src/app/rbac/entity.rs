@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, sqlx::FromRow)]
+#[derive(Debug, PartialEq, serde::Serialize, sqlx::FromRow)]
 pub struct Role {
     pub id: i64,
     pub code: String,
