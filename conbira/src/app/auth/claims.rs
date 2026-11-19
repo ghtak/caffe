@@ -26,6 +26,14 @@ impl UserClaims {
         self.permissions.iter().any(|permission| permission == code)
     }
 
+    pub fn require_permission(&self, code: &str, at: &'static str) -> crate::Result<()> {
+        if self.has_permission(code) {
+            Ok(())
+        } else {
+            Err(crate::Error::new(crate::Code::Forbidden, "Permission denied").at(at))
+        }
+    }
+
     /// 빈 목록은 false를 반환한다.
     pub fn has_any_permission(&self, codes: &[&str]) -> bool {
         codes.iter().any(|code| self.has_permission(code))
@@ -75,6 +83,18 @@ impl TryFrom<UserClaims> for Map<String, Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn require_permission_returns_forbidden_with_caller_location() {
+        let claims = UserClaims::new(42, UserStatus::Active, vec!["rbac.read".into()]);
+        // 보유한 권한은 통과하고, 없는 권한은 호출 위치를 보존해 거부한다.
+        assert!(claims.require_permission("rbac.read", "caller").is_ok());
+        let error = claims
+            .require_permission("rbac.write", "caller")
+            .unwrap_err();
+        assert_eq!(error.code, crate::Code::Forbidden);
+        assert_eq!(error.at, Some("caller"));
+    }
 
     #[test]
     fn claims_convert_to_json_map_and_deserialize_for_each_user_status() -> anyhow::Result<()> {

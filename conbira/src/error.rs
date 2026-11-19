@@ -8,6 +8,7 @@ pub enum Code {
     InvalidConfiguration,
     InvalidRequest,
     Unauthorized,
+    Forbidden,
     Busy,
     NotFound,
 }

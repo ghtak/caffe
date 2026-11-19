@@ -6,7 +6,7 @@ pub struct Role {
     pub description: String,
 }
 
-#[derive(Debug, PartialEq, sqlx::FromRow)]
+#[derive(Debug, PartialEq, serde::Serialize, sqlx::FromRow)]
 pub struct Permission {
     pub id: i64,
     pub code: String,
