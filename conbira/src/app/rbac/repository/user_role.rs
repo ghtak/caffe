@@ -9,7 +9,21 @@ pub async fn insert(handle: &mut Handle<'_>, user_id: i64, role_id: i64) -> Resu
         .bind(role_id)
         .execute(handle.conn())
         .await
-        .map_err_internal("Failed to insert user_role", crate::here!())?;
+        .map_err(|error| {
+            let code = error.as_database_error();
+            let (kind, message) = if code.is_some_and(|e| e.is_unique_violation()) {
+                (crate::Code::InvalidRequest, "User already has role")
+            } else if code.is_some_and(|e| e.is_foreign_key_violation()) {
+                (crate::Code::NotFound, "User or role not found")
+            } else {
+                return crate::Error::internal("Failed to insert user_role")
+                    .at(crate::here!())
+                    .cause(error);
+            };
+            crate::Error::new(kind, message)
+                .at(crate::here!())
+                .cause(error)
+        })?;
     Ok(())
 }
 
