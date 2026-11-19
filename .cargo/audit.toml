@@ -1,0 +1,6 @@
+[advisories]
+ignore = [
+    # 상위 라이브러리의 의존성으로, 라이브러리 버전 업데이트 시 재검토.
+    "RUSTSEC-2026-0459", # libsqlite3-sys
+    "RUSTSEC-2026-0543", # chrono
+]
