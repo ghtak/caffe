@@ -12,14 +12,22 @@ pub struct NewPermission {
 pub async fn insert(handle: &mut Handle<'_>, value: &NewPermission) -> Result<Permission> {
     sqlx::query_as::<_, Permission>(
         "INSERT INTO conbira_rbac_permissions (code, name, description) VALUES ($1, $2, $3)
+         ON CONFLICT (code) DO NOTHING
          RETURNING id, code, name, description",
     )
     .bind(&value.code)
     .bind(&value.name)
     .bind(&value.description)
-    .fetch_one(handle.conn())
+    .fetch_optional(handle.conn())
     .await
-    .map_err_internal("Failed to insert permission", crate::here!())
+    .map_err_internal("Failed to insert permission", crate::here!())?
+    .ok_or_else(|| {
+        crate::Error::new(
+            crate::Code::InvalidRequest,
+            "Permission code already exists",
+        )
+        .at(crate::here!())
+    })
 }
 
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Permission>> {
@@ -84,6 +92,22 @@ pub async fn delete(handle: &mut Handle<'_>, id: i64) -> Result<bool> {
         .bind(id)
         .execute(handle.conn())
         .await
-        .map_err_internal("Failed to delete permission", crate::here!())?;
+        .map_err(|error| {
+            if error
+                .as_database_error()
+                .is_some_and(|db_error| db_error.is_foreign_key_violation())
+            {
+                crate::Error::new(
+                    crate::Code::InvalidRequest,
+                    "Permission is assigned to a role",
+                )
+                .at(crate::here!())
+                .cause(error)
+            } else {
+                crate::Error::internal("Failed to delete permission")
+                    .at(crate::here!())
+                    .cause(error)
+            }
+        })?;
     Ok(result.rows_affected() > 0)
 }
