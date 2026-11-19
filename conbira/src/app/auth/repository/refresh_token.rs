@@ -44,7 +44,7 @@ impl From<TokenRow> for RefreshToken {
 
 pub async fn insert(handle: &mut Handle<'_>, token: &NewRefreshToken) -> Result<RefreshToken> {
     sqlx::query_as::<_, TokenRow>(
-        "INSERT INTO conbira_refresh_tokens
+        "INSERT INTO conbira_auth_refresh_tokens
              (user_id, family_id, token_hash, expires_at, family_expires_at)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, user_id, family_id, token_hash, expires_at, family_expires_at,
@@ -65,7 +65,7 @@ pub async fn find_by_hash(handle: &mut Handle<'_>, hash: &str) -> Result<Option<
     sqlx::query_as::<_, TokenRow>(
         "SELECT id, user_id, family_id, token_hash, expires_at, family_expires_at,
                 used_at, revoked_at, revoke_reason, created_at
-         FROM conbira_refresh_tokens WHERE token_hash = $1",
+         FROM conbira_auth_refresh_tokens WHERE token_hash = $1",
     )
     .bind(hash)
     .fetch_optional(handle.conn())
@@ -101,7 +101,7 @@ pub async fn revoke_family(
     reason: &str,
 ) -> Result<()> {
     sqlx::query(
-        "UPDATE conbira_refresh_tokens SET revoked_at = CURRENT_TIMESTAMP, revoke_reason = $2
+        "UPDATE conbira_auth_refresh_tokens SET revoked_at = CURRENT_TIMESTAMP, revoke_reason = $2
          WHERE family_id = $1 AND used_at IS NULL AND revoked_at IS NULL",
     )
     .bind(family_id)
@@ -120,7 +120,7 @@ pub async fn find_by_hash_for_update(
     sqlx::query_as::<_, TokenRow>(
         "SELECT id, user_id, family_id, token_hash, expires_at, family_expires_at,
                 used_at, revoked_at, revoke_reason, created_at
-         FROM conbira_refresh_tokens WHERE token_hash = $1 FOR UPDATE",
+         FROM conbira_auth_refresh_tokens WHERE token_hash = $1 FOR UPDATE",
     )
     .bind(hash)
     .fetch_optional(handle.conn())
@@ -136,7 +136,7 @@ pub async fn find_by_family_id(
     sqlx::query_as::<_, TokenRow>(
         "SELECT id, user_id, family_id, token_hash, expires_at, family_expires_at,
                 used_at, revoked_at, revoke_reason, created_at
-         FROM conbira_refresh_tokens WHERE family_id = $1 ORDER BY id",
+         FROM conbira_auth_refresh_tokens WHERE family_id = $1 ORDER BY id",
     )
     .bind(family_id)
     .fetch_all(handle.conn())
@@ -147,7 +147,7 @@ pub async fn find_by_family_id(
 
 pub async fn update(handle: &mut Handle<'_>, token: &RefreshToken) -> Result<Option<RefreshToken>> {
     sqlx::query_as::<_, TokenRow>(
-        "UPDATE conbira_refresh_tokens
+        "UPDATE conbira_auth_refresh_tokens
          SET used_at = $2, revoked_at = $3, revoke_reason = $4
          WHERE id = $1
          RETURNING id, user_id, family_id, token_hash, expires_at, family_expires_at,
@@ -183,7 +183,7 @@ mod tests {
                 .await?;
         }
         Ok(
-            sqlx::query_scalar("INSERT INTO conbira_users (nickname) VALUES ('user') RETURNING id")
+            sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id")
                 .fetch_one(handle.conn())
                 .await?,
         )

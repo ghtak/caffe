@@ -9,7 +9,7 @@ pub struct NewUser {
 
 pub async fn insert(handle: &mut Handle<'_>, user: &NewUser) -> Result<User> {
     sqlx::query_as::<_, User>(
-        "INSERT INTO conbira_users (nickname)
+        "INSERT INTO conbira_auth_users (nickname)
          VALUES ($1)
          RETURNING id, nickname, status, created_at, updated_at",
     )
@@ -22,7 +22,7 @@ pub async fn insert(handle: &mut Handle<'_>, user: &NewUser) -> Result<User> {
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<User>> {
     sqlx::query_as::<_, User>(
         "SELECT id, nickname, status, created_at, updated_at
-         FROM conbira_users
+         FROM conbira_auth_users
          WHERE id = $1",
     )
     .bind(id)
@@ -33,7 +33,7 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<User>
 
 pub async fn update(handle: &mut Handle<'_>, user: &User) -> Result<Option<User>> {
     sqlx::query_as::<_, User>(
-        "UPDATE conbira_users
+        "UPDATE conbira_auth_users
          SET nickname = $2, status = $3, updated_at = CURRENT_TIMESTAMP
          WHERE id = $1
          RETURNING id, nickname, status, created_at, updated_at",
@@ -88,7 +88,7 @@ mod tests {
         );
 
         let old_timestamp = jiff::Timestamp::from_second(1_700_000_000)?;
-        sqlx::query("UPDATE conbira_users SET updated_at = $2 WHERE id = $1")
+        sqlx::query("UPDATE conbira_auth_users SET updated_at = $2 WHERE id = $1")
             .bind(user.id)
             .bind(jiff_sqlx::Timestamp::from(old_timestamp))
             .execute(handle.conn())

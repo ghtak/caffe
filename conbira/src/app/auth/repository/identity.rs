@@ -13,7 +13,7 @@ pub struct NewIdentity {
 
 pub async fn insert(handle: &mut Handle<'_>, identity: &NewIdentity) -> Result<Identity> {
     sqlx::query_as::<_, Identity>(
-        "INSERT INTO conbira_user_identities
+        "INSERT INTO conbira_auth_user_identities
              (user_id, provider, provider_subject, email, password_hash)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, user_id, provider, provider_subject, email, password_hash,
@@ -37,7 +37,7 @@ pub async fn find_by_provider_subject(
     sqlx::query_as::<_, Identity>(
         "SELECT id, user_id, provider, provider_subject, email, password_hash,
                 created_at, updated_at
-         FROM conbira_user_identities
+         FROM conbira_auth_user_identities
          WHERE provider = $1 AND provider_subject = $2",
     )
     .bind(provider)
@@ -54,7 +54,7 @@ pub async fn find_local_by_email(handle: &mut Handle<'_>, email: &str) -> Result
     sqlx::query_as::<_, Identity>(
         "SELECT id, user_id, provider, provider_subject, email, password_hash,
                 created_at, updated_at
-         FROM conbira_user_identities
+         FROM conbira_auth_user_identities
          WHERE provider = 'local' AND email = $1",
     )
     .bind(email)
@@ -67,7 +67,7 @@ pub async fn find_by_user_id(handle: &mut Handle<'_>, user_id: i64) -> Result<Ve
     sqlx::query_as::<_, Identity>(
         "SELECT id, user_id, provider, provider_subject, email, password_hash,
                 created_at, updated_at
-         FROM conbira_user_identities
+         FROM conbira_auth_user_identities
          WHERE user_id = $1
          ORDER BY id",
     )
@@ -79,7 +79,7 @@ pub async fn find_by_user_id(handle: &mut Handle<'_>, user_id: i64) -> Result<Ve
 
 pub async fn update(handle: &mut Handle<'_>, identity: &Identity) -> Result<Option<Identity>> {
     sqlx::query_as::<_, Identity>(
-        "UPDATE conbira_user_identities
+        "UPDATE conbira_auth_user_identities
          SET email = $2, password_hash = $3, updated_at = CURRENT_TIMESTAMP
          WHERE id = $1
          RETURNING id, user_id, provider, provider_subject, email, password_hash,
@@ -109,7 +109,7 @@ mod tests {
             .execute(handle.conn())
             .await?;
         let user_id: i64 =
-            sqlx::query_scalar("INSERT INTO conbira_users (nickname) VALUES ('user') RETURNING id")
+            sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id")
                 .fetch_one(handle.conn())
                 .await?;
         let input = NewIdentity {
@@ -150,7 +150,7 @@ mod tests {
         assert!(find_by_user_id(&mut handle, -1).await?.is_empty());
 
         let second_user_id: i64 = sqlx::query_scalar(
-            "INSERT INTO conbira_users (nickname) VALUES ('second') RETURNING id",
+            "INSERT INTO conbira_auth_users (nickname) VALUES ('second') RETURNING id",
         )
         .fetch_one(handle.conn())
         .await?;
@@ -165,7 +165,7 @@ mod tests {
         assert!(insert(&mut handle, &duplicate).await.is_err());
 
         let old_timestamp = jiff::Timestamp::from_second(1_700_000_000)?;
-        sqlx::query("UPDATE conbira_user_identities SET updated_at = $2 WHERE id = $1")
+        sqlx::query("UPDATE conbira_auth_user_identities SET updated_at = $2 WHERE id = $1")
             .bind(identity.id)
             .bind(jiff_sqlx::Timestamp::from(old_timestamp))
             .execute(handle.conn())

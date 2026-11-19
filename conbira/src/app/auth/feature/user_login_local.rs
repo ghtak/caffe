@@ -227,7 +227,7 @@ mod tests {
         .await?;
         for status in ["registered", "active", "inactive", "withdrawn"] {
             let mut connection = db.conn().await?;
-            sqlx::query("UPDATE conbira_users SET status = $1 WHERE id = $2")
+            sqlx::query("UPDATE conbira_auth_users SET status = $1 WHERE id = $2")
                 .bind(status)
                 .bind(user.id)
                 .execute(connection.handle().conn())
@@ -306,7 +306,7 @@ mod tests {
         .await;
         assert!(matches!(result, Err(error) if error.code == crate::Code::Internal));
         let mut connection = db.conn().await?;
-        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_refresh_tokens")
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_refresh_tokens")
             .fetch_one(connection.handle().conn())
             .await?;
         // 실패한 시도는 refresh token을 추가하지 않는다.

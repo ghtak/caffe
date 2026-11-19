@@ -222,7 +222,7 @@ mod tests {
                 .await?;
         }
         let user_id =
-            sqlx::query_scalar("INSERT INTO conbira_users (nickname) VALUES ('user') RETURNING id")
+            sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id")
                 .fetch_one(conn.handle().conn())
                 .await?;
         drop(conn);
@@ -290,7 +290,7 @@ mod tests {
         let mut tx = db.tx().await?;
         let expired = service.issue(&mut tx.handle(), user_id).await?;
         let revoked = service.issue(&mut tx.handle(), user_id).await?;
-        sqlx::query("UPDATE conbira_refresh_tokens SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE token_hash = $1")
+        sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE token_hash = $1")
             .bind(token_hash(&expired.token)).execute(tx.handle().conn()).await?;
         assert!(
             service
@@ -390,7 +390,7 @@ mod tests {
                     .await?;
             }
             let user_id: i64 = sqlx::query_scalar(
-                "INSERT INTO conbira_users (nickname) VALUES ('user') RETURNING id",
+                "INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id",
             )
             .fetch_one(first.handle().conn())
             .await?;

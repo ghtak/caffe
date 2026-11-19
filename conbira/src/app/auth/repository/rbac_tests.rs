@@ -109,7 +109,7 @@ async fn user_permissions_combine_roles_without_duplicates_and_reflect_removed_l
     setup(&mut handle).await?;
 
     let user_id: i64 =
-        sqlx::query_scalar("INSERT INTO conbira_users (nickname) VALUES ('reader') RETURNING id")
+        sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('reader') RETURNING id")
             .fetch_one(handle.conn())
             .await?;
     let admin = role::find_by_code(&mut handle, "admin").await?.unwrap();
@@ -123,7 +123,7 @@ async fn user_permissions_combine_roles_without_duplicates_and_reflect_removed_l
     // 두 역할에 공통인 조회 권한은 한 번만 반환되고 나머지 관리자 권한도
     // 포함된다.
     let permissions = permission::find_by_user_id(&mut handle, user_id).await?;
-    assert_eq!(permissions.len(), 4);
+    assert_eq!(permissions.len(), 6);
     assert_eq!(permissions.iter().filter(|p| p.id == read.id).count(), 1);
     assert_eq!(
         user_role::list_by_user_id(&mut handle, user_id)

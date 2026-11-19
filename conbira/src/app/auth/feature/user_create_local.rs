@@ -230,7 +230,7 @@ mod tests {
             .is_err()
         );
         let mut connection = db.conn().await?;
-        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_users")
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_users")
             .fetch_one(connection.handle().conn())
             .await?;
         // 식별 정보 중복으로 실패한 사용자는 남지 않는다.

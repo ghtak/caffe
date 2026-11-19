@@ -11,7 +11,7 @@ pub struct NewPermission {
 
 pub async fn insert(handle: &mut Handle<'_>, value: &NewPermission) -> Result<Permission> {
     sqlx::query_as::<_, Permission>(
-        "INSERT INTO conbira_permissions (code, name, description) VALUES ($1, $2, $3)
+        "INSERT INTO conbira_rbac_permissions (code, name, description) VALUES ($1, $2, $3)
          RETURNING id, code, name, description",
     )
     .bind(&value.code)
@@ -24,7 +24,7 @@ pub async fn insert(handle: &mut Handle<'_>, value: &NewPermission) -> Result<Pe
 
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Permission>> {
     sqlx::query_as::<_, Permission>(
-        "SELECT id, code, name, description FROM conbira_permissions WHERE id = $1",
+        "SELECT id, code, name, description FROM conbira_rbac_permissions WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(handle.conn())
@@ -34,7 +34,7 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Permi
 
 pub async fn find_by_code(handle: &mut Handle<'_>, code: &str) -> Result<Option<Permission>> {
     sqlx::query_as::<_, Permission>(
-        "SELECT id, code, name, description FROM conbira_permissions WHERE code = $1",
+        "SELECT id, code, name, description FROM conbira_rbac_permissions WHERE code = $1",
     )
     .bind(code)
     .fetch_optional(handle.conn())
@@ -44,7 +44,7 @@ pub async fn find_by_code(handle: &mut Handle<'_>, code: &str) -> Result<Option<
 
 pub async fn list(handle: &mut Handle<'_>) -> Result<Vec<Permission>> {
     sqlx::query_as::<_, Permission>(
-        "SELECT id, code, name, description FROM conbira_permissions ORDER BY id",
+        "SELECT id, code, name, description FROM conbira_rbac_permissions ORDER BY id",
     )
     .fetch_all(handle.conn())
     .await
@@ -54,9 +54,9 @@ pub async fn list(handle: &mut Handle<'_>) -> Result<Vec<Permission>> {
 pub async fn find_by_user_id(handle: &mut Handle<'_>, user_id: i64) -> Result<Vec<Permission>> {
     sqlx::query_as::<_, Permission>(
         "SELECT DISTINCT p.id, p.code, p.name, p.description
-         FROM conbira_permissions p
-         JOIN conbira_role_permissions rp ON rp.permission_id = p.id
-         JOIN conbira_user_roles ur ON ur.role_id = rp.role_id
+         FROM conbira_rbac_permissions p
+         JOIN conbira_rbac_role_permissions rp ON rp.permission_id = p.id
+         JOIN conbira_rbac_user_roles ur ON ur.role_id = rp.role_id
          WHERE ur.user_id = $1 ORDER BY p.id",
     )
     .bind(user_id)
@@ -67,7 +67,7 @@ pub async fn find_by_user_id(handle: &mut Handle<'_>, user_id: i64) -> Result<Ve
 
 pub async fn update(handle: &mut Handle<'_>, value: &Permission) -> Result<Option<Permission>> {
     sqlx::query_as::<_, Permission>(
-        "UPDATE conbira_permissions SET code = $2, name = $3, description = $4
+        "UPDATE conbira_rbac_permissions SET code = $2, name = $3, description = $4
          WHERE id = $1 RETURNING id, code, name, description",
     )
     .bind(value.id)
@@ -80,7 +80,7 @@ pub async fn update(handle: &mut Handle<'_>, value: &Permission) -> Result<Optio
 }
 
 pub async fn delete(handle: &mut Handle<'_>, id: i64) -> Result<bool> {
-    let result = sqlx::query("DELETE FROM conbira_permissions WHERE id = $1")
+    let result = sqlx::query("DELETE FROM conbira_rbac_permissions WHERE id = $1")
         .bind(id)
         .execute(handle.conn())
         .await
