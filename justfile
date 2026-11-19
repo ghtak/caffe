@@ -84,3 +84,33 @@ conbira-cli-generate-tls:
 [working-directory: 'conbira']
 conbira-cli-generate-ed25519:
     cargo run -p conbira --bin conbira-cli -- --generate-ed25519
+
+# 프런트엔드 의존성 설치
+[group: 'conbira-ui']
+[working-directory: 'conbira-ui']
+conbira-ui-install:
+    npm ci
+
+# 프런트엔드 개발 서버 실행
+[group: 'conbira-ui']
+[working-directory: 'conbira-ui']
+conbira-ui-dev:
+    npm run dev
+
+# 프런트엔드 타입 검사
+[group: 'conbira-ui']
+[working-directory: 'conbira-ui']
+conbira-ui-check:
+    npm run typecheck
+
+# 프런트엔드 프로덕션 빌드
+[group: 'conbira-ui']
+[working-directory: 'conbira-ui']
+conbira-ui-build:
+    npm run build
+
+# 프런트엔드 프로덕션 빌드 미리보기
+[group: 'conbira-ui']
+[working-directory: 'conbira-ui']
+conbira-ui-preview:
+    npm run preview
