@@ -3,7 +3,7 @@
 
 ### 로컬 사용자 생성: 요청마다 고유 이메일 사용
 # @name createLocalUser
-POST {{httpServer}}/api/auth/user/local
+POST {{httpServer}}/api/auth/users/local
 Content-Type: application/json
 
 {

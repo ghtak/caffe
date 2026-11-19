@@ -2,7 +2,7 @@
 
 ### 샘플 생성
 # @name createSample
-POST {{httpServer}}/api/sample
+POST {{httpServer}}/api/samples
 Content-Type: application/json
 
 {
@@ -10,7 +10,7 @@ Content-Type: application/json
 }
 
 ### 생성 요청 실행 후 응답의 ID로 샘플 수정
-PUT {{httpServer}}/api/sample/{{createSample.response.body.$.data.id}}
+PUT {{httpServer}}/api/samples/{{createSample.response.body.$.data.id}}
 Content-Type: application/json
 
 {
@@ -18,7 +18,7 @@ Content-Type: application/json
 }
 
 ### 생성한 샘플 단건 조회
-GET {{httpServer}}/api/sample/{{createSample.response.body.$.data.id}}
+GET {{httpServer}}/api/samples/{{createSample.response.body.$.data.id}}
 
 ### 이름 부분 검색 및 페이지 조회
-GET {{httpServer}}/api/sample?name=sample&page=1&page_size=20
+GET {{httpServer}}/api/samples?name=sample&page=1&page_size=20

@@ -84,6 +84,35 @@ mod tests {
             "/required",
             axum::routing::get(required).with_state(container),
         );
+        for path in [
+            "/api/samples",
+            "/api/auth/users/local",
+            "/api/auth/login/local",
+        ] {
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::post(path)
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from("{"))?,
+                )
+                .await?;
+            // 새 경로는 요청 본문을 검사하는 핸들러에 도달한다.
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{path}");
+        }
+        for path in [
+            "/api/sample",
+            "/api/sample/1",
+            "/api/auth/user/local",
+            "/api/auth/sessions/local",
+        ] {
+            let response = router
+                .clone()
+                .oneshot(Request::post(path).body(Body::empty())?)
+                .await?;
+            // 제거한 경로에는 요청을 처리하는 라우트가 없다.
+            assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
+        }
         for path in ["/api/auth/me", "/required"] {
             for authorization in [None, Some("Bearer invalid")] {
                 let mut request = Request::builder().uri(path);

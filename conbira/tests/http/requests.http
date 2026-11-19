@@ -6,4 +6,4 @@ GET {{httpServer}}/api/health
 
 
 ### sample
-POST {{httpServer}}/api/sample
+POST {{httpServer}}/api/samples

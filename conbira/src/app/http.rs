@@ -14,7 +14,7 @@ pub mod response;
 pub fn router(container: Arc<Container>) -> crate::Result<axum::Router> {
     let router = axum::Router::new()
         .route("/api/health", get(|| async { StatusCode::OK }))
-        .nest("/api/sample", super::sample::router())
+        .nest("/api/samples", super::sample::router())
         .nest("/api/rbac", super::rbac::router())
         .nest("/api/auth", super::auth::router());
 
