@@ -51,13 +51,12 @@ pub mod endpoint {
             },
         )
         .await?;
-        Ok(crate::app::http::response::ApiResponse::new(
-            LoginResponse {
-                access_token: tokens.access_token,
-                refresh_token: tokens.refresh_token,
-                user: tokens.user,
-            },
-        ))
+        Ok(LoginResponse {
+            access_token: tokens.access_token,
+            refresh_token: tokens.refresh_token,
+            user: tokens.user,
+        }
+        .into())
     }
 }
 

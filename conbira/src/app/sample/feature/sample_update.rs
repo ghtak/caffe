@@ -7,7 +7,7 @@ pub mod endpoint {
 
     use crate::app::Container;
     use crate::app::http::extract::{ApiJson, ApiPath};
-    use crate::app::http::response::{ApiResponse, ApiResult};
+    use crate::app::http::response::ApiResult;
     use crate::app::sample::entity::Sample;
 
     #[derive(Debug, Deserialize, Validate)]
@@ -30,7 +30,7 @@ pub mod endpoint {
             },
         )
         .await?;
-        Ok(ApiResponse::new(sample))
+        Ok(sample.into())
     }
 }
 

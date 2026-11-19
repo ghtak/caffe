@@ -44,7 +44,7 @@ pub mod endpoint {
     use crate::app::Container;
     use crate::app::auth::entity::UserInfo;
     use crate::app::http::extract::ApiJson;
-    use crate::app::http::response::{ApiResponse, ApiResult};
+    use crate::app::http::response::ApiResult;
 
     pub type CreateRequest = super::Input;
 
@@ -59,7 +59,7 @@ pub mod endpoint {
         let user =
             super::usecase::execute(&container.db, &container.password_hash_service, command)
                 .await?;
-        Ok(ApiResponse::new(user))
+        Ok(user.into())
     }
 }
 

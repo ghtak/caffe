@@ -7,7 +7,7 @@ pub mod endpoint {
 
     use crate::app::Container;
     use crate::app::http::extract::ApiQuery;
-    use crate::app::http::response::{ApiResponse, ApiResult};
+    use crate::app::http::response::ApiResult;
     use crate::app::sample::entity::Sample;
 
     #[derive(Debug, Deserialize, Validate)]
@@ -43,12 +43,13 @@ pub mod endpoint {
             },
         )
         .await?;
-        Ok(ApiResponse::new(SearchResponse {
+        Ok(SearchResponse {
             items: result.items,
             page,
             page_size,
             has_next: result.has_next,
-        }))
+        }
+        .into())
     }
 }
 

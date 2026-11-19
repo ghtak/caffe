@@ -21,7 +21,7 @@ where
         let Query(value) = Query::<T>::from_request_parts(parts, state)
             .await
             .map_err(|error| {
-                ApiResponse::from(
+                ApiResponse::<()>::from(
                     Error::new(Code::InvalidRequest, "Invalid request query")
                         .at(crate::here!())
                         .cause(error),
@@ -30,7 +30,7 @@ where
             })?;
         value
             .validate()
-            .map_err(|error| ApiResponse::from(error.into()).into_response())?;
+            .map_err(|error| ApiResponse::<()>::from(error.into()).into_response())?;
         Ok(Self(value))
     }
 }
@@ -55,7 +55,7 @@ where
                     Error::new(Code::InvalidRequest, "Invalid request path")
                 };
                 let error = mapped.at(crate::here!()).cause(error);
-                ApiResponse::from(error).into_response()
+                ApiResponse::<()>::from(error).into_response()
             })?;
         Ok(Self(value))
     }
@@ -79,12 +79,12 @@ where
                 let error = Error::new(Code::InvalidRequest, "Invalid request body")
                     .at(crate::here!())
                     .cause(error);
-                ApiResponse::from(error).into_response()
+                ApiResponse::<()>::from(error).into_response()
             })?;
 
         value
             .validate()
-            .map_err(|error| ApiResponse::from(error.into()).into_response())?;
+            .map_err(|error| ApiResponse::<()>::from(error.into()).into_response())?;
 
         Ok(Self(value))
     }

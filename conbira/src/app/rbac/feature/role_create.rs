@@ -7,7 +7,7 @@ pub mod endpoint {
 
     use crate::app::auth::claims::UserClaims;
     use crate::app::http::extract::ApiJson;
-    use crate::app::http::response::{ApiResponse, ApiResult};
+    use crate::app::http::response::ApiResult;
     use crate::app::rbac::entity::Role;
     use crate::app::rbac::repository::role::{self, NewRole};
     use crate::app::{Container, DatabaseExt as _};
@@ -33,8 +33,6 @@ pub mod endpoint {
             name: request.name,
             description: request.description,
         };
-        Ok(ApiResponse::new(
-            role::insert(&mut connection.handle(), &value).await?,
-        ))
+        Ok((role::insert(&mut connection.handle(), &value).await?).into())
     }
 }

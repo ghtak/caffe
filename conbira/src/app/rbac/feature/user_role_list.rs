@@ -6,7 +6,7 @@ pub mod endpoint {
     use crate::app::auth::claims::UserClaims;
     use crate::app::auth::repository::user;
     use crate::app::http::extract::ApiPath;
-    use crate::app::http::response::{ApiResponse, ApiResult};
+    use crate::app::http::response::ApiResult;
     use crate::app::rbac::entity::Role;
     use crate::app::rbac::repository::user_role;
     use crate::app::{Container, DatabaseExt as _};
@@ -27,8 +27,6 @@ pub mod endpoint {
                 .at(crate::here!())
                 .into());
         }
-        Ok(ApiResponse::new(
-            user_role::list_by_user_id(&mut handle, user_id).await?,
-        ))
+        Ok((user_role::list_by_user_id(&mut handle, user_id).await?).into())
     }
 }

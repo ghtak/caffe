@@ -66,7 +66,7 @@ impl OptionalFromRequestParts<Arc<Container>> for AuthClaims {
 }
 
 pub(super) fn bearer_rejection(message: &'static str, at: &'static str) -> Response {
-    let mut response = crate::app::http::response::ApiResponse::from(
+    let mut response = crate::app::http::response::ApiResponse::<()>::from(
         crate::Error::new(crate::Code::Unauthorized, message).at(at),
     )
     .into_response();

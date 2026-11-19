@@ -7,7 +7,7 @@ pub mod endpoint {
 
     use crate::app::Container;
     use crate::app::http::extract::ApiJson;
-    use crate::app::http::response::{ApiResponse, ApiResult};
+    use crate::app::http::response::ApiResult;
     use crate::app::sample::entity::Sample;
 
     #[derive(Debug, Deserialize, Validate)]
@@ -26,7 +26,7 @@ pub mod endpoint {
             super::usecase::Command { name: request.name },
         )
         .await?;
-        Ok(ApiResponse::new(sample))
+        Ok(sample.into())
     }
 }
 

@@ -30,6 +30,10 @@ impl<T> ApiResponse<T> {
     }
 }
 
+impl<T> From<T> for ApiResponse<T> {
+    fn from(data: T) -> Self { Self::new(data) }
+}
+
 impl ApiResponse<()> {
     pub fn empty() -> Self {
         Self {
@@ -122,18 +126,16 @@ mod tests {
         id: u32,
     }
 
-    async fn typed_response() -> ApiResponse<TestSample> {
-        ApiResponse::new(TestSample { id: 123 })
-    }
+    async fn typed_response() -> ApiResponse<TestSample> { TestSample { id: 123 }.into() }
 
     async fn typed_result() -> ApiResult<TestSample> {
         let sample: crate::Result<TestSample> = Ok(TestSample { id: 456 });
-        Ok(ApiResponse::new(sample?))
+        Ok(sample?.into())
     }
 
     async fn typed_error() -> ApiResult<TestSample> {
         let sample: crate::Result<TestSample> = Err(Error::internal("공개 오류 메시지"));
-        Ok(ApiResponse::new(sample?))
+        Ok(sample?.into())
     }
 
     async fn body(response: Response) -> serde_json::Value {
@@ -178,7 +180,7 @@ mod tests {
 
     #[tokio::test]
     async fn success_responses_include_only_present_data_and_use_selected_status() {
-        let response = ApiResponse::new(json!({"id": "123"}))
+        let response = ApiResponse::from(json!({"id": "123"}))
             .with_status(StatusCode::CREATED)
             .into_response();
         // 지정한 상태와 데이터가 응답에 포함된다.
@@ -220,7 +222,7 @@ mod tests {
             let error = Error::new(code, "공개 오류 메시지")
                 .at("secret location")
                 .cause(anyhow::anyhow!("secret cause"));
-            let response = ApiResponse::from(error).into_response();
+            let response = ApiResponse::<()>::from(error).into_response();
             // 코드에 맞는 상태와 공개 메시지를 반환하고 위치와 원인은 제외한다.
             assert_eq!(response.status(), status);
             assert_eq!(
@@ -239,7 +241,7 @@ mod tests {
             }
         }
 
-        let response = ApiResponse::new(Broken).into_response();
+        let response = ApiResponse::from(Broken).into_response();
         // 직렬화 오류도 내부 내용을 노출하지 않는 JSON 응답으로 변환한다.
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(

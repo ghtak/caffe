@@ -4,7 +4,7 @@ pub mod endpoint {
     use axum::extract::State;
 
     use crate::app::auth::claims::UserClaims;
-    use crate::app::http::response::{ApiResponse, ApiResult};
+    use crate::app::http::response::ApiResult;
     use crate::app::rbac::entity::Permission;
     use crate::app::rbac::repository::permission;
     use crate::app::{Container, DatabaseExt as _};
@@ -18,9 +18,7 @@ pub mod endpoint {
         claims.require_permission("rbac.read", crate::here!())?;
         // 단순 목록 조회는 별도 유스케이스 없이 저장소를 호출한다.
         let mut connection = container.db.acquire_conn(crate::here!()).await?;
-        Ok(ApiResponse::new(
-            permission::list(&mut connection.handle()).await?,
-        ))
+        Ok(permission::list(&mut connection.handle()).await?.into())
     }
 }
 

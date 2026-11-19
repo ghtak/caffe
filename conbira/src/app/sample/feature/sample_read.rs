@@ -5,7 +5,7 @@ pub mod endpoint {
 
     use crate::app::Container;
     use crate::app::http::extract::ApiPath;
-    use crate::app::http::response::{ApiResponse, ApiResult};
+    use crate::app::http::response::ApiResult;
     use crate::app::sample::entity::Sample;
 
     pub type ReadResponse = Sample;
@@ -14,9 +14,7 @@ pub mod endpoint {
         State(container): State<Arc<Container>>,
         ApiPath(id): ApiPath<i64>,
     ) -> ApiResult<ReadResponse> {
-        Ok(ApiResponse::new(
-            super::usecase::execute(&container.db, id).await?,
-        ))
+        Ok(super::usecase::execute(&container.db, id).await?.into())
     }
 }
 
