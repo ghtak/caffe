@@ -9,10 +9,18 @@ pub struct AuthClaims(pub espr::jwt::Claims);
 pub struct UserClaims {
     pub id: i64,
     pub status: UserStatus,
+    #[serde(default)]
+    pub permissions: Vec<String>,
 }
 
 impl UserClaims {
-    pub fn new(id: i64, status: UserStatus) -> Self { Self { id, status } }
+    pub fn new(id: i64, status: UserStatus, permissions: Vec<String>) -> Self {
+        Self {
+            id,
+            status,
+            permissions,
+        }
+    }
 }
 
 impl TryFrom<AuthClaims> for UserClaims {
@@ -62,17 +70,27 @@ mod tests {
             (UserStatus::Inactive, "inactive"),
             (UserStatus::Withdrawn, "withdrawn"),
         ] {
-            let map: Map<String, Value> = UserClaims { id: 42, status }.try_into()?;
-            // 토큰에 사용자 ID와 상태 문자열만 포함된다.
+            let map: Map<String, Value> =
+                UserClaims::new(42, status, vec!["rbac.read".into()]).try_into()?;
+            // 토큰에 사용자 ID, 상태와 권한 코드가 포함된다.
             assert_eq!(
                 Value::Object(map.clone()),
-                serde_json::json!({"id": 42, "status": name})
+                serde_json::json!({"id": 42, "status": name, "permissions": ["rbac.read"]})
             );
             let decoded: UserClaims = serde_json::from_value(Value::Object(map))?;
-            // 저장된 claim을 동일한 사용자 ID와 상태로 읽는다.
+            // 저장된 claim을 동일한 사용자 정보와 권한으로 읽는다.
             assert_eq!(decoded.id, 42);
             assert_eq!(decoded.status, status);
+            assert_eq!(decoded.permissions, ["rbac.read"]);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn older_claims_without_permissions_have_no_permissions() -> anyhow::Result<()> {
+        let claims: UserClaims =
+            serde_json::from_value(serde_json::json!({"id": 42, "status": "active"}))?;
+        assert!(claims.permissions.is_empty());
         Ok(())
     }
 

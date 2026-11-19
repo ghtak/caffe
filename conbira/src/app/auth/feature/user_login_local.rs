@@ -69,6 +69,7 @@ pub mod usecase {
     use crate::app::auth::service::password_hash::PasswordHashService;
     use crate::app::auth::service::refresh_token::RefreshTokenService;
     use crate::app::container::db::Database;
+    use crate::app::rbac::repository::permission;
     use crate::error::ResultExt as _;
 
     pub struct Command {
@@ -118,19 +119,25 @@ pub mod usecase {
             return Err(unauthorized().at(crate::here!()));
         }
         let identity = identity.ok_or_else(|| unauthorized().at(crate::here!()))?;
-        let user = {
+        let (user, permissions) = {
             let mut connection = db.acquire_conn(crate::here!()).await?;
-            user::find_by_id(&mut connection.handle(), identity.user_id)
+            let mut handle = connection.handle();
+            let user = user::find_by_id(&mut handle, identity.user_id)
                 .await?
                 .ok_or_else(|| {
                     crate::Error::internal("User for identity not found").at(crate::here!())
-                })?
+                })?;
+            if !matches!(user.status, UserStatus::Registered | UserStatus::Active) {
+                return Err(unauthorized().at(crate::here!()));
+            }
+            let permissions = permission::find_by_user_id(&mut handle, user.id)
+                .await?
+                .into_iter()
+                .map(|permission| permission.code)
+                .collect();
+            (user, permissions)
         };
-        if !matches!(user.status, UserStatus::Registered | UserStatus::Active) {
-            return Err(unauthorized().at(crate::here!()));
-        }
-
-        let claims = UserClaims::new(user.id, user.status).try_into()?;
+        let claims = UserClaims::new(user.id, user.status, permissions).try_into()?;
         let access = jwt_token_service
             .issue(&user.id.to_string(), claims)
             .map_err_internal("Failed to issue access token", crate::here!())?;
@@ -179,6 +186,7 @@ mod tests {
         for schema in [
             include_str!("../../../../migrations/0010_user.sql"),
             include_str!("../../../../migrations/0011_refresh_token.sql"),
+            include_str!("../../../../migrations/0012_rbac.sql"),
         ] {
             let schema = schema.replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
             sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
@@ -225,6 +233,12 @@ mod tests {
             },
         )
         .await?;
+        let mut connection = db.conn().await?;
+        sqlx::query("INSERT INTO conbira_rbac_user_roles (user_id, role_id) SELECT $1, id FROM conbira_rbac_roles WHERE code = 'user'")
+            .bind(user.id)
+            .execute(connection.handle().conn())
+            .await?;
+        drop(connection);
         for status in ["registered", "active", "inactive", "withdrawn"] {
             let mut connection = db.conn().await?;
             sqlx::query("UPDATE conbira_auth_users SET status = $1 WHERE id = $2")
@@ -247,13 +261,19 @@ mod tests {
             .await;
             if status == "registered" || status == "active" {
                 let tokens = result?;
+                let mut connection = db.conn().await?;
+                sqlx::query("DELETE FROM conbira_rbac_user_roles WHERE user_id = $1")
+                    .bind(user.id)
+                    .execute(connection.handle().conn())
+                    .await?;
+                drop(connection);
                 // 허용된 계정의 JWT와 저장된 refresh token이 같은 사용자를
-                // 가리킨다.
+                // 가리키고, 역할 회수 후에도 발급 당시 권한을 유지한다.
                 let claims = jwt.verify(&tokens.access_token)?;
                 assert_eq!(claims.sub, user.id.to_string());
                 assert_eq!(
                     claims.user,
-                    serde_json::json!({"id": user.id, "status": status})
+                    serde_json::json!({"id": user.id, "status": status, "permissions": ["rbac.read"]})
                         .as_object()
                         .unwrap()
                         .clone()
@@ -262,6 +282,10 @@ mod tests {
                 assert_eq!(tokens.user.email, "alice@example.com");
                 assert_eq!(tokens.user.nickname, "Alice");
                 let mut connection = db.conn().await?;
+                sqlx::query("INSERT INTO conbira_rbac_user_roles (user_id, role_id) SELECT $1, id FROM conbira_rbac_roles WHERE code = 'user'")
+                    .bind(user.id)
+                    .execute(connection.handle().conn())
+                    .await?;
                 assert_eq!(
                     refresh
                         .find_user_id(&mut connection.handle(), &tokens.refresh_token)
