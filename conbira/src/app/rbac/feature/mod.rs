@@ -4,6 +4,8 @@ pub mod permission_list;
 pub mod role_create;
 pub mod role_delete;
 pub mod role_list;
+pub mod role_permission_add;
+pub mod role_permission_remove;
 
 #[cfg(test)]
 mod permission_write_tests;

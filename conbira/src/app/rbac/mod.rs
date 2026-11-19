@@ -14,6 +14,11 @@ pub fn router() -> axum::Router<std::sync::Arc<crate::app::Container>> {
             axum::routing::delete(feature::role_delete::endpoint::handler),
         )
         .route(
+            "/roles/{role_id}/permissions/{permission_id}",
+            axum::routing::post(feature::role_permission_add::endpoint::handler)
+                .delete(feature::role_permission_remove::endpoint::handler),
+        )
+        .route(
             "/permissions",
             axum::routing::get(feature::permission_list::endpoint::handler)
                 .post(feature::permission_create::endpoint::handler),

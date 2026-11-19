@@ -11,7 +11,21 @@ pub async fn insert(handle: &mut Handle<'_>, role_id: i64, permission_id: i64) -
     .bind(permission_id)
     .execute(handle.conn())
     .await
-    .map_err_internal("Failed to insert role_permission", crate::here!())?;
+    .map_err(|error| {
+        let code = error.as_database_error();
+        let (kind, message) = if code.is_some_and(|e| e.is_unique_violation()) {
+            (crate::Code::InvalidRequest, "Role already has permission")
+        } else if code.is_some_and(|e| e.is_foreign_key_violation()) {
+            (crate::Code::NotFound, "Role or permission not found")
+        } else {
+            return crate::Error::internal("Failed to insert role_permission")
+                .at(crate::here!())
+                .cause(error);
+        };
+        crate::Error::new(kind, message)
+            .at(crate::here!())
+            .cause(error)
+    })?;
     Ok(())
 }
 

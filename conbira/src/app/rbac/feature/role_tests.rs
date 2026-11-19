@@ -38,6 +38,8 @@ async fn role_writes_require_manage_permission() -> anyhow::Result<()> {
             r#"{"code":"test","name":"Test","description":""}"#,
         ),
         ("DELETE", "/api/rbac/roles/1", ""),
+        ("POST", "/api/rbac/roles/1/permissions/2", ""),
+        ("DELETE", "/api/rbac/roles/1/permissions/2", ""),
     ] {
         for (authorization, expected) in [
             (None, StatusCode::UNAUTHORIZED),
@@ -58,6 +60,110 @@ async fn role_writes_require_manage_permission() -> anyhow::Result<()> {
             // 인증이 없거나 관리 권한이 없으면 쓰기를 거부한다.
             assert_eq!(response.status(), expected);
         }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn adds_and_removes_role_permissions_and_rejects_invalid_relationships() -> anyhow::Result<()>
+{
+    let (router, container) = setup().await?;
+    {
+        let mut connection = container.db.conn().await?;
+        for sql in [
+            "CREATE TEMPORARY TABLE conbira_rbac_roles (id BIGINT PRIMARY KEY)",
+            "CREATE TEMPORARY TABLE conbira_rbac_permissions (id BIGINT PRIMARY KEY)",
+            "CREATE TEMPORARY TABLE conbira_rbac_role_permissions (role_id BIGINT REFERENCES conbira_rbac_roles(id), permission_id BIGINT REFERENCES conbira_rbac_permissions(id), PRIMARY KEY (role_id, permission_id))",
+            "INSERT INTO conbira_rbac_roles VALUES (1)",
+            "INSERT INTO conbira_rbac_permissions VALUES (2)",
+        ] {
+            sqlx::query(sql).execute(connection.handle().conn()).await?;
+        }
+    }
+    let claims =
+        serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.role.manage"]});
+    let token = container
+        .jwt_token_service
+        .issue("42", claims.as_object().unwrap().clone())?
+        .token;
+    for (method, path, expected, message) in [
+        (
+            "POST",
+            "/api/rbac/roles/9/permissions/2",
+            StatusCode::NOT_FOUND,
+            Some("Role or permission not found"),
+        ),
+        (
+            "POST",
+            "/api/rbac/roles/1/permissions/9",
+            StatusCode::NOT_FOUND,
+            Some("Role or permission not found"),
+        ),
+        (
+            "POST",
+            "/api/rbac/roles/1/permissions/2",
+            StatusCode::OK,
+            None,
+        ),
+        (
+            "POST",
+            "/api/rbac/roles/1/permissions/2",
+            StatusCode::BAD_REQUEST,
+            Some("Role already has permission"),
+        ),
+        (
+            "DELETE",
+            "/api/rbac/roles/1/permissions/2",
+            StatusCode::OK,
+            None,
+        ),
+        (
+            "DELETE",
+            "/api/rbac/roles/1/permissions/2",
+            StatusCode::NOT_FOUND,
+            Some("Role permission not found"),
+        ),
+        (
+            "DELETE",
+            "/api/rbac/roles/9/permissions/2",
+            StatusCode::NOT_FOUND,
+            Some("Role permission not found"),
+        ),
+        (
+            "DELETE",
+            "/api/rbac/roles/1/permissions/9",
+            StatusCode::NOT_FOUND,
+            Some("Role permission not found"),
+        ),
+    ] {
+        let request = Request::builder()
+            .method(method)
+            .uri(path)
+            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+            .body(Body::empty())?;
+        let response = router.clone().oneshot(request).await?;
+        // 각 관계 변경 결과와 공개 오류가 계약과 일치한다.
+        assert_eq!(response.status(), expected, "{method} {path}");
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 4096).await?)?;
+        if let Some(message) = message {
+            assert_eq!(body["message"], message);
+        } else {
+            assert_eq!(body, serde_json::json!({"code": "OK"}));
+        }
+        let mut connection = container.db.conn().await?;
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_rbac_role_permissions")
+            .fetch_one(connection.handle().conn())
+            .await?;
+        // 성공한 추가 이후부터 성공한 제거 전까지 관계 하나만 유지한다.
+        let expected_count = if method == "POST"
+            && (expected == StatusCode::OK || expected == StatusCode::BAD_REQUEST)
+        {
+            1
+        } else {
+            0
+        };
+        assert_eq!(count, expected_count);
     }
     Ok(())
 }
