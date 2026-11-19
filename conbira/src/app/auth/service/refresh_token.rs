@@ -221,10 +221,11 @@ mod tests {
                 .execute(conn.handle().conn())
                 .await?;
         }
-        let user_id =
-            sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id")
-                .fetch_one(conn.handle().conn())
-                .await?;
+        let user_id = sqlx::query_scalar(
+            "INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id",
+        )
+        .fetch_one(conn.handle().conn())
+        .await?;
         drop(conn);
         Ok((db, user_id))
     }

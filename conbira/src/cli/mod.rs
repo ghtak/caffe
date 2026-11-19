@@ -28,10 +28,11 @@ pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
         nickname,
         email,
         password,
+        role,
     }) = &command
     {
         let config = Config::load(&common.config, common.env_file.as_deref())?;
-        return user_create_local(&config, nickname, email, password).await;
+        return user_create_local(&config, nickname, email, password, role).await;
     }
     if let Some(option::Command::Migration { directories }) = command {
         let config = Config::load(&common.config, common.env_file.as_deref())?;
@@ -50,7 +51,7 @@ pub(crate) async fn run(options: option::CliOptions) -> Result<()> {
             for example in [
                 "Examples:",
                 "  conbira-cli migration dir01 dir02     Run migrations",
-                "  conbira-cli user-create-local --nickname NAME --email EMAIL --password PASSWORD",
+                "  conbira-cli user-create-local --nickname NAME --email EMAIL --password PASSWORD [--role user,admin]",
                 "  conbira-cli --generate-tls localhost  Generate a TLS certificate and private key",
                 "  conbira-cli --generate-ed25519        Generate an Ed25519 key pair for JWT signing",
             ] {
@@ -66,6 +67,7 @@ async fn user_create_local(
     nickname: &str,
     email: &str,
     password: &str,
+    role: &[String],
 ) -> Result<()> {
     let request = create_local::Input {
         nickname: nickname.to_owned(),
@@ -84,7 +86,10 @@ async fn user_create_local(
         password_hasher,
         &config.auth.password_hash,
     )?;
-    let user = create_local::usecase::execute(&db, &password_service, request.into()).await?;
+    let mut command: create_local::usecase::Command = request.into();
+    command.role_codes = role.to_vec();
+    command.status = conbira::app::auth::entity::UserStatus::Active;
+    let user = create_local::usecase::execute(&db, &password_service, command).await?;
     let output = serde_json::to_string(&user)
         .map_err_internal("Failed to serialize created user", conbira::here!())?;
     println!("{output}");

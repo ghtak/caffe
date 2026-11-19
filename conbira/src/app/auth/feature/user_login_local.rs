@@ -230,15 +230,11 @@ mod tests {
                 nickname: "Alice".into(),
                 email: "alice@example.com".into(),
                 password: "secret".into(),
+                role_codes: vec!["user".into()],
+                status: crate::app::auth::entity::UserStatus::Registered,
             },
         )
         .await?;
-        let mut connection = db.conn().await?;
-        sqlx::query("INSERT INTO conbira_rbac_user_roles (user_id, role_id) SELECT $1, id FROM conbira_rbac_roles WHERE code = 'user'")
-            .bind(user.id)
-            .execute(connection.handle().conn())
-            .await?;
-        drop(connection);
         for status in ["registered", "active", "inactive", "withdrawn"] {
             let mut connection = db.conn().await?;
             sqlx::query("UPDATE conbira_auth_users SET status = $1 WHERE id = $2")

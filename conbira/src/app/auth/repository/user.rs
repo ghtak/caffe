@@ -1,19 +1,21 @@
 use crate::Result;
-use crate::app::auth::entity::User;
+use crate::app::auth::entity::{User, UserStatus};
 use crate::app::container::db::Handle;
 use crate::error::ResultExt as _;
 
 pub struct NewUser {
     pub nickname: String,
+    pub status: UserStatus,
 }
 
 pub async fn insert(handle: &mut Handle<'_>, user: &NewUser) -> Result<User> {
     sqlx::query_as::<_, User>(
-        "INSERT INTO conbira_auth_users (nickname)
-         VALUES ($1)
+        "INSERT INTO conbira_auth_users (nickname, status)
+         VALUES ($1, $2)
          RETURNING id, nickname, status, created_at, updated_at",
     )
     .bind(&user.nickname)
+    .bind(user.status)
     .fetch_one(handle.conn())
     .await
     .map_err_internal("Failed to insert user", crate::here!())
@@ -70,6 +72,7 @@ mod tests {
             &mut handle,
             &NewUser {
                 nickname: "first".into(),
+                status: UserStatus::Registered,
             },
         )
         .await?;

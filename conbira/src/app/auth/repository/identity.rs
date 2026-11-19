@@ -108,10 +108,11 @@ mod tests {
         sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
             .execute(handle.conn())
             .await?;
-        let user_id: i64 =
-            sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id")
-                .fetch_one(handle.conn())
-                .await?;
+        let user_id: i64 = sqlx::query_scalar(
+            "INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id",
+        )
+        .fetch_one(handle.conn())
+        .await?;
         let input = NewIdentity {
             user_id,
             provider: Provider::Local,

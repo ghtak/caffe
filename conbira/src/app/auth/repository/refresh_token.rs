@@ -182,11 +182,11 @@ mod tests {
                 .execute(handle.conn())
                 .await?;
         }
-        Ok(
-            sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id")
-                .fetch_one(handle.conn())
-                .await?,
+        Ok(sqlx::query_scalar(
+            "INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id",
         )
+        .fetch_one(handle.conn())
+        .await?)
     }
 
     fn new_token(user_id: i64, family_id: uuid::Uuid, hash: &str) -> NewRefreshToken {

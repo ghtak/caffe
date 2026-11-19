@@ -36,6 +36,9 @@ pub(crate) enum Command {
         email: String,
         #[arg(long)]
         password: String,
+        /// Assign existing roles by comma-separated codes (defaults to user).
+        #[arg(long, value_delimiter = ',', default_value = "user")]
+        role: Vec<String>,
     },
 }
 
@@ -58,7 +61,17 @@ mod tests {
         let options =
             CliOptions::try_parse_from(args.into_iter().chain(["--password", "secret"])).unwrap();
         assert!(
-            matches!(options.command, Some(Command::UserCreateLocal { nickname, email, password }) if nickname == "name" && email == "user@example.com" && password == "secret")
+            matches!(options.command, Some(Command::UserCreateLocal { nickname, email, password, role }) if nickname == "name" && email == "user@example.com" && password == "secret" && role == ["user"])
+        );
+        let options = CliOptions::try_parse_from(args.into_iter().chain([
+            "--password",
+            "secret",
+            "--role",
+            "user,admin",
+        ]))
+        .unwrap();
+        assert!(
+            matches!(options.command, Some(Command::UserCreateLocal { role, .. }) if role == ["user", "admin"])
         );
     }
 }

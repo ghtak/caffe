@@ -30,6 +30,8 @@ impl From<Input> for usecase::Command {
             nickname: request.nickname,
             email: request.email,
             password: request.password,
+            role_codes: Vec::new(),
+            status: crate::app::auth::entity::UserStatus::Registered,
         }
     }
 }
@@ -52,12 +54,11 @@ pub mod endpoint {
         State(container): State<Arc<Container>>,
         ApiJson(request): ApiJson<CreateRequest>,
     ) -> ApiResult<CreateResponse> {
-        let user = super::usecase::execute(
-            &container.db,
-            &container.password_hash_service,
-            request.into(),
-        )
-        .await?;
+        let mut command: super::usecase::Command = request.into();
+        command.role_codes = vec!["user".to_owned()];
+        let user =
+            super::usecase::execute(&container.db, &container.password_hash_service, command)
+                .await?;
         Ok(ApiResponse::new(user))
     }
 }
@@ -68,12 +69,15 @@ pub mod usecase {
     use crate::app::auth::repository::{identity, user};
     use crate::app::auth::service::password_hash::PasswordHashService;
     use crate::app::container::db::Database;
+    use crate::app::rbac::repository::{role, user_role};
     use crate::error::ResultExt as _;
 
     pub struct Command {
         pub nickname: String,
         pub email: String,
         pub password: String,
+        pub role_codes: Vec<String>,
+        pub status: crate::app::auth::entity::UserStatus,
     }
 
     pub async fn execute(
@@ -87,7 +91,14 @@ pub mod usecase {
 
         let mut tx = db.begin_tx(crate::here!()).await?;
         let mut handle = tx.handle();
-        let user = user::insert(&mut handle, &user::NewUser { nickname }).await?;
+        let user = user::insert(
+            &mut handle,
+            &user::NewUser {
+                nickname,
+                status: command.status,
+            },
+        )
+        .await?;
         identity::insert(
             &mut handle,
             &identity::NewIdentity {
@@ -99,6 +110,7 @@ pub mod usecase {
             },
         )
         .await?;
+        assign_roles(&mut handle, user.id, &command.role_codes).await?;
         tx.commit()
             .await
             .map_err_internal("Failed to commit user creation", crate::here!())?;
@@ -110,6 +122,25 @@ pub mod usecase {
             email,
             created_at: user.created_at,
         })
+    }
+
+    async fn assign_roles(
+        handle: &mut crate::app::db::Handle<'_>,
+        user_id: i64,
+        role_codes: &[String],
+    ) -> crate::Result<()> {
+        let mut seen = std::collections::HashSet::new();
+        for code in role_codes {
+            if !seen.insert(code) {
+                continue;
+            }
+            let role = role::find_by_code(handle, code).await?.ok_or_else(|| {
+                crate::Error::new(crate::Code::NotFound, format!("Role not found: {code}"))
+                    .at(crate::here!())
+            })?;
+            user_role::insert(handle, user_id, role.id).await?;
+        }
+        Ok(())
     }
 }
 
@@ -164,6 +195,7 @@ mod tests {
         assert_eq!(command.nickname, "user");
         assert_eq!(command.email, "user@example.com");
         assert_eq!(command.password, "secret");
+        assert_eq!(command.status, UserStatus::Registered);
     }
 
     #[tokio::test]
@@ -171,6 +203,11 @@ mod tests {
         let db = Database::new(&crate::test_support::database_config(1)).await?;
         let mut connection = db.conn().await?;
         let schema = include_str!("../../../../migrations/0010_user.sql")
+            .replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
+            .execute(connection.handle().conn())
+            .await?;
+        let schema = include_str!("../../../../migrations/0012_rbac.sql")
             .replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
         sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
             .execute(connection.handle().conn())
@@ -192,6 +229,8 @@ mod tests {
                 nickname: "Alice".into(),
                 email: " Alice@Example.com ".into(),
                 password: "correct password".into(),
+                role_codes: vec!["user".into(), "admin".into(), "user".into()],
+                status: UserStatus::Active,
             },
         )
         .await?;
@@ -205,7 +244,14 @@ mod tests {
         // 저장된다.
         assert_eq!(result.nickname, "Alice");
         assert_eq!(result.email, "alice@example.com");
-        assert_eq!(result.status, UserStatus::Registered);
+        assert_eq!(result.status, UserStatus::Active);
+        assert_eq!(
+            crate::app::auth::repository::user::find_by_id(&mut handle, result.id)
+                .await?
+                .unwrap()
+                .status,
+            UserStatus::Active
+        );
         assert_eq!(identity.user_id, result.id);
         assert_eq!(identity.provider, Provider::Local);
         assert_eq!(identity.provider_subject, result.id.to_string());
@@ -214,6 +260,12 @@ mod tests {
             identity.password_hash.as_deref().unwrap()
         )?);
         assert!(!hasher.verify("wrong password", identity.password_hash.as_deref().unwrap())?);
+        let roles =
+            crate::app::rbac::repository::user_role::list_by_user_id(&mut handle, result.id)
+                .await?;
+        assert_eq!(roles.len(), 2);
+        assert!(roles.iter().any(|role| role.code == "user"));
+        assert!(roles.iter().any(|role| role.code == "admin"));
         drop(connection);
 
         assert!(
@@ -224,11 +276,27 @@ mod tests {
                     nickname: "Duplicate".into(),
                     email: "alice@example.com".into(),
                     password: "another password".into(),
+                    role_codes: vec!["user".into()],
+                    status: UserStatus::Registered,
                 }
             )
             .await
             .is_err()
         );
+        let error = execute(
+            &db,
+            &password_service,
+            Command {
+                nickname: "Missing role".into(),
+                email: "missing@example.com".into(),
+                password: "password".into(),
+                role_codes: vec!["user".into(), "missing".into()],
+                status: UserStatus::Registered,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error.code, crate::Code::NotFound);
         let mut connection = db.conn().await?;
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_users")
             .fetch_one(connection.handle().conn())

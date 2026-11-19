@@ -66,12 +66,12 @@ conbira-cli:
 conbira-cli-migration:
     cargo run -p conbira --bin conbira-cli -- migration migrations
 
-# 로컬 사용자 추가
+# 로컬 사용자 추가 (역할은 쉼표로 구분, 기본값 user)
 [group: 'conbira']
 [working-directory: 'conbira']
 [positional-arguments]
-conbira-cli-user-create-local nickname email password:
-    @cargo run -p conbira --bin conbira-cli -- user-create-local --nickname "$1" --email "$2" --password "$3"
+conbira-cli-user-create-local nickname email password role='user':
+    @cargo run -p conbira --bin conbira-cli -- user-create-local --nickname "$1" --email "$2" --password "$3" --role "$4"
 
 # 설정된 경로에 localhost용 TLS 인증서와 키 생성
 [group: 'conbira']
