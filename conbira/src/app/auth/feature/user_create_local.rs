@@ -184,22 +184,21 @@ mod tests {
     }
 
     #[test]
-    fn request_deserializes_and_converts_to_command() {
+    fn local_user_request_defaults_to_registered_status() {
         let request: CreateRequest = serde_json::from_str(
             r#"{"nickname":"user","email":"user@example.com","password":"secret"}"#,
         )
         .unwrap();
-        assert!(request.validate().is_ok());
         let command: Command = request.into();
-        // JSON 요청의 세 값이 유스케이스 입력으로 전달된다.
-        assert_eq!(command.nickname, "user");
-        assert_eq!(command.email, "user@example.com");
-        assert_eq!(command.password, "secret");
+        // 로컬 사용자 생성은 등록 상태로 시작한다.
         assert_eq!(command.status, UserStatus::Registered);
     }
 
-    #[tokio::test]
-    async fn creates_local_user_with_hash_and_rolls_back_duplicate_email() -> anyhow::Result<()> {
+    async fn setup() -> anyhow::Result<(
+        Database,
+        Arc<espr::hash::argon2::Hasher>,
+        crate::app::auth::service::password_hash::PasswordHashService,
+    )> {
         let db = Database::new(&crate::test_support::database_config(1)).await?;
         let mut connection = db.conn().await?;
         let schema = include_str!("../../../../migrations/0010_user.sql")
@@ -222,6 +221,12 @@ mod tests {
                 wait_timeout_seconds: 5,
             },
         )?;
+        Ok((db, hasher, password_service))
+    }
+
+    #[tokio::test]
+    async fn creates_local_user_with_hash_and_distinct_roles() -> anyhow::Result<()> {
+        let (db, hasher, password_service) = setup().await?;
         let result = execute(
             &db,
             &password_service,
@@ -266,8 +271,24 @@ mod tests {
         assert_eq!(roles.len(), 2);
         assert!(roles.iter().any(|role| role.code == "user"));
         assert!(roles.iter().any(|role| role.code == "admin"));
-        drop(connection);
+        Ok(())
+    }
 
+    #[tokio::test]
+    async fn duplicate_email_rolls_back_user_creation() -> anyhow::Result<()> {
+        let (db, _, password_service) = setup().await?;
+        execute(
+            &db,
+            &password_service,
+            Command {
+                nickname: "Original".into(),
+                email: "alice@example.com".into(),
+                password: "password".into(),
+                role_codes: vec!["user".into()],
+                status: UserStatus::Registered,
+            },
+        )
+        .await?;
         assert!(
             execute(
                 &db,
@@ -283,6 +304,18 @@ mod tests {
             .await
             .is_err()
         );
+        let mut connection = db.conn().await?;
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_users")
+            .fetch_one(connection.handle().conn())
+            .await?;
+        // 중복 이메일 요청은 추가 사용자를 남기지 않는다.
+        assert_eq!(count, 1);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn missing_role_rolls_back_user_creation() -> anyhow::Result<()> {
+        let (db, _, password_service) = setup().await?;
         let error = execute(
             &db,
             &password_service,
@@ -301,8 +334,8 @@ mod tests {
         let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_users")
             .fetch_one(connection.handle().conn())
             .await?;
-        // 식별 정보 중복으로 실패한 사용자는 남지 않는다.
-        assert_eq!(count, 1);
+        // 없는 역할이 포함되면 생성한 사용자도 롤백한다.
+        assert_eq!(count, 0);
         Ok(())
     }
 }

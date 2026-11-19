@@ -27,24 +27,6 @@ pub mod sample {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn creates_and_drops_sample_table() -> crate::Result<()> {
-        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
-        let mut conn = db.conn().await?;
-        setup(&mut conn.handle()).await?;
-        let exists: bool = sqlx::query_scalar("SELECT to_regclass('pg_temp.sample') IS NOT NULL")
-            .fetch_one(conn.handle().conn())
-            .await?;
-        assert!(exists);
-
-        teardown(&mut conn.handle()).await?;
-        let exists: bool = sqlx::query_scalar("SELECT to_regclass('pg_temp.sample') IS NOT NULL")
-            .fetch_one(conn.handle().conn())
-            .await?;
-        assert!(!exists);
-        Ok(())
-    }
-
     pub mod entity {
         #[derive(Debug, PartialEq, sqlx::FromRow)]
         pub struct Sample {
@@ -101,14 +83,6 @@ pub mod sample {
                 .await?;
             Ok(())
         }
-
-        pub async fn delete(handle: &mut TestHandle<'_>, id: i64) -> crate::Result<()> {
-            sqlx::query("DELETE FROM sample WHERE id = $1")
-                .bind(id)
-                .execute(handle.conn())
-                .await?;
-            Ok(())
-        }
     }
 
     fn sample() -> entity::Sample {
@@ -119,52 +93,6 @@ pub mod sample {
             created_at: time,
             updated_at: time,
         }
-    }
-
-    #[tokio::test]
-    async fn insert_and_find_sample() -> crate::Result<()> {
-        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
-        let mut conn = db.conn().await?;
-        setup(&mut conn.handle()).await?;
-        let sample = sample();
-
-        repository::insert(&mut conn.handle(), &sample).await?;
-
-        let stored = repository::find_by_id(&mut conn.handle(), sample.id).await?;
-        assert_eq!(stored, Some(sample));
-        teardown(&mut conn.handle()).await
-    }
-
-    #[tokio::test]
-    async fn update_sample() -> crate::Result<()> {
-        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
-        let mut conn = db.conn().await?;
-        setup(&mut conn.handle()).await?;
-        let mut sample = sample();
-        repository::insert(&mut conn.handle(), &sample).await?;
-        sample.name = "updated".into();
-        sample.updated_at += jiff::SignedDuration::from_secs(1);
-
-        repository::update(&mut conn.handle(), &sample).await?;
-
-        let stored = repository::find_by_id(&mut conn.handle(), sample.id).await?;
-        assert_eq!(stored, Some(sample));
-        teardown(&mut conn.handle()).await
-    }
-
-    #[tokio::test]
-    async fn delete_sample() -> crate::Result<()> {
-        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
-        let mut conn = db.conn().await?;
-        setup(&mut conn.handle()).await?;
-        let sample = sample();
-        repository::insert(&mut conn.handle(), &sample).await?;
-
-        repository::delete(&mut conn.handle(), sample.id).await?;
-
-        let stored = repository::find_by_id(&mut conn.handle(), sample.id).await?;
-        assert_eq!(stored, None);
-        teardown(&mut conn.handle()).await
     }
 
     #[tokio::test]

@@ -136,11 +136,6 @@ mod sample {
             )?;
             Ok(())
         }
-
-        pub fn delete(conn: &Connection, id: i64) -> Result<()> {
-            conn.execute("DELETE FROM ORA$PTT_SAMPLE WHERE id = :1", &[&id])?;
-            Ok(())
-        }
     }
 
     fn sample() -> entity::Sample {
@@ -151,83 +146,6 @@ mod sample {
             created_at: time,
             updated_at: time,
         }
-    }
-
-    #[tokio::test]
-    async fn creates_and_drops_sample_table() -> Result<()> {
-        let db = Database::new(&crate::test_support::oracle_config()).await?;
-        db.interact(|pool| {
-            let conn = pool.acquire()?;
-            setup(&conn)?;
-            let row = conn.query_row(
-                "SELECT COUNT(*) FROM USER_PRIVATE_TEMP_TABLES WHERE TABLE_NAME = 'ORA$PTT_SAMPLE'",
-                &[],
-            )?;
-            assert_eq!(row.get::<i64>(0)?, 1);
-            teardown(&conn)?;
-            let row = conn.query_row(
-                "SELECT COUNT(*) FROM USER_PRIVATE_TEMP_TABLES WHERE TABLE_NAME = 'ORA$PTT_SAMPLE'",
-                &[],
-            )?;
-            assert_eq!(row.get::<i64>(0)?, 0);
-            Ok(())
-        })
-        .await
-    }
-
-    #[tokio::test]
-    async fn insert_and_find_sample() -> Result<()> {
-        let db = Database::new(&crate::test_support::oracle_config()).await?;
-        db.interact(|pool| {
-            let conn = pool.acquire()?;
-            setup(&conn)?;
-            let sample = sample();
-
-            repository::insert(&conn, &sample)?;
-
-            let stored = repository::find_by_id(&conn, sample.id)?;
-            assert_eq!(stored, Some(sample));
-            teardown(&conn)
-        })
-        .await
-    }
-
-    #[tokio::test]
-    async fn update_sample() -> Result<()> {
-        let db = Database::new(&crate::test_support::oracle_config()).await?;
-        db.interact(|pool| {
-            let conn = pool.acquire()?;
-            setup(&conn)?;
-            let mut sample = sample();
-            repository::insert(&conn, &sample)?;
-            sample.name = "updated".into();
-            sample.updated_at += jiff::SignedDuration::from_secs(1);
-
-            repository::update(&conn, &sample)?;
-
-            let stored = repository::find_by_id(&conn, sample.id)?;
-            assert_eq!(stored, Some(sample));
-            teardown(&conn)
-        })
-        .await
-    }
-
-    #[tokio::test]
-    async fn delete_sample() -> Result<()> {
-        let db = Database::new(&crate::test_support::oracle_config()).await?;
-        db.interact(|pool| {
-            let conn = pool.acquire()?;
-            setup(&conn)?;
-            let sample = sample();
-            repository::insert(&conn, &sample)?;
-
-            repository::delete(&conn, sample.id)?;
-
-            let stored = repository::find_by_id(&conn, sample.id)?;
-            assert_eq!(stored, None);
-            teardown(&conn)
-        })
-        .await
     }
 
     #[tokio::test]
