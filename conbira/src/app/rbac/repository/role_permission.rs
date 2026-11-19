@@ -1,15 +1,17 @@
 use crate::Result;
-use crate::app::auth::entity::Permission;
 use crate::app::container::db::Handle;
+use crate::app::rbac::entity::Permission;
 use crate::error::ResultExt as _;
 
 pub async fn insert(handle: &mut Handle<'_>, role_id: i64, permission_id: i64) -> Result<()> {
-    sqlx::query("INSERT INTO conbira_rbac_role_permissions (role_id, permission_id) VALUES ($1, $2)")
-        .bind(role_id)
-        .bind(permission_id)
-        .execute(handle.conn())
-        .await
-        .map_err_internal("Failed to insert role_permission", crate::here!())?;
+    sqlx::query(
+        "INSERT INTO conbira_rbac_role_permissions (role_id, permission_id) VALUES ($1, $2)",
+    )
+    .bind(role_id)
+    .bind(permission_id)
+    .execute(handle.conn())
+    .await
+    .map_err_internal("Failed to insert role_permission", crate::here!())?;
     Ok(())
 }
 

@@ -108,10 +108,11 @@ async fn user_permissions_combine_roles_without_duplicates_and_reflect_removed_l
     let mut handle = connection.handle();
     setup(&mut handle).await?;
 
-    let user_id: i64 =
-        sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('reader') RETURNING id")
-            .fetch_one(handle.conn())
-            .await?;
+    let user_id: i64 = sqlx::query_scalar(
+        "INSERT INTO conbira_auth_users (nickname) VALUES ('reader') RETURNING id",
+    )
+    .fetch_one(handle.conn())
+    .await?;
     let admin = role::find_by_code(&mut handle, "admin").await?.unwrap();
     let user = role::find_by_code(&mut handle, "user").await?.unwrap();
     let read = permission::find_by_code(&mut handle, "rbac.read")

@@ -1,6 +1,6 @@
 use crate::Result;
-use crate::app::auth::entity::Role;
 use crate::app::container::db::Handle;
+use crate::app::rbac::entity::Role;
 use crate::error::ResultExt as _;
 
 pub struct NewRole {
@@ -23,11 +23,13 @@ pub async fn insert(handle: &mut Handle<'_>, value: &NewRole) -> Result<Role> {
 }
 
 pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<Role>> {
-    sqlx::query_as::<_, Role>("SELECT id, code, name, description FROM conbira_rbac_roles WHERE id = $1")
-        .bind(id)
-        .fetch_optional(handle.conn())
-        .await
-        .map_err_internal("Failed to find role by id", crate::here!())
+    sqlx::query_as::<_, Role>(
+        "SELECT id, code, name, description FROM conbira_rbac_roles WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(handle.conn())
+    .await
+    .map_err_internal("Failed to find role by id", crate::here!())
 }
 
 pub async fn find_by_code(handle: &mut Handle<'_>, code: &str) -> Result<Option<Role>> {
@@ -41,10 +43,12 @@ pub async fn find_by_code(handle: &mut Handle<'_>, code: &str) -> Result<Option<
 }
 
 pub async fn list(handle: &mut Handle<'_>) -> Result<Vec<Role>> {
-    sqlx::query_as::<_, Role>("SELECT id, code, name, description FROM conbira_rbac_roles ORDER BY id")
-        .fetch_all(handle.conn())
-        .await
-        .map_err_internal("Failed to list roles", crate::here!())
+    sqlx::query_as::<_, Role>(
+        "SELECT id, code, name, description FROM conbira_rbac_roles ORDER BY id",
+    )
+    .fetch_all(handle.conn())
+    .await
+    .map_err_internal("Failed to list roles", crate::here!())
 }
 
 pub async fn update(handle: &mut Handle<'_>, value: &Role) -> Result<Option<Role>> {

@@ -1,6 +1,6 @@
 use crate::Result;
-use crate::app::auth::entity::Role;
 use crate::app::container::db::Handle;
+use crate::app::rbac::entity::Role;
 use crate::error::ResultExt as _;
 
 pub async fn insert(handle: &mut Handle<'_>, user_id: i64, role_id: i64) -> Result<()> {
@@ -26,11 +26,12 @@ pub async fn list_by_user_id(handle: &mut Handle<'_>, user_id: i64) -> Result<Ve
 }
 
 pub async fn delete(handle: &mut Handle<'_>, user_id: i64, role_id: i64) -> Result<bool> {
-    let result = sqlx::query("DELETE FROM conbira_rbac_user_roles WHERE user_id = $1 AND role_id = $2")
-        .bind(user_id)
-        .bind(role_id)
-        .execute(handle.conn())
-        .await
-        .map_err_internal("Failed to delete user_role", crate::here!())?;
+    let result =
+        sqlx::query("DELETE FROM conbira_rbac_user_roles WHERE user_id = $1 AND role_id = $2")
+            .bind(user_id)
+            .bind(role_id)
+            .execute(handle.conn())
+            .await
+            .map_err_internal("Failed to delete user_role", crate::here!())?;
     Ok(result.rows_affected() > 0)
 }

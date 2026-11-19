@@ -1,6 +1,6 @@
 use crate::Result;
-use crate::app::auth::entity::Permission;
 use crate::app::container::db::Handle;
+use crate::app::rbac::entity::Permission;
 use crate::error::ResultExt as _;
 
 pub struct NewPermission {
