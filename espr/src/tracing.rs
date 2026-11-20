@@ -207,135 +207,166 @@ fn resolve_filter(filter: Option<&str>) -> EnvFilter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    mod contract {
+        use super::super::*;
 
-    #[test]
-    fn exporter_requires_tokio_runtime() {
-        let config = Config {
-            exporter: Some(exporter::Config {
-                endpoint: "http://localhost:4317".into(),
-            }),
-            ..Config::default()
-        };
-        let error = match initialize(&config) {
-            Ok(_) => panic!("exporter must require a runtime"),
-            Err(error) => error,
-        };
-        assert!(error.to_string().contains("requires a Tokio runtime"));
-    }
-
-    #[test]
-    fn propagates_request_context() {
-        let provider = SdkTracerProvider::builder().build();
-        let subscriber = Registry::default()
-            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
-        tracing::subscriber::with_default(subscriber, || {
-            assert_eq!(current_trace_ids(), None);
-            let request = axum::http::Request::builder()
-                .header(
-                    "traceparent",
-                    "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-                )
-                .header("tracestate", "vendor=value")
-                .body(())
-                .unwrap();
-            let span = crate::http::make_request_span(&request);
-            let _entered = span.enter();
-            let ids = current_trace_ids().unwrap();
-            assert_eq!(ids.trace_id, "4bf92f3577b34da6a3ce929d0e0e4736");
-            assert_ne!(ids.span_id, "00f067aa0ba902b7");
-            let mut headers = HeaderMap::new();
-            inject_trace_context(&mut headers);
-            assert_eq!(
-                headers["traceparent"],
-                format!("00-{}-{}-01", ids.trace_id, ids.span_id)
-            );
-            assert_eq!(headers["tracestate"], "vendor=value");
-        });
-    }
-
-    #[test]
-    fn invalid_parent_starts_new_trace() {
-        let provider = SdkTracerProvider::builder().build();
-        let subscriber = Registry::default()
-            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
-        tracing::subscriber::with_default(subscriber, || {
-            let request = axum::http::Request::builder()
-                .header("traceparent", "invalid")
-                .header("tracestate", "vendor=value")
-                .body(())
-                .unwrap();
-            let span = crate::http::make_request_span(&request);
-            let _entered = span.enter();
-            assert!(current_trace_ids().is_some());
-            let mut headers = HeaderMap::new();
-            inject_trace_context(&mut headers);
-            assert!(headers.contains_key("traceparent"));
-            assert!(!headers.contains_key("tracestate"));
-        });
-    }
-
-    #[test]
-    fn initializes_file_logging() {
-        const LOG_DIR: &str = "ESPR_TRACING_TEST_DIR";
-
-        if let Some(directory) = std::env::var_os(LOG_DIR) {
+        #[test]
+        fn initialize_rejects_exporter_without_tokio_runtime() {
             let config = Config {
-                console: None,
-                exporter: None,
-                file: Some(File {
-                    filter: Some("error".into()),
-                    directory: directory.into(),
-                    filename_prefix: "test".into(),
-                    buffered_lines_limit: default_buffered_lines_limit(),
-                    lossy: false,
+                exporter: Some(exporter::Config {
+                    endpoint: "http://localhost:4317".into(),
                 }),
+                ..Config::default()
             };
-            let guard = initialize(&config).unwrap();
-            let span = tracing::info_span!("request");
-            assert!(span.context().span().span_context().is_valid());
-            tracing::debug!("visible debug event");
-            tracing::trace!("hidden trace event");
-            assert!(initialize(&config).is_err());
-            drop(guard);
-            return;
+            let result = initialize(&config);
+
+            // Initialization reports that the exporter requires a Tokio
+            // runtime.
+            let error = match result {
+                Ok(_) => panic!("exporter must require a runtime"),
+                Err(error) => error,
+            };
+            assert!(error.to_string().contains("requires a Tokio runtime"));
         }
 
-        let directory = std::env::temp_dir().join(format!(
-            "espr-tracing-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", "tracing::tests::initializes_file_logging"])
+        #[test]
+        fn request_span_propagates_trace_id_and_tracestate_with_a_new_span_id() {
+            let provider = SdkTracerProvider::builder().build();
+            let subscriber = Registry::default()
+                .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+            tracing::subscriber::with_default(subscriber, || {
+                // Before entering a request span, there are no current trace
+                // IDs.
+                assert_eq!(current_trace_ids(), None);
+                let request = axum::http::Request::builder()
+                    .header(
+                        "traceparent",
+                        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                    )
+                    .header("tracestate", "vendor=value")
+                    .body(())
+                    .unwrap();
+                let span = crate::http::make_request_span(&request);
+                let _entered = span.enter();
+                let ids = current_trace_ids().unwrap();
+                let mut headers = HeaderMap::new();
+                inject_trace_context(&mut headers);
+
+                // Outgoing headers carry the original trace and the child span
+                // ID.
+                assert_eq!(ids.trace_id, "4bf92f3577b34da6a3ce929d0e0e4736");
+                assert_ne!(ids.span_id, "00f067aa0ba902b7");
+                assert_eq!(
+                    headers["traceparent"],
+                    format!("00-{}-{}-01", ids.trace_id, ids.span_id)
+                );
+                assert_eq!(headers["tracestate"], "vendor=value");
+            });
+        }
+
+        #[test]
+        fn file_logging_uses_rust_log_filter_over_configured_filter() {
+            const LOG_DIR: &str = "ESPR_TRACING_TEST_DIR";
+
+            if let Some(directory) = std::env::var_os(LOG_DIR) {
+                let config = Config {
+                    console: None,
+                    exporter: None,
+                    file: Some(File {
+                        filter: Some("error".into()),
+                        directory: directory.into(),
+                        filename_prefix: "test".into(),
+                        buffered_lines_limit: default_buffered_lines_limit(),
+                        lossy: false,
+                    }),
+                };
+                let guard = initialize(&config).unwrap();
+                let span = tracing::info_span!("request");
+
+                // Initialization installs tracing with a valid span context.
+                assert!(span.context().span().span_context().is_valid());
+                tracing::debug!("visible debug event");
+                tracing::trace!("hidden trace event");
+                let second_initialization = initialize(&config);
+
+                // A second initialization returns an error.
+                assert!(second_initialization.is_err());
+                drop(guard);
+                return;
+            }
+
+            let directory = std::env::temp_dir().join(format!(
+                "espr-tracing-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                    "tracing::tests::contract::file_logging_uses_rust_log_filter_over_configured_filter",
+            ])
             .env(LOG_DIR, &directory)
             .env("RUST_LOG", "debug")
             .output()
             .unwrap();
-        assert!(
-            output.status.success(),
-            "stdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
 
-        let log_files: Vec<_> = std::fs::read_dir(&directory)
-            .expect("read log directory")
-            .map(|entry| entry.expect("read log directory entry").path())
-            .filter(|path| {
-                path.file_name()
-                    .and_then(|name| name.to_str())
-                    .is_some_and(|name| name.starts_with("test.") && name.ends_with(".log"))
-            })
-            .collect();
-        assert_eq!(log_files.len(), 1, "expected one test log file");
-        let contents = std::fs::read_to_string(&log_files[0]).expect("read test log file");
-        std::fs::remove_dir_all(directory).unwrap();
+            // Initialization and logging succeed in the isolated subprocess.
+            assert!(
+                output.status.success(),
+                "stdout: {}\nstderr: {}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
 
-        assert!(contents.contains("visible debug event"));
-        assert!(!contents.contains("hidden trace event"));
+            let log_files: Vec<_> = std::fs::read_dir(&directory)
+                .expect("read log directory")
+                .map(|entry| entry.expect("read log directory entry").path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("test.") && name.ends_with(".log"))
+                })
+                .collect();
+
+            // The configured prefix produces one log file.
+            assert_eq!(log_files.len(), 1, "expected one test log file");
+            let contents = std::fs::read_to_string(&log_files[0]).expect("read test log file");
+            std::fs::remove_dir_all(directory).unwrap();
+
+            // RUST_LOG=debug includes debug events and filters out trace
+            // events.
+            assert!(contents.contains("visible debug event"));
+            assert!(!contents.contains("hidden trace event"));
+        }
+    }
+
+    mod edge {
+        use super::super::*;
+
+        #[test]
+        fn invalid_parent_starts_new_trace_without_incoming_tracestate() {
+            let provider = SdkTracerProvider::builder().build();
+            let subscriber = Registry::default()
+                .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+            tracing::subscriber::with_default(subscriber, || {
+                let request = axum::http::Request::builder()
+                    .header("traceparent", "invalid")
+                    .header("tracestate", "vendor=value")
+                    .body(())
+                    .unwrap();
+                let span = crate::http::make_request_span(&request);
+                let _entered = span.enter();
+                let mut headers = HeaderMap::new();
+                inject_trace_context(&mut headers);
+
+                // A fresh trace is propagated without the incoming tracestate.
+                assert!(current_trace_ids().is_some());
+                assert!(headers.contains_key("traceparent"));
+                assert!(!headers.contains_key("tracestate"));
+            });
+        }
     }
 }

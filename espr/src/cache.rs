@@ -124,84 +124,142 @@ impl Cache {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn rejects_zero_pool_size() {
-        let mut config = crate::test_support::cache_config();
-        config.max_connections = 0;
-        assert!(matches!(
-            Cache::new(&config).await,
-            Err(Error::InvalidParameter(_))
-        ));
-    }
-
-    #[tokio::test]
-    async fn rejects_zero_timeouts() {
-        let mut config = crate::test_support::cache_config();
-        config.connect_timeout_ms = 0;
-        assert!(matches!(
-            Cache::new(&config).await,
-            Err(Error::InvalidParameter(_))
-        ));
-        config.connect_timeout_ms = 1_000;
-        config.response_timeout_ms = 0;
-        assert!(matches!(
-            Cache::new(&config).await,
-            Err(Error::InvalidParameter(_))
-        ));
-        config.response_timeout_ms = 1_000;
-        config.pool_wait_timeout_ms = 0;
-        assert!(matches!(
-            Cache::new(&config).await,
-            Err(Error::InvalidParameter(_))
-        ));
-    }
-
-    #[tokio::test]
-    async fn reports_pool_errors_as_cache_errors() {
+    fn cache_with_closed_pool() -> Cache {
         let manager = deadpool_redis::Manager::new("redis://127.0.0.1/").unwrap();
         let pool = deadpool_redis::Pool::builder(manager).build().unwrap();
         pool.close();
-        let cache = Cache { pool };
-
-        assert!(matches!(
-            cache.get::<_, String>("key").await,
-            Err(Error::CachePoolError(deadpool_redis::PoolError::Closed))
-        ));
+        Cache { pool }
     }
 
-    #[tokio::test]
-    async fn stores_and_reads_values() -> Result<()> {
-        let cache = Cache::new(&crate::test_support::cache_config()).await?;
-        cache.ping().await?;
-        let key = format!("espr:test:{}:values", std::process::id());
+    mod contract {
+        use super::*;
 
-        let missing: Option<String> = cache.get(&key).await?;
-        assert_eq!(missing, None);
-        cache.set(&key, "hello").await?;
-        let stored: Option<String> = cache.get(&key).await?;
-        assert_eq!(stored.as_deref(), Some("hello"));
+        #[tokio::test]
+        async fn set_stores_a_readable_value_without_expiration() -> Result<()> {
+            let cache = Cache::new(&crate::test_support::cache_config()).await?;
+            cache.ping().await?;
+            let key = format!("espr:test:{}:values", std::process::id());
 
-        let mut conn = cache.pool.get().await?;
-        redis::cmd("DEL")
-            .arg(&key)
-            .query_async::<()>(&mut conn)
-            .await?;
-        Ok(())
+            let missing: Option<String> = cache.get(&key).await?;
+
+            // A key that has not been stored returns None.
+            assert_eq!(missing, None);
+
+            cache.set(&key, "hello").await?;
+            let stored: Option<String> = cache.get(&key).await?;
+            let mut conn = cache.pool.get().await?;
+            let ttl: i64 = redis::cmd("PTTL").arg(&key).query_async(&mut conn).await?;
+            redis::cmd("DEL")
+                .arg(&key)
+                .query_async::<()>(&mut conn)
+                .await?;
+
+            // The stored value is readable, and Redis reports -1 for a key
+            // without expiration.
+            assert_eq!(stored.as_deref(), Some("hello"));
+            assert_eq!(ttl, -1);
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn set_with_ttl_returns_value_before_expiry_and_none_after() -> Result<()> {
+            let cache = Cache::new(&crate::test_support::cache_config()).await?;
+            let key = format!("espr:test:{}:expiry", std::process::id());
+
+            cache
+                .set_with_ttl(&key, b"value", Duration::from_millis(1_000))
+                .await?;
+            let stored: Option<Vec<u8>> = cache.get(&key).await?;
+
+            // Before the TTL elapses, the original value is readable.
+            assert_eq!(stored.as_deref(), Some(b"value".as_slice()));
+
+            tokio::time::sleep(Duration::from_millis(1_200)).await;
+            let expired: Option<Vec<u8>> = cache.get(&key).await?;
+
+            // After the TTL elapses, reading the key returns None.
+            assert_eq!(expired, None);
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn set_with_ttl_rejects_durations_without_a_valid_millisecond_value() {
+            let cache = cache_with_closed_pool();
+            for ttl in [
+                Duration::ZERO,
+                Duration::from_micros(999),
+                Duration::from_millis(i64::MAX as u64 + 1),
+            ] {
+                let result = cache.set_with_ttl("key", "value", ttl).await;
+
+                // An out-of-range TTL returns InvalidParameter without using
+                // the pool.
+                assert!(
+                    matches!(result, Err(Error::InvalidParameter(_))),
+                    "TTL: {ttl:?}"
+                );
+            }
+        }
     }
 
-    #[tokio::test]
-    async fn expires_values() -> Result<()> {
-        let cache = Cache::new(&crate::test_support::cache_config()).await?;
-        let key = format!("espr:test:{}:expiry", std::process::id());
+    mod edge {
+        use super::*;
 
-        cache
-            .set_with_ttl(&key, b"value", Duration::from_secs(1))
-            .await?;
-        let stored: Option<Vec<u8>> = cache.get(&key).await?;
-        assert_eq!(stored.as_deref(), Some(b"value".as_slice()));
-        tokio::time::sleep(Duration::from_millis(1200)).await;
-        let expired: Option<Vec<u8>> = cache.get(&key).await?;
-        assert_eq!(expired, None);
-        Ok(())
+        #[tokio::test]
+        async fn new_returns_invalid_parameter_for_zero_pool_size() {
+            let config = Config {
+                max_connections: 0,
+                ..crate::test_support::cache_config()
+            };
+            let result = Cache::new(&config).await;
+
+            // Zero connections is rejected as an invalid parameter.
+            assert!(matches!(result, Err(Error::InvalidParameter(_))));
+        }
+
+        #[tokio::test]
+        async fn new_returns_invalid_parameter_for_each_zero_timeout() {
+            let config = crate::test_support::cache_config();
+            for (field, config) in [
+                (
+                    "connect_timeout_ms",
+                    Config {
+                        connect_timeout_ms: 0,
+                        ..config.clone()
+                    },
+                ),
+                (
+                    "response_timeout_ms",
+                    Config {
+                        response_timeout_ms: 0,
+                        ..config.clone()
+                    },
+                ),
+                (
+                    "pool_wait_timeout_ms",
+                    Config {
+                        pool_wait_timeout_ms: 0,
+                        ..config
+                    },
+                ),
+            ] {
+                let result = Cache::new(&config).await;
+
+                // Each zero timeout is rejected as an invalid parameter.
+                assert!(matches!(result, Err(Error::InvalidParameter(_))), "{field}");
+            }
+        }
+
+        #[tokio::test]
+        async fn get_returns_cache_pool_error_when_pool_is_closed() {
+            let cache = cache_with_closed_pool();
+            let result = cache.get::<_, String>("key").await;
+
+            // Reading through a closed pool returns CachePoolError(Closed).
+            assert!(matches!(
+                result,
+                Err(Error::CachePoolError(deadpool_redis::PoolError::Closed))
+            ));
+        }
     }
 }
