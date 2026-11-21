@@ -46,14 +46,14 @@ pub mod endpoint {
     use crate::app::http::extract::ApiJson;
     use crate::app::http::response::ApiResult;
 
-    pub type CreateRequest = super::Input;
+    pub type RequestBody = super::Input;
 
-    pub type CreateResponse = UserInfo;
+    pub type ResponseData = UserInfo;
 
     pub async fn handler(
         State(container): State<Arc<Container>>,
-        ApiJson(request): ApiJson<CreateRequest>,
-    ) -> ApiResult<CreateResponse> {
+        ApiJson(request): ApiJson<RequestBody>,
+    ) -> ApiResult<ResponseData> {
         let mut command: super::usecase::Command = request.into();
         command.role_codes = vec!["user".to_owned()];
         let user =
@@ -152,7 +152,7 @@ mod tests {
     use espr::validate::Validate as _;
 
     use super::Input;
-    use super::endpoint::CreateRequest;
+    use super::endpoint::RequestBody;
     use super::usecase::{Command, execute};
     use crate::app::auth::entity::{Provider, UserStatus};
     use crate::app::auth::repository::identity;
@@ -185,7 +185,7 @@ mod tests {
 
     #[test]
     fn local_user_request_defaults_to_registered_status() {
-        let request: CreateRequest = serde_json::from_str(
+        let request: RequestBody = serde_json::from_str(
             r#"{"nickname":"user","email":"user@example.com","password":"secret"}"#,
         )
         .unwrap();

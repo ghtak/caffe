@@ -12,13 +12,13 @@ pub mod endpoint {
     use crate::app::{Container, DatabaseExt as _};
     use crate::{Code, Error};
 
-    pub type UserRoleResponse = Role;
+    pub type ResponseData = Vec<Role>;
 
     pub async fn handler(
         State(container): State<Arc<Container>>,
         claims: UserClaims,
         ApiPath(user_id): ApiPath<i64>,
-    ) -> ApiResult<Vec<UserRoleResponse>> {
+    ) -> ApiResult<ResponseData> {
         claims.require_permission("rbac.read", crate::here!())?;
         let mut connection = container.db.acquire_conn(crate::here!()).await?;
         let mut handle = connection.handle();

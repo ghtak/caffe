@@ -9,12 +9,12 @@ pub mod endpoint {
     use crate::app::rbac::repository::permission;
     use crate::app::{Container, DatabaseExt as _};
 
-    pub type PermissionResponse = Permission;
+    pub type ResponseData = Vec<Permission>;
 
     pub async fn handler(
         State(container): State<Arc<Container>>,
         claims: UserClaims,
-    ) -> ApiResult<Vec<PermissionResponse>> {
+    ) -> ApiResult<ResponseData> {
         claims.require_permission("rbac.read", crate::here!())?;
         // 단순 목록 조회는 별도 유스케이스 없이 저장소를 호출한다.
         let mut connection = container.db.acquire_conn(crate::here!()).await?;

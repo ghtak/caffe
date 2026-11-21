@@ -13,19 +13,19 @@ pub mod endpoint {
     use crate::app::{Container, DatabaseExt as _};
 
     #[derive(Debug, Deserialize, Validate)]
-    pub struct CreateRequest {
+    pub struct RequestBody {
         pub code: String,
         pub name: String,
         pub description: String,
     }
 
-    pub type CreateResponse = Role;
+    pub type ResponseData = Role;
 
     pub async fn handler(
         State(container): State<Arc<Container>>,
         claims: UserClaims,
-        ApiJson(request): ApiJson<CreateRequest>,
-    ) -> ApiResult<CreateResponse> {
+        ApiJson(request): ApiJson<RequestBody>,
+    ) -> ApiResult<ResponseData> {
         claims.require_permission("rbac.role.manage", crate::here!())?;
         let mut connection = container.db.acquire_conn(crate::here!()).await?;
         let value = NewRole {

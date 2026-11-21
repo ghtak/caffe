@@ -8,12 +8,12 @@ pub mod endpoint {
     use crate::app::http::response::ApiResult;
 
     #[derive(serde::Deserialize)]
-    pub struct LoginRequest {
+    pub struct RequestBody {
         pub email: String,
         pub password: String,
     }
 
-    impl espr::validate::Validate for LoginRequest {
+    impl espr::validate::Validate for RequestBody {
         type Error = crate::Error;
 
         fn validate(&self) -> crate::Result<()> {
@@ -29,7 +29,7 @@ pub mod endpoint {
     }
 
     #[derive(serde::Serialize)]
-    pub struct LoginResponse {
+    pub struct ResponseData {
         pub access_token: String,
         pub refresh_token: String,
         pub user: crate::app::auth::entity::UserInfo,
@@ -37,8 +37,8 @@ pub mod endpoint {
 
     pub async fn handler(
         State(container): State<Arc<Container>>,
-        ApiJson(request): ApiJson<LoginRequest>,
-    ) -> ApiResult<LoginResponse> {
+        ApiJson(request): ApiJson<RequestBody>,
+    ) -> ApiResult<ResponseData> {
         let tokens = super::usecase::execute(
             &container.db,
             &container.password_hash_service,
@@ -51,7 +51,7 @@ pub mod endpoint {
             },
         )
         .await?;
-        Ok(LoginResponse {
+        Ok(ResponseData {
             access_token: tokens.access_token,
             refresh_token: tokens.refresh_token,
             user: tokens.user,

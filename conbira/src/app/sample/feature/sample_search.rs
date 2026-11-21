@@ -11,7 +11,7 @@ pub mod endpoint {
     use crate::app::sample::entity::Sample;
 
     #[derive(Debug, Deserialize, Validate)]
-    pub struct SearchRequest {
+    pub struct RequestQuery {
         /// 이름 부분 검색. 생략하면 전체 조회.
         pub name: Option<String>,
         /// 1부터 시작하는 페이지 번호. 생략하면 1.
@@ -21,7 +21,7 @@ pub mod endpoint {
     }
 
     #[derive(Debug, Serialize)]
-    pub struct SearchResponse {
+    pub struct ResponseData {
         pub items: Vec<Sample>,
         pub page: u32,
         pub page_size: u32,
@@ -30,8 +30,8 @@ pub mod endpoint {
 
     pub async fn handler(
         State(container): State<Arc<Container>>,
-        ApiQuery(request): ApiQuery<SearchRequest>,
-    ) -> ApiResult<SearchResponse> {
+        ApiQuery(request): ApiQuery<RequestQuery>,
+    ) -> ApiResult<ResponseData> {
         let page = request.page.unwrap_or(1);
         let page_size = request.page_size.unwrap_or(20);
         let result = super::usecase::execute(
@@ -43,7 +43,7 @@ pub mod endpoint {
             },
         )
         .await?;
-        Ok(SearchResponse {
+        Ok(ResponseData {
             items: result.items,
             page,
             page_size,

@@ -8,12 +8,12 @@ pub mod endpoint {
     use crate::app::http::response::ApiResult;
     use crate::app::sample::entity::Sample;
 
-    pub type ReadResponse = Sample;
+    pub type ResponseData = Sample;
 
     pub async fn handler(
         State(container): State<Arc<Container>>,
         ApiPath(id): ApiPath<i64>,
-    ) -> ApiResult<ReadResponse> {
+    ) -> ApiResult<ResponseData> {
         Ok(super::usecase::execute(&container.db, id).await?.into())
     }
 }

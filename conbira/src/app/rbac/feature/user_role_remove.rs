@@ -2,6 +2,7 @@ pub mod endpoint {
     use std::sync::Arc;
 
     use axum::extract::State;
+    use serde::Deserialize;
 
     use crate::app::auth::claims::UserClaims;
     use crate::app::http::extract::ApiPath;
@@ -10,10 +11,16 @@ pub mod endpoint {
     use crate::app::{Container, DatabaseExt as _};
     use crate::{Code, Error};
 
+    #[derive(Deserialize)]
+    pub struct RequestPath {
+        user_id: i64,
+        role_id: i64,
+    }
+
     pub async fn handler(
         State(container): State<Arc<Container>>,
         claims: UserClaims,
-        ApiPath((user_id, role_id)): ApiPath<(i64, i64)>,
+        ApiPath(RequestPath { user_id, role_id }): ApiPath<RequestPath>,
     ) -> ApiResult<()> {
         claims.require_permission("rbac.user_role.manage", crate::here!())?;
         let mut connection = container.db.acquire_conn(crate::here!()).await?;

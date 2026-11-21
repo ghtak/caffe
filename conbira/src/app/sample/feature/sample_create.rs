@@ -11,21 +11,19 @@ pub mod endpoint {
     use crate::app::sample::entity::Sample;
 
     #[derive(Debug, Deserialize, Validate)]
-    pub struct CreateRequest {
+    pub struct RequestBody {
         pub name: String,
     }
 
-    pub type CreateResponse = Sample;
+    pub type ResponseData = Sample;
 
     pub async fn handler(
         State(container): State<Arc<Container>>,
-        ApiJson(request): ApiJson<CreateRequest>,
-    ) -> ApiResult<CreateResponse> {
-        let sample = super::usecase::execute(
-            &container.db,
-            super::usecase::Command { name: request.name },
-        )
-        .await?;
+        ApiJson(body): ApiJson<RequestBody>,
+    ) -> ApiResult<ResponseData> {
+        let sample =
+            super::usecase::execute(&container.db, super::usecase::Command { name: body.name })
+                .await?;
         Ok(sample.into())
     }
 }
