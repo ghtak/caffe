@@ -1,0 +1,16 @@
+---
+description: 작업 유형별 사용 모델 매핑 정책
+alwaysApply: false
+---
+
+# 모델 매핑 기준
+
+작업 유형별 Codex 실행 설정. 모델을 갱신할 때 아래 JSON 블록의 `model`과 `reasoning_effort`를 수정.
+
+```json
+{
+  "general": { "model": "gpt-6.2-sol", "reasoning_effort": "medium" },
+  "commit": { "model": "gpt-6.1-terra", "reasoning_effort": "medium" },
+  "review": { "model": "gpt-6.1-terra", "reasoning_effort": "medium" }
+}
+```
