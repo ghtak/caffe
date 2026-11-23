@@ -1,0 +1,53 @@
+services:
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "valkey-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    configs:
+      - source: postgres_init
+        target: /docker-entrypoint-initdb.d/00-create-databases.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d conbira_dev" ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # oracle:
+  #   image: gvenzl/oracle-free:23-slim-faststart
+  #   ports:
+  #     - "31521:1521"
+  #   environment:
+  #     ORACLE_PASSWORD: conbira_dev
+  #     APP_USER: oracle
+  #     APP_USER_PASSWORD: oracle
+  #   healthcheck:
+  #     test: [ "CMD", "healthcheck.sh" ]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 12
+
+volumes:
+  postgres_data:
+
+configs:
+  postgres_init:
+    content: |
+      CREATE DATABASE conbira;
+      CREATE DATABASE conbira_dev;
+      CREATE DATABASE conbira_test;
+      CREATE DATABASE espr_test;

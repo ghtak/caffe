@@ -1,3 +1,5 @@
+set dotenv-load := true
+
 [windows]
 set shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 

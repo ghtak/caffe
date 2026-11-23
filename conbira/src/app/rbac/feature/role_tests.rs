@@ -12,8 +12,7 @@ async fn setup() -> anyhow::Result<(axum::Router, Arc<crate::app::Container>)> {
         Some(&dir.join("missing.env")),
     )?;
     config.database = crate::test_support::database_config(1);
-    config.cache.url =
-        std::env::var("TESTENV_CACHE_URL").unwrap_or_else(|_| "redis://192.168.1.20:36379".into());
+    config.cache.url = crate::test_support::cache_url();
     config.jwt.ed25519.key_path = dir.join("private.pem");
     config.jwt.ed25519.public_key_path = dir.join("public.pem");
     espr::jwt::ed25519::generate(&config.jwt.ed25519)?;
@@ -302,8 +301,7 @@ mod list_tests {
             Some(&dir.join("missing.env")),
         )?;
         config.database = crate::test_support::database_config(1);
-        config.cache.url = std::env::var("TESTENV_CACHE_URL")
-            .unwrap_or_else(|_| "redis://192.168.1.20:36379".into());
+        config.cache.url = crate::test_support::cache_url();
         config.jwt.ed25519.key_path = dir.join("private.pem");
         config.jwt.ed25519.public_key_path = dir.join("public.pem");
         espr::jwt::ed25519::generate(&config.jwt.ed25519)?;
