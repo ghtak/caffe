@@ -1,0 +1,76 @@
+import type { QueryClient } from '@tanstack/react-query'
+import { createRootRouteWithContext, createRoute, createRouter, Navigate, type RouterHistory } from '@tanstack/react-router'
+import { LoginPage } from '@/features/auth'
+import { HomePage } from '@/features/home'
+import { AdminCatalogPage, AdminHomePage, catalogOptions, type Catalog } from '@/features/rbac'
+import { AdminLayout } from '../layouts/AdminLayout'
+import { RootLayout } from '../layouts/RootLayout'
+import { useSession, type Session } from '../providers/SessionProvider'
+
+type RouterContext = { queryClient: QueryClient; session: Session }
+
+function LoginRoute() {
+  const { session, signIn } = useSession()
+  if (session.status === 'authenticated') return <Navigate to="/" replace />
+  if (session.status !== 'guest') return <main className="min-h-90" />
+  return <LoginPage onLogin={signIn} />
+}
+
+function AdminRoute() {
+  const { session } = useSession()
+  if (session.status === 'guest') return <Navigate to="/login" replace />
+  if (session.status !== 'authenticated') return <main className="min-h-90" />
+  if (!session.canManage) return <Navigate to="/" replace />
+  return <AdminLayout />
+}
+
+function AdminCatalogRoute({ catalog }: { catalog: Catalog }) {
+  const { session } = useSession()
+  if (session.status !== 'authenticated') return null
+  return <AdminCatalogPage catalog={catalog} token={session.token} />
+}
+
+function loadCatalog({ queryClient, session }: RouterContext, catalog: Catalog) {
+  if (session.status !== 'authenticated' || !session.canManage) return
+  // The page owns pending and error UI while the query is warmed.
+  void queryClient.ensureQueryData(catalogOptions(catalog, session.token)).catch(() => {})
+}
+
+const rootRoute = createRootRouteWithContext<RouterContext>()({ component: RootLayout })
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  component: HomePage,
+})
+const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginRoute })
+const adminRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin', component: AdminRoute })
+const adminIndexRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: '/',
+  component: AdminHomePage,
+})
+const rolesRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'roles',
+  loader: ({ context }) => loadCatalog(context, 'roles'),
+  component: () => <AdminCatalogRoute catalog="roles" />,
+})
+const permissionsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'permissions',
+  loader: ({ context }) => loadCatalog(context, 'permissions'),
+  component: () => <AdminCatalogRoute catalog="permissions" />,
+})
+const routeTree = rootRoute.addChildren([
+  indexRoute, loginRoute, adminRoute.addChildren([adminIndexRoute, rolesRoute, permissionsRoute]),
+])
+
+export function createAppRouter(queryClient: QueryClient, history?: RouterHistory) {
+  return createRouter({ routeTree, history, context: { queryClient, session: { status: 'guest' } } })
+}
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: ReturnType<typeof createAppRouter>
+  }
+}

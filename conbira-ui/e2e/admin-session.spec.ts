@@ -1,0 +1,113 @@
+import { expect, test } from '@playwright/test'
+import { http, HttpResponse } from 'msw'
+import { server } from '../test/msw/server'
+
+test.beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
+test.beforeEach(async ({ page }) => {
+  // 브라우저의 API 요청을 Node의 MSW 핸들러에 전달한다.
+  await page.route('**/api/**', async (route) => {
+    const request = route.request()
+    const response = await fetch(request.url(), {
+      method: request.method(),
+      headers: request.headers(),
+      body: request.postData() ?? undefined,
+    })
+    await route.fulfill({
+      status: response.status,
+      headers: Object.fromEntries(response.headers),
+      body: await response.text(),
+    })
+  })
+})
+test.afterEach(() => server.resetHandlers())
+test.afterAll(() => server.close())
+
+test.describe('contract', () => {
+  test('관리자 세션은 새로고침 후 유지되고 로그아웃하면 보호된 화면 접근이 차단된다', async ({ page }) => {
+    const email = 'admin@example.test'
+    const password = 'example-password'
+    const token = 'admin-access-token'
+    server.use(
+      http.post('*/api/auth/login/local', () =>
+        HttpResponse.json({ code: 'OK', data: { access_token: token } })),
+      http.get('*/api/auth/me', ({ request }) => {
+        if (request.headers.get('authorization') !== `Bearer ${token}`) {
+          return HttpResponse.json({ code: 'UNAUTHORIZED' }, { status: 401 })
+        }
+        return HttpResponse.json({
+          code: 'OK',
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['admin'], permissions: ['rbac.read'] } },
+        })
+      }),
+      http.get('*/api/rbac/roles', () => HttpResponse.json({ code: 'OK', data: [] })),
+    )
+    await page.goto('/login')
+    await page.getByLabel('이메일').fill(email)
+    await page.getByLabel('비밀번호').fill(password)
+    await page.getByRole('button', { name: '로그인' }).click()
+    await page.getByRole('link', { name: '관리', exact: true }).click()
+    await page.getByRole('navigation', { name: '관리 메뉴' }).getByRole('link', { name: '역할 관리' }).click()
+    await expect(page).toHaveURL('/admin/roles')
+    await page.reload()
+
+    // 새로고침 후 브라우저에 저장된 세션으로 보호된 주소를 다시 연다.
+    await expect(page.getByRole('heading', { name: '역할 관리' })).toBeVisible()
+    await expect(page).toHaveURL('/admin/roles')
+
+    await page.getByRole('button', { name: '로그아웃' }).click()
+
+    // 보호된 하위 화면에서 로그아웃해도 홈으로 돌아간다.
+    await expect(page).toHaveURL('/')
+    await expect(page.getByRole('heading', { name: '홈' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '로그인' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '관리', exact: true })).toHaveCount(0)
+
+    await page.goto('/admin/roles')
+
+    // 로그아웃한 브라우저에서 보호된 주소를 열면 로그인 화면으로 이동한다.
+    await expect(page).toHaveURL('/login')
+    await expect(page.getByRole('heading', { name: '로그인' })).toBeVisible()
+  })
+})
+
+test.describe('regression', () => {
+  test('세션 저장소가 차단돼도 홈을 열고 현재 페이지에서 로그인·로그아웃할 수 있다', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'sessionStorage', {
+        get() { throw new DOMException('Storage access denied', 'SecurityError') },
+      })
+    })
+    server.use(
+      http.post('*/api/auth/login/local', () => HttpResponse.json({ data: { access_token: 'member-token' } })),
+      http.get('*/api/auth/me', () => HttpResponse.json({
+        data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
+      })),
+    )
+
+    await page.goto('/')
+    // 저장소 읽기가 실패해도 공개 홈과 로그인 메뉴를 표시한다.
+    await expect(page.getByRole('heading', { name: '홈' })).toBeVisible()
+    await page.getByRole('link', { name: '로그인' }).click()
+    await page.getByLabel('이메일').fill('member@example.test')
+    await page.getByLabel('비밀번호').fill('example-password')
+    await page.getByRole('button', { name: '로그인' }).click()
+
+    // 토큰을 저장할 수 없어도 현재 페이지에서 로그인 상태로 전환한다.
+    await expect(page).toHaveURL('/')
+    await page.getByRole('button', { name: '로그아웃' }).click()
+
+    // 토큰을 삭제할 수 없어도 현재 세션을 종료한다.
+    await expect(page.getByRole('link', { name: '로그인' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '로그아웃' })).toHaveCount(0)
+
+    await page.getByRole('link', { name: '로그인' }).click()
+    await page.getByLabel('이메일').fill('member@example.test')
+    await page.getByLabel('비밀번호').fill('example-password')
+    await page.getByRole('button', { name: '로그인' }).click()
+    await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible()
+    await page.reload()
+
+    // 저장되지 않은 세션은 새로고침 시 복원되지 않는다.
+    await expect(page.getByRole('link', { name: '로그인' })).toBeVisible()
+  })
+})

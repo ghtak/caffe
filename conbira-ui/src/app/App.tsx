@@ -1,30 +1,26 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from '@tanstack/react-router'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { RouterProvider } from '@tanstack/react-router'
+import { SessionProvider, useSession } from './providers/SessionProvider'
+import { createAppRouter } from './routes/router'
 
 const queryClient = new QueryClient()
+const router = createAppRouter(queryClient)
 
-const rootRoute = createRootRoute({ component: () => <Outlet /> })
-const indexRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/',
-  component: () => (
-    <main className="mx-auto max-w-4xl p-8">
-      <h1 className="text-3xl font-bold">Conbira</h1>
-    </main>
-  ),
-})
-const router = createRouter({ routeTree: rootRoute.addChildren([indexRoute]) })
-
-declare module '@tanstack/react-router' {
-  interface Register {
-    router: typeof router
-  }
+function AppRoutes({ appRouter }: { appRouter: typeof router }) {
+  const { session } = useSession()
+  const appQueryClient = useQueryClient()
+  return <RouterProvider router={appRouter} context={{ queryClient: appQueryClient, session }} />
 }
 
-export function App() {
+export function App({
+  appRouter = router,
+  appQueryClient = queryClient,
+}: { appRouter?: typeof router; appQueryClient?: QueryClient } = {}) {
   return (
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+    <QueryClientProvider client={appQueryClient}>
+      <SessionProvider>
+        <AppRoutes appRouter={appRouter} />
+      </SessionProvider>
     </QueryClientProvider>
   )
 }
