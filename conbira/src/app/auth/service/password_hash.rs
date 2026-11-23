@@ -87,59 +87,85 @@ mod tests {
         )
     }
 
-    #[test]
-    fn rejects_invalid_capacity_and_timeout() {
-        for (capacity, timeout) in [(0, 1), (1, 0), (tokio::sync::Semaphore::MAX_PERMITS + 1, 1)] {
-            assert!(
-                matches!(service(capacity, timeout), Err(error) if error.code == crate::Code::InvalidConfiguration)
+    mod contract {
+        use super::*;
+
+        #[test]
+        fn rejects_zero_capacity_or_timeout() {
+            for (capacity, timeout) in [(0, 1), (1, 0)] {
+                // 용량과 대기 제한은 양수여야 한다.
+                assert!(
+                    matches!(service(capacity, timeout), Err(error) if error.code == crate::Code::InvalidConfiguration)
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn generated_hash_verifies_only_the_original_password() -> anyhow::Result<()> {
+            let service = service(1, 1)?;
+            let hash = service.hash("correct".into()).await?;
+            // 생성된 해시는 올바른 비밀번호만 검증한다.
+            assert!(service.verify("correct".into(), hash.clone()).await?);
+            assert!(!service.verify("wrong".into(), hash).await?);
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn cancelled_caller_keeps_capacity_until_blocking_work_finishes() -> anyhow::Result<()>
+        {
+            let service = Arc::new(service(1, 1)?);
+            let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let running = {
+                let service = Arc::clone(&service);
+                tokio::spawn(async move {
+                    service
+                        .run(move || {
+                            let _ = started_tx.send(());
+                            let _ = release_rx.recv();
+                            Ok(())
+                        })
+                        .await
+                })
+            };
+            started_rx.await?;
+            running.abort();
+            let (hash, verify) = tokio::join!(
+                service.hash("password".into()),
+                service.verify("password".into(), "invalid".into())
             );
+            // 호출자가 취소되어도 실행 중인 작업이 허용량을 보유해 두 작업 모두
+            // 대기 초과된다.
+            assert!(matches!(hash, Err(error) if error.code == crate::Code::Busy));
+            assert!(matches!(verify, Err(error) if error.code == crate::Code::Busy));
+            release_tx.send(())?;
+            // blocking 작업이 끝나면 다시 해싱을 수행할 수 있다.
+            let hash = service.hash("password".into()).await?;
+            assert!(service.verify("password".into(), hash).await?);
+            Ok(())
         }
     }
 
-    #[tokio::test]
-    async fn hashes_and_verifies_password_and_reports_invalid_hash() -> anyhow::Result<()> {
-        let service = service(1, 1)?;
-        let hash = service.hash("correct".into()).await?;
-        // 생성된 해시는 올바른 비밀번호만 검증한다.
-        assert!(service.verify("correct".into(), hash.clone()).await?);
-        assert!(!service.verify("wrong".into(), hash).await?);
-        assert!(
-            matches!(service.verify("correct".into(), "invalid".into()).await, Err(error) if error.code == crate::Code::Internal)
-        );
-        Ok(())
-    }
+    mod edge {
+        use super::*;
 
-    #[tokio::test]
-    async fn cancelled_caller_keeps_capacity_until_blocking_work_finishes() -> anyhow::Result<()> {
-        let service = Arc::new(service(1, 1)?);
-        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
-        let (release_tx, release_rx) = std::sync::mpsc::channel();
-        let running = {
-            let service = Arc::clone(&service);
-            tokio::spawn(async move {
-                service
-                    .run(move || {
-                        let _ = started_tx.send(());
-                        let _ = release_rx.recv();
-                        Ok(())
-                    })
-                    .await
-            })
-        };
-        started_rx.await?;
-        running.abort();
-        let (hash, verify) = tokio::join!(
-            service.hash("password".into()),
-            service.verify("password".into(), "invalid".into())
-        );
-        // 호출자가 취소되어도 실행 중인 작업이 허용량을 보유해 두 작업 모두
-        // 대기 초과된다.
-        assert!(matches!(hash, Err(error) if error.code == crate::Code::Busy));
-        assert!(matches!(verify, Err(error) if error.code == crate::Code::Busy));
-        release_tx.send(())?;
-        // blocking 작업이 끝나면 다시 해싱을 수행할 수 있다.
-        let hash = service.hash("password".into()).await?;
-        assert!(service.verify("password".into(), hash).await?);
-        Ok(())
+        #[test]
+        fn unrepresentable_capacity_is_rejected() {
+            let result = service(tokio::sync::Semaphore::MAX_PERMITS + 1, 1);
+            // 세마포어의 표현 한계를 넘는 용량은 설정 오류를 반환한다.
+            assert!(
+                matches!(result, Err(error) if error.code == crate::Code::InvalidConfiguration)
+            );
+        }
+
+        #[tokio::test]
+        async fn verify_reports_malformed_hash_as_internal_error() -> anyhow::Result<()> {
+            let service = service(1, 1)?;
+            // 저장된 해시가 잘못되면 내부 오류를 반환한다.
+            assert!(
+                matches!(service.verify("correct".into(), "invalid".into()).await, Err(error) if error.code == crate::Code::Internal)
+            );
+            Ok(())
+        }
     }
 }

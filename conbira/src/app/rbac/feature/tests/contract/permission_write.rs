@@ -5,20 +5,7 @@ use axum::http::{Request, StatusCode, header};
 use tower::ServiceExt as _;
 
 async fn setup() -> anyhow::Result<(axum::Router, Arc<crate::app::Container>)> {
-    let dir =
-        std::env::temp_dir().join(format!("conbira-permission-write-{}", uuid::Uuid::new_v4()));
-    std::fs::create_dir(&dir)?;
-    let mut config = crate::config::Config::load(
-        std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/config.toml")),
-        Some(&dir.join("missing.env")),
-    )?;
-    config.database = crate::test_support::database_config(1);
-    config.cache.url = crate::test_support::cache_url();
-    config.jwt.ed25519.key_path = dir.join("private.pem");
-    config.jwt.ed25519.public_key_path = dir.join("public.pem");
-    espr::jwt::ed25519::generate(&config.jwt.ed25519)?;
-    let container = Arc::new(crate::app::Container::new(&config).await?);
-    std::fs::remove_dir_all(dir)?;
+    let container = crate::test_support::container().await?;
     let router = crate::app::http::router(Arc::clone(&container))?;
     Ok((router, container))
 }

@@ -11,8 +11,10 @@ pub mod user_role_list;
 pub mod user_role_remove;
 
 #[cfg(test)]
-mod permission_write_tests;
-#[cfg(test)]
-mod role_tests;
-#[cfg(test)]
-mod user_role_tests;
+mod tests {
+    mod contract {
+        mod permission_write;
+        mod role;
+        mod user_role;
+    }
+}

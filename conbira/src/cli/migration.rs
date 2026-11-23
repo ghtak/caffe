@@ -187,55 +187,57 @@ pub(crate) async fn run(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    mod contract {
+        use super::super::*;
 
-    struct Code(Order);
+        struct Code(Order);
 
-    impl Migration for Code {
-        fn order(&self) -> Order { self.0 }
-        fn run<'a>(
-            &'a self,
-            _: &'a Database<Postgres>,
-        ) -> Pin<Box<dyn Future<Output = conbira::Result<()>> + Send + 'a>> {
-            Box::pin(async { Ok(()) })
+        impl Migration for Code {
+            fn order(&self) -> Order { self.0 }
+            fn run<'a>(
+                &'a self,
+                _: &'a Database<Postgres>,
+            ) -> Pin<Box<dyn Future<Output = conbira::Result<()>> + Send + 'a>> {
+                Box::pin(async { Ok(()) })
+            }
         }
-    }
 
-    #[test]
-    fn combines_directories_and_code_and_rejects_duplicate_order() {
-        let root = std::env::temp_dir().join(format!(
-            "conbira-migration-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let first = root.join("first");
-        let second = root.join("second");
-        std::fs::create_dir_all(&first).unwrap();
-        std::fs::create_dir_all(&second).unwrap();
-        std::fs::write(first.join("0003_last.sql"), "").unwrap();
-        std::fs::write(second.join("0001_first.sql"), "").unwrap();
-        std::fs::write(second.join("notes.txt"), "").unwrap();
-        let dirs = [&first, &second];
-        let tasks = collect(&dirs, vec![Box::new(Code(2))]).unwrap();
-        assert_eq!(
-            tasks.iter().map(MigrationTask::order).collect::<Vec<_>>(),
-            vec![1, 2, 3]
-        );
-        assert!(
-            collect(&dirs, vec![Box::new(Code(1))])
-                .err()
-                .unwrap()
-                .to_string()
-                .contains("Duplicate migration order")
-        );
-        std::fs::write(first.join("invalid.sql"), "").unwrap();
-        assert!(
-            collect(&dirs, vec![])
-                .err()
-                .unwrap()
-                .to_string()
-                .contains("Invalid migration filename")
-        );
-        std::fs::remove_dir_all(root).unwrap();
+        #[test]
+        fn combines_directories_and_code_and_rejects_duplicate_order() {
+            let root = std::env::temp_dir().join(format!(
+                "conbira-migration-{}-{:?}",
+                std::process::id(),
+                std::thread::current().id()
+            ));
+            let first = root.join("first");
+            let second = root.join("second");
+            std::fs::create_dir_all(&first).unwrap();
+            std::fs::create_dir_all(&second).unwrap();
+            std::fs::write(first.join("0003_last.sql"), "").unwrap();
+            std::fs::write(second.join("0001_first.sql"), "").unwrap();
+            std::fs::write(second.join("notes.txt"), "").unwrap();
+            let dirs = [&first, &second];
+            let tasks = collect(&dirs, vec![Box::new(Code(2))]).unwrap();
+            assert_eq!(
+                tasks.iter().map(MigrationTask::order).collect::<Vec<_>>(),
+                vec![1, 2, 3]
+            );
+            assert!(
+                collect(&dirs, vec![Box::new(Code(1))])
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("Duplicate migration order")
+            );
+            std::fs::write(first.join("invalid.sql"), "").unwrap();
+            assert!(
+                collect(&dirs, vec![])
+                    .err()
+                    .unwrap()
+                    .to_string()
+                    .contains("Invalid migration filename")
+            );
+            std::fs::remove_dir_all(root).unwrap();
+        }
     }
 }

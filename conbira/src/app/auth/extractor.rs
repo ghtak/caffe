@@ -101,159 +101,101 @@ fn extract_claims(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    mod contract {
+        use std::sync::Arc;
 
-    use axum::body::{Body, to_bytes};
-    use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, header};
-    use tower::ServiceExt as _;
+        use axum::body::{Body, to_bytes};
+        use axum::http::{HeaderMap, HeaderValue, Request, StatusCode, header};
+        use tower::ServiceExt as _;
 
-    use super::extract_claims;
-    use crate::app::auth::claims::{AuthClaims, UserClaims};
+        use super::super::extract_claims;
+        use crate::app::auth::claims::{AuthClaims, UserClaims};
 
-    #[test]
-    fn optional_claims_can_be_used_as_a_handler_extractor() {
-        async fn handler(_: Option<AuthClaims>) {}
-        // Axum 핸들러에서 선택적 인증 추출기로 사용 가능하다.
-        let _: axum::Router<Arc<crate::app::Container>> =
-            axum::Router::new().route("/", axum::routing::get(handler));
-    }
-
-    #[test]
-    fn optional_claims_only_accepts_valid_bearer_tokens() -> anyhow::Result<()> {
-        let dir = std::env::temp_dir().join(format!("conbira-extractor-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&dir)?;
-        let keys = espr::jwt::ed25519::Config {
-            key_path: dir.join("private.pem"),
-            public_key_path: dir.join("public.pem"),
-        };
-        espr::jwt::ed25519::generate(&keys)?;
-        let service = espr::jwt::TokenService::new(&espr::jwt::Config {
-            issuer: "test".into(),
-            audience: "test".into(),
-            access_token_ttl_seconds: 900,
-            ed25519: keys,
-        })?;
-        std::fs::remove_dir_all(dir)?;
-        let token = service.issue("user-1", Default::default())?.token;
-        let mut headers = HeaderMap::new();
-        // 헤더가 없는 요청은 익명 요청으로 처리한다.
-        assert!(extract_claims(&headers, &service).unwrap().is_none());
-        headers.insert(header::AUTHORIZATION, format!("bearer {token}").parse()?);
-        // 유효한 토큰만 검증된 사용자 클레임을 반환한다.
-        assert_eq!(
-            extract_claims(&headers, &service).unwrap().unwrap().sub,
-            "user-1"
-        );
-        for value in [
-            "Basic abc",
-            "Bearer",
-            "Bearer ",
-            "Bearer invalid",
-            "Bearer a b",
-        ] {
-            headers.insert(header::AUTHORIZATION, HeaderValue::from_str(value)?);
-            assert!(extract_claims(&headers, &service).is_err(), "{value}");
+        #[test]
+        fn optional_claims_can_be_used_as_a_handler_extractor() {
+            async fn handler(_: Option<AuthClaims>) {}
+            // Axum 핸들러에서 선택적 인증 추출기로 사용 가능하다.
+            let _: axum::Router<Arc<crate::app::Container>> =
+                axum::Router::new().route("/", axum::routing::get(handler));
         }
-        headers.insert(header::AUTHORIZATION, format!("Bearer {token}").parse()?);
-        headers.append(
-            header::AUTHORIZATION,
-            HeaderValue::from_static("Bearer invalid"),
-        );
-        // 중복 인증 헤더는 하나를 임의로 선택하지 않고 거부한다.
-        assert!(extract_claims(&headers, &service).is_err());
-        Ok(())
-    }
-    async fn user_claims_router() -> anyhow::Result<(axum::Router, Arc<crate::app::Container>)> {
-        let dir =
-            std::env::temp_dir().join(format!("conbira-user-claims-{}", uuid::Uuid::new_v4()));
-        std::fs::create_dir(&dir)?;
-        let mut config = crate::config::Config::load(
-            std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/config.toml")),
-            Some(&dir.join("missing.env")),
-        )?;
-        config.database = crate::test_support::database_config(1);
-        config.cache.url = crate::test_support::cache_url();
-        config.jwt.ed25519.key_path = dir.join("private.pem");
-        config.jwt.ed25519.public_key_path = dir.join("public.pem");
-        espr::jwt::ed25519::generate(&config.jwt.ed25519)?;
-        let container = Arc::new(crate::app::Container::new(&config).await?);
-        std::fs::remove_dir_all(dir)?;
 
-        async fn required(user: UserClaims) -> String { user.id.to_string() }
-        async fn optional(user: Option<UserClaims>) -> String {
-            user.map_or_else(|| "anonymous".into(), |user| user.id.to_string())
-        }
-        let router = axum::Router::new()
-            .route("/required", axum::routing::get(required))
-            .route("/optional", axum::routing::get(optional))
-            .with_state(Arc::clone(&container));
-        Ok((router, container))
-    }
-
-    #[tokio::test]
-    async fn user_claims_without_header_are_required_or_anonymous() -> anyhow::Result<()> {
-        let (router, _) = user_claims_router().await?;
-        let required = router
-            .clone()
-            .oneshot(Request::builder().uri("/required").body(Body::empty())?)
-            .await?;
-        // 필수 추출은 인증이 없으면 Bearer 챌린지와 401을 반환한다.
-        assert_eq!(required.status(), StatusCode::UNAUTHORIZED);
-        assert_eq!(required.headers()[header::WWW_AUTHENTICATE], "Bearer");
-
-        let optional = router
-            .oneshot(Request::builder().uri("/optional").body(Body::empty())?)
-            .await?;
-        // 선택 추출은 인증이 없으면 익명으로 처리한다.
-        assert_eq!(optional.status(), StatusCode::OK);
-        assert_eq!(
-            to_bytes(optional.into_body(), 4096).await?.as_ref(),
-            b"anonymous"
-        );
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn user_claims_extractors_accept_matching_user() -> anyhow::Result<()> {
-        let (router, container) = user_claims_router().await?;
-        let user = serde_json::json!({"id": 42, "status": "active"});
-        let token = container
-            .jwt_token_service
-            .issue("42", user.as_object().unwrap().clone())?
-            .token;
-        for path in ["/required", "/optional"] {
-            let response = router
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri(path)
-                        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                        .body(Body::empty())?,
-                )
-                .await?;
-            // 두 추출기 모두 검증된 사용자 ID를 전달한다.
-            assert_eq!(response.status(), StatusCode::OK, "{path}");
+        #[test]
+        fn optional_claims_only_accepts_valid_bearer_tokens() -> anyhow::Result<()> {
+            let service = crate::test_support::jwt_service("test", "test", 900)?;
+            let token = service.issue("user-1", Default::default())?.token;
+            let mut headers = HeaderMap::new();
+            // 헤더가 없는 요청은 익명 요청으로 처리한다.
+            assert!(extract_claims(&headers, &service).unwrap().is_none());
+            headers.insert(header::AUTHORIZATION, format!("bearer {token}").parse()?);
+            // 유효한 토큰만 검증된 사용자 클레임을 반환한다.
             assert_eq!(
-                to_bytes(response.into_body(), 4096).await?.as_ref(),
-                b"42",
-                "{path}"
+                extract_claims(&headers, &service).unwrap().unwrap().sub,
+                "user-1"
             );
+            for value in [
+                "Basic abc",
+                "Bearer",
+                "Bearer ",
+                "Bearer invalid",
+                "Bearer a b",
+            ] {
+                headers.insert(header::AUTHORIZATION, HeaderValue::from_str(value)?);
+                assert!(extract_claims(&headers, &service).is_err(), "{value}");
+            }
+            headers.insert(header::AUTHORIZATION, format!("Bearer {token}").parse()?);
+            headers.append(
+                header::AUTHORIZATION,
+                HeaderValue::from_static("Bearer invalid"),
+            );
+            // 중복 인증 헤더는 하나를 임의로 선택하지 않고 거부한다.
+            assert!(extract_claims(&headers, &service).is_err());
+            Ok(())
         }
-        Ok(())
-    }
+        async fn user_claims_router() -> anyhow::Result<(axum::Router, Arc<crate::app::Container>)>
+        {
+            let container = crate::test_support::container().await?;
 
-    #[tokio::test]
-    async fn user_claims_extractors_reject_invalid_tokens_and_user_claims() -> anyhow::Result<()> {
-        let (router, container) = user_claims_router().await?;
-        for (subject, user) in [
-            ("43", serde_json::json!({"id": 42, "status": "active"})),
-            ("42", serde_json::json!({})),
-            ("42", serde_json::json!({"id": 42, "status": "unknown"})),
-            ("42", serde_json::json!({"id": "42", "status": "active"})),
-        ] {
+            async fn required(user: UserClaims) -> String { user.id.to_string() }
+            async fn optional(user: Option<UserClaims>) -> String {
+                user.map_or_else(|| "anonymous".into(), |user| user.id.to_string())
+            }
+            let router = axum::Router::new()
+                .route("/required", axum::routing::get(required))
+                .route("/optional", axum::routing::get(optional))
+                .with_state(Arc::clone(&container));
+            Ok((router, container))
+        }
+
+        #[tokio::test]
+        async fn user_claims_without_header_are_required_or_anonymous() -> anyhow::Result<()> {
+            let (router, _) = user_claims_router().await?;
+            let required = router
+                .clone()
+                .oneshot(Request::builder().uri("/required").body(Body::empty())?)
+                .await?;
+            // 필수 추출은 인증이 없으면 Bearer 챌린지와 401을 반환한다.
+            assert_eq!(required.status(), StatusCode::UNAUTHORIZED);
+            assert_eq!(required.headers()[header::WWW_AUTHENTICATE], "Bearer");
+
+            let optional = router
+                .oneshot(Request::builder().uri("/optional").body(Body::empty())?)
+                .await?;
+            // 선택 추출은 인증이 없으면 익명으로 처리한다.
+            assert_eq!(optional.status(), StatusCode::OK);
+            assert_eq!(
+                to_bytes(optional.into_body(), 4096).await?.as_ref(),
+                b"anonymous"
+            );
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn user_claims_extractors_accept_matching_user() -> anyhow::Result<()> {
+            let (router, container) = user_claims_router().await?;
+            let user = serde_json::json!({"id": 42, "status": "active"});
             let token = container
                 .jwt_token_service
-                .issue(subject, user.as_object().unwrap().clone())?
+                .issue("42", user.as_object().unwrap().clone())?
                 .token;
             for path in ["/required", "/optional"] {
                 let response = router
@@ -265,38 +207,74 @@ mod tests {
                             .body(Body::empty())?,
                     )
                     .await?;
-                // 불일치하거나 잘못된 사용자 클레임은 Bearer 챌린지와 401을
-                // 반환한다.
+                // 두 추출기 모두 검증된 사용자 ID를 전달한다.
+                assert_eq!(response.status(), StatusCode::OK, "{path}");
                 assert_eq!(
-                    response.status(),
-                    StatusCode::UNAUTHORIZED,
-                    "{path}: {user}"
+                    to_bytes(response.into_body(), 4096).await?.as_ref(),
+                    b"42",
+                    "{path}"
                 );
+            }
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn user_claims_extractors_reject_invalid_tokens_and_user_claims() -> anyhow::Result<()>
+        {
+            let (router, container) = user_claims_router().await?;
+            for (subject, user) in [
+                ("43", serde_json::json!({"id": 42, "status": "active"})),
+                ("42", serde_json::json!({})),
+                ("42", serde_json::json!({"id": 42, "status": "unknown"})),
+                ("42", serde_json::json!({"id": "42", "status": "active"})),
+            ] {
+                let token = container
+                    .jwt_token_service
+                    .issue(subject, user.as_object().unwrap().clone())?
+                    .token;
+                for path in ["/required", "/optional"] {
+                    let response = router
+                        .clone()
+                        .oneshot(
+                            Request::builder()
+                                .uri(path)
+                                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                                .body(Body::empty())?,
+                        )
+                        .await?;
+                    // 불일치하거나 잘못된 사용자 클레임은 Bearer 챌린지와 401을
+                    // 반환한다.
+                    assert_eq!(
+                        response.status(),
+                        StatusCode::UNAUTHORIZED,
+                        "{path}: {user}"
+                    );
+                    assert_eq!(
+                        response.headers()[header::WWW_AUTHENTICATE],
+                        "Bearer",
+                        "{path}: {user}"
+                    );
+                }
+            }
+            for path in ["/required", "/optional"] {
+                let response = router
+                    .clone()
+                    .oneshot(
+                        Request::builder()
+                            .uri(path)
+                            .header(header::AUTHORIZATION, "Bearer invalid")
+                            .body(Body::empty())?,
+                    )
+                    .await?;
+                // 잘못된 토큰은 Bearer 챌린지와 401을 반환한다.
+                assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
                 assert_eq!(
                     response.headers()[header::WWW_AUTHENTICATE],
                     "Bearer",
-                    "{path}: {user}"
+                    "{path}"
                 );
             }
+            Ok(())
         }
-        for path in ["/required", "/optional"] {
-            let response = router
-                .clone()
-                .oneshot(
-                    Request::builder()
-                        .uri(path)
-                        .header(header::AUTHORIZATION, "Bearer invalid")
-                        .body(Body::empty())?,
-                )
-                .await?;
-            // 잘못된 토큰은 Bearer 챌린지와 401을 반환한다.
-            assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
-            assert_eq!(
-                response.headers()[header::WWW_AUTHENTICATE],
-                "Bearer",
-                "{path}"
-            );
-        }
-        Ok(())
     }
 }

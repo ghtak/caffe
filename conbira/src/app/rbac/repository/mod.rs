@@ -4,4 +4,6 @@ pub mod role_permission;
 pub mod user_role;
 
 #[cfg(test)]
-mod rbac_tests;
+mod tests {
+    mod contract;
+}

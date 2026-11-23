@@ -46,9 +46,10 @@ pub(crate) enum Command {
 mod tests {
     use super::*;
 
-    #[test]
-    fn local_user_command_requires_all_inputs() {
-        let args = [
+    mod contract {
+        use super::*;
+
+        const LOCAL_USER_ARGS_WITHOUT_PASSWORD: [&str; 6] = [
             "conbira-cli",
             "user-create-local",
             "--nickname",
@@ -56,22 +57,42 @@ mod tests {
             "--email",
             "user@example.com",
         ];
-        // 비밀번호가 빠진 명령은 파싱 단계에서 거부한다.
-        assert!(CliOptions::try_parse_from(args).is_err());
-        let options =
-            CliOptions::try_parse_from(args.into_iter().chain(["--password", "secret"])).unwrap();
-        assert!(
-            matches!(options.command, Some(Command::UserCreateLocal { nickname, email, password, role }) if nickname == "name" && email == "user@example.com" && password == "secret" && role == ["user"])
-        );
-        let options = CliOptions::try_parse_from(args.into_iter().chain([
-            "--password",
-            "secret",
-            "--role",
-            "user,admin",
-        ]))
-        .unwrap();
-        assert!(
-            matches!(options.command, Some(Command::UserCreateLocal { role, .. }) if role == ["user", "admin"])
-        );
+
+        #[test]
+        fn local_user_command_rejects_a_missing_password() {
+            let result = CliOptions::try_parse_from(LOCAL_USER_ARGS_WITHOUT_PASSWORD);
+            // 비밀번호가 빠진 명령은 파싱 단계에서 거부한다.
+            assert!(result.is_err());
+        }
+
+        #[test]
+        fn local_user_command_preserves_inputs_and_defaults_to_user_role() {
+            let options = CliOptions::try_parse_from(
+                LOCAL_USER_ARGS_WITHOUT_PASSWORD
+                    .into_iter()
+                    .chain(["--password", "secret"]),
+            )
+            .unwrap();
+            // 사용자 입력은 유지되고 역할을 생략하면 user를 사용한다.
+            assert!(
+                matches!(options.command, Some(Command::UserCreateLocal { nickname, email, password, role }) if nickname == "name" && email == "user@example.com" && password == "secret" && role == ["user"])
+            );
+        }
+
+        #[test]
+        fn local_user_command_accepts_comma_separated_roles() {
+            let options =
+                CliOptions::try_parse_from(LOCAL_USER_ARGS_WITHOUT_PASSWORD.into_iter().chain([
+                    "--password",
+                    "secret",
+                    "--role",
+                    "user,admin",
+                ]))
+                .unwrap();
+            // 쉼표로 구분한 두 역할을 순서대로 읽는다.
+            assert!(
+                matches!(options.command, Some(Command::UserCreateLocal { role, .. }) if role == ["user", "admin"])
+            );
+        }
     }
 }

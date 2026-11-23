@@ -1,10 +1,10 @@
-use super::{permission, role, role_permission, user_role};
+use super::super::{permission, role, role_permission, user_role};
 use crate::app::container::db::{Database, Handle};
 
 async fn setup(handle: &mut Handle<'_>) -> anyhow::Result<()> {
     for schema in [
-        include_str!("../../../../migrations/0010_user.sql"),
-        include_str!("../../../../migrations/0012_rbac.sql"),
+        include_str!("../../../../../migrations/0010_user.sql"),
+        include_str!("../../../../../migrations/0012_rbac.sql"),
     ] {
         let schema = schema.replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
         sqlx::raw_sql(sqlx::AssertSqlSafe(schema))

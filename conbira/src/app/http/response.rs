@@ -112,141 +112,152 @@ impl From<Error> for ApiResponse<()> {
 
 #[cfg(test)]
 mod tests {
-    use axum::Router;
-    use axum::body::{Body, to_bytes};
-    use axum::http::Request;
-    use axum::routing::get;
+    use axum::body::to_bytes;
     use serde_json::json;
-    use tower::ServiceExt;
 
     use super::*;
-
-    #[derive(Serialize)]
-    struct TestSample {
-        id: u32,
-    }
-
-    async fn typed_response() -> ApiResponse<TestSample> { TestSample { id: 123 }.into() }
-
-    async fn typed_result() -> ApiResult<TestSample> {
-        let sample: crate::Result<TestSample> = Ok(TestSample { id: 456 });
-        Ok(sample?.into())
-    }
-
-    async fn typed_error() -> ApiResult<TestSample> {
-        let sample: crate::Result<TestSample> = Err(Error::internal("공개 오류 메시지"));
-        Ok(sample?.into())
-    }
 
     async fn body(response: Response) -> serde_json::Value {
         let bytes = to_bytes(response.into_body(), 4096).await.unwrap();
         serde_json::from_slice(&bytes).unwrap()
     }
 
-    #[tokio::test]
-    async fn typed_responses_and_http_results_work_as_axum_handlers() {
-        let router = Router::new()
-            .route("/response", get(typed_response))
-            .route("/success", get(typed_result))
-            .route("/error", get(typed_error));
+    mod contract {
+        use axum::Router;
+        use axum::body::Body;
+        use axum::http::Request;
+        use axum::routing::get;
+        use tower::ServiceExt;
 
-        for (path, status, expected) in [
-            (
-                "/response",
-                StatusCode::OK,
-                json!({"code": "OK", "data": {"id": 123}}),
-            ),
-            (
-                "/success",
-                StatusCode::OK,
-                json!({"code": "OK", "data": {"id": 456}}),
-            ),
-            (
-                "/error",
-                StatusCode::INTERNAL_SERVER_ERROR,
-                json!({"code": "INTERNAL", "message": "공개 오류 메시지"}),
-            ),
-        ] {
-            let response = router
-                .clone()
-                .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
-                .await
-                .unwrap();
-            // 명시된 반환 타입이 Axum의 HTTP 응답으로 변환된다.
-            assert_eq!(response.status(), status);
-            assert_eq!(body(response).await, expected);
+        use super::*;
+
+        #[derive(Serialize)]
+        struct TestSample {
+            id: u32,
         }
-    }
 
-    #[tokio::test]
-    async fn success_responses_include_only_present_data_and_use_selected_status() {
-        let response = ApiResponse::from(json!({"id": "123"}))
-            .with_status(StatusCode::CREATED)
-            .into_response();
-        // 지정한 상태와 데이터가 응답에 포함된다.
-        assert_eq!(response.status(), StatusCode::CREATED);
-        assert_eq!(
-            body(response).await,
-            json!({"code": "OK", "data": {"id": "123"}})
-        );
+        async fn typed_response() -> ApiResponse<TestSample> { TestSample { id: 123 }.into() }
 
-        let response = ApiResponse::empty().into_response();
-        // 데이터 없는 성공은 code만 포함한다.
-        assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(body(response).await, json!({"code": "OK"}));
-    }
-
-    #[tokio::test]
-    async fn errors_include_their_message_without_location_or_cause() {
-        for (code, status, public_code) in [
-            (
-                Code::Internal,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INTERNAL",
-            ),
-            (
-                Code::InvalidConfiguration,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "INVALID_CONFIGURATION",
-            ),
-            (
-                Code::InvalidRequest,
-                StatusCode::BAD_REQUEST,
-                "INVALID_REQUEST",
-            ),
-            (Code::Unauthorized, StatusCode::UNAUTHORIZED, "UNAUTHORIZED"),
-            (Code::Forbidden, StatusCode::FORBIDDEN, "FORBIDDEN"),
-            (Code::Busy, StatusCode::SERVICE_UNAVAILABLE, "BUSY"),
-            (Code::NotFound, StatusCode::NOT_FOUND, "NOT_FOUND"),
-        ] {
-            let error = Error::new(code, "공개 오류 메시지")
-                .at("secret location")
-                .cause(anyhow::anyhow!("secret cause"));
-            let response = ApiResponse::<()>::from(error).into_response();
-            // 코드에 맞는 상태와 공개 메시지를 반환하고 위치와 원인은 제외한다.
-            assert_eq!(response.status(), status);
-            assert_eq!(
-                body(response).await,
-                json!({"code": public_code, "message": "공개 오류 메시지"})
-            );
+        async fn typed_result() -> ApiResult<TestSample> {
+            let sample: crate::Result<TestSample> = Ok(TestSample { id: 456 });
+            Ok(sample?.into())
         }
-    }
 
-    #[tokio::test]
-    async fn serialization_failure_returns_safe_internal_error() {
-        struct Broken;
-        impl Serialize for Broken {
-            fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
-                Err(serde::ser::Error::custom("secret serialization failure"))
+        async fn typed_error() -> ApiResult<TestSample> {
+            let sample: crate::Result<TestSample> = Err(Error::internal("공개 오류 메시지"));
+            Ok(sample?.into())
+        }
+
+        #[tokio::test]
+        async fn typed_responses_and_http_results_work_as_axum_handlers() {
+            let router = Router::new()
+                .route("/response", get(typed_response))
+                .route("/success", get(typed_result))
+                .route("/error", get(typed_error));
+
+            for (path, status, expected) in [
+                (
+                    "/response",
+                    StatusCode::OK,
+                    json!({"code": "OK", "data": {"id": 123}}),
+                ),
+                (
+                    "/success",
+                    StatusCode::OK,
+                    json!({"code": "OK", "data": {"id": 456}}),
+                ),
+                (
+                    "/error",
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    json!({"code": "INTERNAL", "message": "공개 오류 메시지"}),
+                ),
+            ] {
+                let response = router
+                    .clone()
+                    .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+                    .await
+                    .unwrap();
+                // 명시된 반환 타입이 Axum의 HTTP 응답으로 변환된다.
+                assert_eq!(response.status(), status);
+                assert_eq!(body(response).await, expected);
             }
         }
 
-        let response = ApiResponse::from(Broken).into_response();
-        // 직렬화 오류도 내부 내용을 노출하지 않는 JSON 응답으로 변환한다.
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-        assert_eq!(
-            body(response).await,
-            json!({"code": "INTERNAL", "message": "Internal server error"})
-        );
+        #[tokio::test]
+        async fn success_responses_include_only_present_data_and_use_selected_status() {
+            let response = ApiResponse::from(json!({"id": "123"}))
+                .with_status(StatusCode::CREATED)
+                .into_response();
+            // 지정한 상태와 데이터가 응답에 포함된다.
+            assert_eq!(response.status(), StatusCode::CREATED);
+            assert_eq!(
+                body(response).await,
+                json!({"code": "OK", "data": {"id": "123"}})
+            );
+
+            let response = ApiResponse::empty().into_response();
+            // 데이터 없는 성공은 code만 포함한다.
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(body(response).await, json!({"code": "OK"}));
+        }
+
+        #[tokio::test]
+        async fn errors_include_their_message_without_location_or_cause() {
+            for (code, status, public_code) in [
+                (
+                    Code::Internal,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "INTERNAL",
+                ),
+                (
+                    Code::InvalidConfiguration,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "INVALID_CONFIGURATION",
+                ),
+                (
+                    Code::InvalidRequest,
+                    StatusCode::BAD_REQUEST,
+                    "INVALID_REQUEST",
+                ),
+                (Code::Unauthorized, StatusCode::UNAUTHORIZED, "UNAUTHORIZED"),
+                (Code::Forbidden, StatusCode::FORBIDDEN, "FORBIDDEN"),
+                (Code::Busy, StatusCode::SERVICE_UNAVAILABLE, "BUSY"),
+                (Code::NotFound, StatusCode::NOT_FOUND, "NOT_FOUND"),
+            ] {
+                let error = Error::new(code, "공개 오류 메시지")
+                    .at("secret location")
+                    .cause(anyhow::anyhow!("secret cause"));
+                let response = ApiResponse::<()>::from(error).into_response();
+                // 코드에 맞는 상태와 공개 메시지를 반환하고 위치와 원인은
+                // 제외한다.
+                assert_eq!(response.status(), status);
+                assert_eq!(
+                    body(response).await,
+                    json!({"code": public_code, "message": "공개 오류 메시지"})
+                );
+            }
+        }
+    }
+
+    mod edge {
+        use super::*;
+
+        #[tokio::test]
+        async fn serialization_failure_returns_safe_internal_error() {
+            struct Broken;
+            impl Serialize for Broken {
+                fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+                    Err(serde::ser::Error::custom("secret serialization failure"))
+                }
+            }
+
+            let response = ApiResponse::from(Broken).into_response();
+            // 직렬화 오류도 내부 내용을 노출하지 않는 JSON 응답으로 변환한다.
+            assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+            assert_eq!(
+                body(response).await,
+                json!({"code": "INTERNAL", "message": "Internal server error"})
+            );
+        }
     }
 }
