@@ -1,7 +1,7 @@
 # Frontend Architecture & Coding Guidelines
 
-This repository follows a **Feature-Based Architecture** built with **React, TypeScript, TanStack (Query & Router), ky, shadcn/ui, and Tailwind CSS v4**.
-All AI agents MUST strictly adhere to the directory boundaries, state management rules, and styling conventions defined below.
+This repository follows a **Vertical Slice / Feature-Based Architecture** built with **React, TypeScript, TanStack (Query & Router), ky, shadcn/ui, and Tailwind CSS v4**.
+All AI agents MUST strictly adhere to the directory boundaries, public barrel rules, state management patterns, and styling conventions defined below.
 
 ---
 
@@ -9,16 +9,21 @@ All AI agents MUST strictly adhere to the directory boundaries, state management
 
 ```text
 src/
-├── app/              # App entry, global providers, TanStack Router tree
-├── features/         # Business domains (auth, product, order, etc.)
+├── app/
+│   ├── layouts/      # Global shells (DashboardLayout, AuthLayout, PublicLayout)
+│   ├── providers/    # Global providers (QueryClientProvider, RouterProvider, Theme)
+│   └── routes/       # TanStack Router route tree (params, loaders, layout routes)
+├── features/         # Self-contained vertical slices (auth, product, order, etc.)
 │   └── <domain>/
+│       ├── index.ts  # Public API barrel (exports pages, reusable widgets, queryOptions)
 │       ├── api/      # API fetchers, Query Key factories, queryOptions, mutations
-│       ├── components/ # Domain-specific UI components
+│       ├── components/ # Domain-specific UI blocks (layout-agnostic)
 │       ├── hooks/    # Domain-specific custom hooks
-│       └── types/    # Domain TypeScript interfaces/schemas
+│       ├── pages/    # Domain screens & cross-feature page assembly
+│       └── types/    # Domain TypeScript interfaces & Zod schemas
 ├── shared/           # Domain-agnostic, globally reusable modules
 │   ├── api/          # Base HTTP client (ky), hooks, error classes
-│   ├── components/   # Reusable UI primitives based on shadcn/ui
+│   ├── components/   # Pure UI primitives based on shadcn/ui
 │   ├── hooks/        # Generic hooks (useDebounce, useMediaQuery)
 │   ├── lib/          # Utilities (cn, date formatters, validators)
 │   └── types/        # Global utility types & standard API response wrappers
@@ -29,17 +34,45 @@ src/
 ### Strict Dependency Rules (DO NOT VIOLATE)
 
 1. **Unidirectional Flow:** `app` -> `features` -> `shared`.
-2. **No Cross-Feature Imports:** `features/A` MUST NOT directly import internal files from `features/B`. If two features need to share logic or UI, lift it to `shared/` or compose them at the `app/` (route/page) level.
+2. **Feature Isolation & Public Barrel (`index.ts`):**
+* `features/A` internals (`api/`, `components/`, `hooks/`, `types/`) MUST NOT import anything from `features/B`.
+* Only `features/A/pages/` and `app/` may import from `features/B`, and **ONLY via its root barrel (`@/features/B`)**. Direct deep imports into `features/B/components/*` or `features/B/api/*` are strictly forbidden.
+
+
 3. **Pure `shared/`:** Modules inside `shared/` MUST NOT import anything from `features/` or `app/`.
 
 ---
 
-## 2. TanStack Query & Data Fetching Rules
+## 2. Page Placement & Layer Responsibilities
+
+1. **`features/<domain>/pages/` (All Screens & Composition):**
+* Place every screen inside its owning vertical slice (`features/product/pages/ProductListPage.tsx`).
+* When a screen requires widgets from another feature (e.g., `OrderDetailPage` embedding a widget from `features/delivery`), assemble them inside `features/order/pages/OrderDetailPage.tsx` by importing from `@/features/delivery` (`index.ts`).
+* Pages handle Tailwind `grid`/`flex` layout placement and cross-feature prop wiring; they MUST NOT contain raw API fetch calls.
+
+
+2. **`features/<domain>/index.ts` (Public Boundary):**
+* Explicitly export only the pages, components, `queryOptions`, or types intended to be consumed by `app/` or other feature pages. Keep internal helpers unexported.
+
+
+3. **`app/routes/` (URL & Data Boundary):**
+* Handles URL path/search param validation (via Zod), route guards, and data pre-fetching in `loader`s using `queryClient.ensureQueryData(...)`.
+* Keep route files thin: delegate outer shells to `app/layouts/` (`<Outlet />`) and render `features/<domain>/pages/*Page` imported via `@/features/<domain>`.
+
+
+4. **`features/<domain>/components/` (Self-Contained Blocks):**
+* Build components to fill their parent container (`w-full`) without hardcoded outer margins (`m-*`) or viewport positioning. Screen grid placement belongs to `pages/`.
+
+
+
+---
+
+## 3. TanStack Query & State Management Rules
 
 Use **ky** for the shared HTTP client in `shared/api/`.
 
-1. **No Raw `useQuery` in Components:** Components MUST NOT call `useQuery` or `useMutation` directly with inline `queryFn` or string-array keys.
-2. **Query Key Factory & `queryOptions`:** Every domain in `features/<domain>/api/` must define a Query Key Factory and export `queryOptions` (TanStack Query v5 standard) so they can be shared between components and route loaders.
+1. **No Raw `useQuery` in Components or Pages:** UI files MUST NOT call `useQuery` or `useMutation` directly with inline `queryFn` or string-array keys.
+2. **Query Key Factory & `queryOptions`:** Every domain in `features/<domain>/api/` must define a Query Key Factory and export `queryOptions` (TanStack Query v5 standard) so they can be shared between hooks and route `loader`s.
 ```ts
 // features/product/api/product.queries.ts
 export const productKeys = {
@@ -67,14 +100,14 @@ export const productDetailOptions = (id: string) =>
 
 ---
 
-## 3. Routing & Forms
+## 4. Forms & Validation
 
-1. **TanStack Router:** Define route search params and path params with strict TypeScript/Zod validation. Pre-fetch critical data in route `loader`s using `queryClient.ensureQueryData(productDetailOptions(id))`.
-2. **Forms:** Use **React Hook Form + Zod** for all forms with validation. Do not write manual `onChange` state handlers for multi-field forms.
+* Use **React Hook Form + Zod** for all forms with validation. Do not write manual `onChange` state handlers for multi-field forms.
+* Validate untrusted external API responses and URL search params with **Zod** schemas.
 
 ---
 
-## 4. Tailwind CSS v4 & Styling Rules
+## 5. Tailwind CSS v4 & Styling Rules
 
 Use **shadcn/ui** as the foundation for reusable UI components in `shared/components/`.
 
@@ -85,12 +118,12 @@ Use **shadcn/ui** as the foundation for reusable UI components in `shared/compon
 
 ---
 
-## 5. TypeScript & Code Quality Guardrails
+## 6. TypeScript & Code Quality Guardrails
 
 * **Strict Typing:** Never use `any`. Use `unknown` with type guards or Zod schemas for external/untrusted data.
-* **No Premature Abstraction:** Do not create generic wrappers, base classes, or helper files for single-use logic. Keep code colocated inside the relevant `features/<domain>/` folder until reuse is actually required.
+* **No Premature Abstraction:** Do not create generic layout wrappers (e.g., `<SplitLayout />`) or helper files for single-use logic. Keep code colocated inside the relevant `features/<domain>/` slice until reuse is actually required.
 * **File Naming:**
-* Components: `PascalCase.tsx` (e.g., `LoginForm.tsx`)
+* Components / Pages / Layouts: `PascalCase.tsx` (e.g., `LoginForm.tsx`, `ProductListPage.tsx`, `DashboardLayout.tsx`)
 * Hooks: `camelCase.ts` prefixed with `use` (e.g., `useAuthSession.ts`)
 * API / Queries / Utils / Types: `kebab-case.ts` or `domain.role.ts` (e.g., `product.queries.ts`, `auth.types.ts`)
 
@@ -98,8 +131,8 @@ Use **shadcn/ui** as the foundation for reusable UI components in `shared/compon
 
 ---
 
-## 6. Agent Execution Protocol
+## 7. Agent Execution & Verification Protocol
 
-1. **Check Existing Primitives First:** Before generating a new UI component or utility, inspect `shared/components/` and `shared/lib/` to reuse existing building blocks.
-2. **Scope Containment:** When implementing a feature, limit file creation/modification strictly to `features/<target-domain>/` and the corresponding route in `app/routes/` unless shared primitives are explicitly requested.
-3. **Verification:** Before concluding a task, ensure there are no TypeScript errors (`tsc --noEmit`), broken imports across feature boundaries, or unused variables.
+1. **Inspect Primitives First:** Before generating a new UI component or utility, inspect `shared/components/` and `shared/lib/` to reuse existing building blocks.
+2. **Vertical Slice Containment:** Build features end-to-end (`api/`, `components/`, `pages/`, `index.ts`) inside `features/<target-domain>/`. When composing another feature inside `pages/`, import strictly through `@/features/<other>`.
+3. **Verification Gate:** Before concluding a task, run `npm run typecheck` and `npm run lint` from `conbira-ui`, and verify the rendered route works without console errors.
