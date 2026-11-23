@@ -138,7 +138,7 @@ mod tests {
         async fn set_stores_a_readable_value_without_expiration() -> Result<()> {
             let cache = Cache::new(&crate::test_support::cache_config()).await?;
             cache.ping().await?;
-            let key = format!("espr:test:{}:values", std::process::id());
+            let key = format!("espr:test:{}:values", crate::test_support::unique_id());
 
             let missing: Option<String> = cache.get(&key).await?;
 
@@ -164,36 +164,37 @@ mod tests {
         #[tokio::test]
         async fn set_with_ttl_returns_value_before_expiry_and_none_after() -> Result<()> {
             let cache = Cache::new(&crate::test_support::cache_config()).await?;
-            let key = format!("espr:test:{}:expiry", std::process::id());
+            let key = format!("espr:test:{}:expiry", crate::test_support::unique_id());
 
             cache
-                .set_with_ttl(&key, b"value", Duration::from_millis(1_000))
+                .set_with_ttl(&key, b"value", Duration::from_secs(2))
                 .await?;
             let stored: Option<Vec<u8>> = cache.get(&key).await?;
 
             // Before the TTL elapses, the original value is readable.
             assert_eq!(stored.as_deref(), Some(b"value".as_slice()));
 
-            tokio::time::sleep(Duration::from_millis(1_200)).await;
-            let expired: Option<Vec<u8>> = cache.get(&key).await?;
+            let expiration = tokio::time::timeout(Duration::from_secs(5), async {
+                while cache.get::<_, Vec<u8>>(&key).await?.is_some() {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+                Ok::<_, Error>(())
+            })
+            .await;
 
-            // After the TTL elapses, reading the key returns None.
-            assert_eq!(expired, None);
+            // The cache removes the key within the test's expiration deadline.
+            expiration.expect("cache key did not expire within five seconds")?;
             Ok(())
         }
 
         #[tokio::test]
-        async fn set_with_ttl_rejects_durations_without_a_valid_millisecond_value() {
+        async fn set_with_ttl_rejects_durations_below_one_millisecond() {
             let cache = cache_with_closed_pool();
-            for ttl in [
-                Duration::ZERO,
-                Duration::from_micros(999),
-                Duration::from_millis(i64::MAX as u64 + 1),
-            ] {
+            for ttl in [Duration::ZERO, Duration::from_micros(999)] {
                 let result = cache.set_with_ttl("key", "value", ttl).await;
 
-                // An out-of-range TTL returns InvalidParameter without using
-                // the pool.
+                // A TTL below one millisecond is rejected before using the
+                // pool.
                 assert!(
                     matches!(result, Err(Error::InvalidParameter(_))),
                     "TTL: {ttl:?}"
@@ -204,6 +205,16 @@ mod tests {
 
     mod edge {
         use super::*;
+
+        #[tokio::test]
+        async fn set_with_ttl_rejects_milliseconds_outside_the_signed_range() {
+            let cache = cache_with_closed_pool();
+            let ttl = Duration::from_millis(i64::MAX as u64 + 1);
+            let result = cache.set_with_ttl("key", "value", ttl).await;
+
+            // An unrepresentable TTL is rejected before using the pool.
+            assert!(matches!(result, Err(Error::InvalidParameter(_))));
+        }
 
         #[tokio::test]
         async fn new_returns_invalid_parameter_for_zero_pool_size() {

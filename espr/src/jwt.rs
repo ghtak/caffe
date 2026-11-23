@@ -140,82 +140,103 @@ impl TokenService {
 mod tests {
     use super::*;
 
-    #[test]
-    fn issues_and_verifies_access_token() {
-        let dir = std::env::temp_dir().join(format!(
-            "espr-jwt-token-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir(&dir).unwrap();
+    fn key_config(dir: &crate::test_support::TestDir) -> Config {
         let config = Config {
             issuer: "https://auth.example.com".into(),
             audience: "api".into(),
             access_token_ttl_seconds: 900,
             ed25519: ed25519::Config {
-                key_path: dir.join("private.pem"),
-                public_key_path: dir.join("public.pem"),
+                key_path: dir.path().join("private.pem"),
+                public_key_path: dir.path().join("public.pem"),
             },
         };
         ed25519::generate(&config.ed25519).unwrap();
-        let service = TokenService::new(&config).unwrap();
-        let user = serde_json::from_value(serde_json::json!({"name": "Kim"})).unwrap();
-        let before = jiff::Timestamp::now().as_second();
-
-        let issued = service.issue("user-1", user).unwrap();
-        let claims = service.verify(&issued.token).unwrap();
-
-        let after = jiff::Timestamp::now().as_second();
-        assert_eq!(claims.sub, "user-1");
-        assert_eq!(claims.iss, config.issuer);
-        assert_eq!(claims.aud, config.audience);
-        assert_eq!(claims.user["name"], "Kim");
-        assert!((before..=after).contains(&claims.iat));
-        assert_eq!(claims.exp - claims.iat, 900);
-        // 발급 결과의 만료 시각은 서명된 JWT의 exp와 일치한다.
-        assert_eq!(issued.expires_at.as_second(), claims.exp);
-
-        let (header, _) = issued.token.split_once('.').unwrap();
-        let (_, signature) = issued.token.rsplit_once('.').unwrap();
-        let tampered = format!("{header}.e30.{signature}");
-        assert!(matches!(
-            service.verify(&tampered),
-            Err(crate::Error::Validation(_))
-        ));
-
-        let mut long_lived = config.clone();
-        long_lived.access_token_ttl_seconds = jiff::Timestamp::MAX.as_second() as u64;
-        let service = TokenService::new(&long_lived).unwrap();
-        // Timestamp의 표현 범위를 벗어나는 만료 시각은 발급 오류로 처리한다.
-        assert!(matches!(
-            service.issue("user-1", Default::default()),
-            Err(crate::Error::InvalidParameter(_))
-        ));
-
-        std::fs::remove_dir_all(dir).unwrap();
+        config
     }
 
-    #[test]
-    fn claims_round_trip_with_user_data() {
-        let claims = Claims {
-            sub: "user-1".into(),
-            iss: "https://auth.example.com".into(),
-            aud: "api".into(),
-            iat: 1_700_000_000,
-            exp: 1_700_000_900,
-            user: serde_json::from_value(serde_json::json!({"name": "Kim", "roles": ["admin"]}))
+    mod contract {
+        use super::*;
+
+        #[test]
+        fn issues_and_verifies_access_token() {
+            let dir = crate::test_support::TestDir::new("jwt").unwrap();
+            let config = key_config(&dir);
+            let service = TokenService::new(&config).unwrap();
+            let user = serde_json::from_value(serde_json::json!({"name": "Kim"})).unwrap();
+            let before = jiff::Timestamp::now().as_second();
+
+            let issued = service.issue("user-1", user).unwrap();
+            let claims = service.verify(&issued.token).unwrap();
+
+            let after = jiff::Timestamp::now().as_second();
+            // The verified token contains the issued claims and configured
+            // lifetime.
+            assert_eq!(claims.sub, "user-1");
+            assert_eq!(claims.iss, config.issuer);
+            assert_eq!(claims.aud, config.audience);
+            assert_eq!(claims.user["name"], "Kim");
+            assert!((before..=after).contains(&claims.iat));
+            assert_eq!(claims.exp - claims.iat, 900);
+            // 발급 결과의 만료 시각은 서명된 JWT의 exp와 일치한다.
+            assert_eq!(issued.expires_at.as_second(), claims.exp);
+        }
+
+        #[test]
+        fn rejects_token_with_tampered_payload() {
+            let dir = crate::test_support::TestDir::new("jwt").unwrap();
+            let service = TokenService::new(&key_config(&dir)).unwrap();
+            let issued = service.issue("user-1", Default::default()).unwrap();
+            let other = service.issue("user-2", Default::default()).unwrap();
+            let (header, payload_and_signature) = issued.token.split_once('.').unwrap();
+            let (_, signature) = payload_and_signature.split_once('.').unwrap();
+            let tampered_payload = other.token.split('.').nth(1).unwrap();
+            let token = format!("{header}.{tampered_payload}.{signature}");
+            let result = service.verify(&token);
+
+            // Valid claims with a signature for a different payload are
+            // rejected.
+            assert!(matches!(result, Err(crate::Error::Validation(_))));
+        }
+
+        #[test]
+        fn claims_round_trip_with_user_data() {
+            let claims = Claims {
+                sub: "user-1".into(),
+                iss: "https://auth.example.com".into(),
+                aud: "api".into(),
+                iat: 1_700_000_000,
+                exp: 1_700_000_900,
+                user: serde_json::from_value(
+                    serde_json::json!({"name": "Kim", "roles": ["admin"]}),
+                )
                 .unwrap(),
-        };
+            };
 
-        let json = serde_json::to_value(&claims).unwrap();
+            let json = serde_json::to_value(&claims).unwrap();
 
-        assert_eq!(json["sub"], "user-1");
-        assert_eq!(json["exp"], 1_700_000_900_i64);
-        assert_eq!(json["user"]["name"], "Kim");
-        assert_eq!(json["user"]["roles"][0], "admin");
-        assert_eq!(serde_json::from_value::<Claims>(json).unwrap(), claims);
+            // The JSON claims preserve the subject, expiration and user fields.
+            assert_eq!(json["sub"], "user-1");
+            assert_eq!(json["exp"], 1_700_000_900_i64);
+            assert_eq!(json["user"]["name"], "Kim");
+            assert_eq!(json["user"]["roles"][0], "admin");
+            assert_eq!(serde_json::from_value::<Claims>(json).unwrap(), claims);
+        }
+    }
+
+    mod edge {
+        use super::*;
+
+        #[test]
+        fn rejects_expiration_outside_the_timestamp_range() {
+            let dir = crate::test_support::TestDir::new("jwt").unwrap();
+            let mut config = key_config(&dir);
+            config.access_token_ttl_seconds = jiff::Timestamp::MAX.as_second() as u64;
+            let service = TokenService::new(&config).unwrap();
+            let result = service.issue("user-1", Default::default());
+
+            // An unrepresentable expiration is reported as an invalid
+            // parameter.
+            assert!(matches!(result, Err(crate::Error::InvalidParameter(_))));
+        }
     }
 }

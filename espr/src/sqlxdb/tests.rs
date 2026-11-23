@@ -1,10 +1,8 @@
-use super::*;
+mod contract {
+    use super::super::{Database, Handle};
 
-pub type TestDB = Database<sqlx::Postgres>;
-pub type TestHandle<'c> = Handle<'c, sqlx::Postgres>;
-
-pub mod sample {
-    use super::{TestDB, TestHandle};
+    type TestDB = Database<sqlx::Postgres>;
+    type TestHandle<'c> = Handle<'c, sqlx::Postgres>;
 
     async fn setup(handle: &mut TestHandle<'_>) -> crate::Result<()> {
         sqlx::query(
@@ -27,7 +25,7 @@ pub mod sample {
         Ok(())
     }
 
-    pub mod entity {
+    mod entity {
         #[derive(Debug, PartialEq, sqlx::FromRow)]
         pub struct Sample {
             pub id: i64,
@@ -39,9 +37,8 @@ pub mod sample {
         }
     }
 
-    pub mod repository {
-        use crate::sqlxdb::tests::TestHandle;
-        use crate::sqlxdb::tests::sample::entity;
+    mod repository {
+        use super::{TestHandle, entity};
 
         pub async fn find_by_id(
             handle: &mut TestHandle<'_>,
@@ -85,22 +82,18 @@ pub mod sample {
         }
     }
 
-    fn sample() -> entity::Sample {
-        let time = jiff::Timestamp::from_second(1_704_067_200).unwrap();
-        entity::Sample {
-            id: 1,
-            name: "sample".into(),
-            created_at: time,
-            updated_at: time,
-        }
-    }
-
     #[tokio::test]
     async fn transaction_commit_and_rollback() -> crate::Result<()> {
         let db = TestDB::new(&crate::test_support::database_config(10)).await?;
         let mut conn = db.conn().await?;
         setup(&mut conn.handle()).await?;
-        let mut sample = sample();
+        let timestamp = jiff::Timestamp::from_second(1_704_067_200).unwrap();
+        let mut sample = entity::Sample {
+            id: 1,
+            name: "sample".into(),
+            created_at: timestamp,
+            updated_at: timestamp,
+        };
 
         // Insert and commit, then verify the record remains visible.
         let mut tx = conn.begin().await?;
@@ -108,6 +101,8 @@ pub mod sample {
         tx.commit().await?;
 
         let stored = repository::find_by_id(&mut conn.handle(), sample.id).await?;
+
+        // The committed record is visible outside the transaction.
         assert_eq!(stored.as_ref(), Some(&sample));
 
         // Update and roll back, then verify the committed record is unchanged.
@@ -115,22 +110,27 @@ pub mod sample {
         sample.name = "rolled back".into();
         repository::update(&mut tx.handle(), &sample).await?;
         let changed = repository::find_by_id(&mut tx.handle(), sample.id).await?;
+
+        // The update is visible within the transaction before rollback.
         assert_eq!(changed.as_ref(), Some(&sample));
         tx.rollback().await?;
 
         let after_rollback = repository::find_by_id(&mut conn.handle(), sample.id).await?;
+
+        // Rolling back restores the previously committed record.
         assert_eq!(after_rollback, stored);
         teardown(&mut conn.handle()).await
     }
-}
 
-#[tokio::test]
-async fn connects_to_database() -> crate::Result<()> {
-    let db = TestDB::new(&crate::test_support::database_config(10)).await?;
-    let mut conn = db.conn().await?;
-    let value: i32 = sqlx::query_scalar("SELECT 1")
-        .fetch_one(conn.handle().conn())
-        .await?;
-    assert_eq!(value, 1);
-    Ok(())
+    #[tokio::test]
+    async fn connects_to_database() -> crate::Result<()> {
+        let db = TestDB::new(&crate::test_support::database_config(10)).await?;
+        let mut conn = db.conn().await?;
+        let value: i32 = sqlx::query_scalar("SELECT 1")
+            .fetch_one(conn.handle().conn())
+            .await?;
+        // A pooled connection can execute a query and return its value.
+        assert_eq!(value, 1);
+        Ok(())
+    }
 }

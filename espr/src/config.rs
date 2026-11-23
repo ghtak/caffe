@@ -63,74 +63,90 @@ mod tests {
         sample: sample::Config,
     }
 
-    #[test]
-    fn loads_test_config_from_toml() {
-        let path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
-            .join("tests/fixtures/config.toml");
-        let config: TestConfig = load(path, None).unwrap();
+    mod contract {
+        use super::*;
 
-        assert_eq!(config.sample.id, 42);
-        assert_eq!(config.sample.name, "example");
-    }
+        #[test]
+        fn loads_test_config_from_toml() {
+            let path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                .join("tests/fixtures/config.toml");
+            let config: TestConfig = load(path, None).unwrap();
 
-    #[test]
-    fn loads_test_config_from_string() {
-        let config: TestConfig = load_str(
-            include_str!("../tests/fixtures/config.toml"),
-            FileFormat::Toml,
-            None,
-        )
-        .unwrap();
-
-        assert_eq!(config.sample.id, 42);
-        assert_eq!(config.sample.name, "example");
-    }
-
-    #[test]
-    fn rejects_empty_environment_prefix() {
-        let result = load::<TestConfig>("unused.toml", Some(""));
-
-        assert!(matches!(result, Err(Error::InvalidParameter(_))));
-    }
-
-    #[test]
-    fn requires_config_file() {
-        let path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
-            .join("tests/fixtures/missing.toml");
-        let result = load::<TestConfig>(path, None);
-
-        assert!(matches!(result, Err(Error::ConfigError(_))));
-    }
-
-    #[test]
-    fn environment_overrides_toml() {
-        const PREFIX: &str = "ESPR_TEST_CONFIG_OVERRIDE";
-        const MARKER: &str = "ESPR_CONFIG_OVERRIDE_CHILD";
-
-        if std::env::var_os(MARKER).is_none() {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
-                .args(["--exact", "config::tests::environment_overrides_toml"])
-                .env(MARKER, "1")
-                .env("ESPR_TEST_CONFIG_OVERRIDE_SAMPLE__NAME", "overridden")
-                .output()
-                .unwrap();
-            assert!(
-                output.status.success(),
-                "stdout: {}\nstderr: {}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
-            return;
+            // Loading TOML preserves the configured ID.
+            assert_eq!(config.sample.id, 42);
+            assert_eq!(config.sample.name, "example");
         }
 
-        let config: TestConfig = load_str(
-            include_str!("../tests/fixtures/config.toml"),
-            FileFormat::Toml,
-            Some(PREFIX),
-        )
-        .unwrap();
+        #[test]
+        fn loads_test_config_from_string() {
+            let config: TestConfig = load_str(
+                include_str!("../tests/fixtures/config.toml"),
+                FileFormat::Toml,
+                None,
+            )
+            .unwrap();
 
-        assert_eq!(config.sample.id, 42);
-        assert_eq!(config.sample.name, "overridden");
+            // Loading TOML preserves the configured ID.
+            assert_eq!(config.sample.id, 42);
+            assert_eq!(config.sample.name, "example");
+        }
+
+        #[test]
+        fn rejects_empty_environment_prefix() {
+            let result = load::<TestConfig>("unused.toml", Some(""));
+
+            // An empty environment prefix is rejected before reading the file.
+            assert!(matches!(result, Err(Error::InvalidParameter(_))));
+        }
+
+        #[test]
+        fn requires_config_file() {
+            let path = std::path::PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap())
+                .join("tests/fixtures/missing.toml");
+            let result = load::<TestConfig>(path, None);
+
+            // A missing configuration file returns a configuration error.
+            assert!(matches!(result, Err(Error::ConfigError(_))));
+        }
+
+        #[test]
+        fn environment_overrides_toml() {
+            const PREFIX: &str = "ESPR_TEST_CONFIG_OVERRIDE";
+            const MARKER: &str = "ESPR_CONFIG_OVERRIDE_CHILD";
+            const VERIFIED: &str = "verified config override";
+
+            if std::env::var_os(MARKER).is_none() {
+                let (_, module) = module_path!().split_once("::").unwrap();
+                let test_name = format!("{module}::environment_overrides_toml");
+                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", &test_name, "--nocapture"])
+                    .env(MARKER, "1")
+                    .env("ESPR_TEST_CONFIG_OVERRIDE_SAMPLE__NAME", "overridden")
+                    .output()
+                    .unwrap();
+                // The child must actually verify the override and exit
+                // successfully.
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                assert!(
+                    output.status.success() && stdout.lines().any(|line| line == VERIFIED),
+                    "stdout: {}\nstderr: {}",
+                    stdout,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                return;
+            }
+
+            let config: TestConfig = load_str(
+                include_str!("../tests/fixtures/config.toml"),
+                FileFormat::Toml,
+                Some(PREFIX),
+            )
+            .unwrap();
+
+            // The environment overrides the name and leaves the TOML ID intact.
+            assert_eq!(config.sample.id, 42);
+            assert_eq!(config.sample.name, "overridden");
+            println!("{VERIFIED}");
+        }
     }
 }

@@ -5,6 +5,28 @@
 //! - CAFFE_ORACLE_USERNAME / CAFFE_ORACLE_PASSWORD: oracle / oracle
 //! - CAFFE_ORACLE_CONNECT_STRING: 192.168.1.20:31521/FREEPDB1
 
+use rand_core::{OsRng, RngCore};
+
+pub(crate) fn unique_id() -> String {
+    format!("{:016x}{:016x}", OsRng.next_u64(), OsRng.next_u64())
+}
+
+pub(crate) struct TestDir(std::path::PathBuf);
+
+impl TestDir {
+    pub(crate) fn new(label: &str) -> std::io::Result<Self> {
+        let path = std::env::temp_dir().join(format!("espr-{label}-{}", unique_id()));
+        std::fs::create_dir(&path)?;
+        Ok(Self(path))
+    }
+
+    pub(crate) fn path(&self) -> &std::path::Path { &self.0 }
+}
+
+impl Drop for TestDir {
+    fn drop(&mut self) { let _ = std::fs::remove_dir_all(&self.0); }
+}
+
 pub(crate) fn database_config(max_connections: u32) -> crate::sqlxdb::Config {
     crate::sqlxdb::Config {
         url: std::env::var("CAFFE_DATABASE_URL")

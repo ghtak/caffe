@@ -43,49 +43,44 @@ pub fn generate(config: &Config, subject_alt_names: &[String]) -> crate::Result<
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    mod contract {
+        use super::super::*;
 
-    #[test]
-    fn generates_and_overwrites_pem_files() {
-        let dir = std::env::temp_dir().join(format!(
-            "espr-tls-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir(&dir).unwrap();
-        let config = Config {
-            cert_path: dir.join("cert.pem"),
-            key_path: dir.join("key.pem"),
-        };
-        std::fs::write(&config.cert_path, "old certificate").unwrap();
-        std::fs::write(&config.key_path, "old key").unwrap();
+        #[test]
+        fn generates_and_overwrites_pem_files() {
+            let dir = crate::test_support::TestDir::new("tls").unwrap();
+            let config = Config {
+                cert_path: dir.path().join("cert.pem"),
+                key_path: dir.path().join("key.pem"),
+            };
+            std::fs::write(&config.cert_path, "old certificate").unwrap();
+            std::fs::write(&config.key_path, "old key").unwrap();
 
-        generate(&config, &["localhost".into(), "127.0.0.1".into()]).unwrap();
-        assert!(
-            std::fs::read_to_string(&config.cert_path)
-                .unwrap()
-                .contains("BEGIN CERTIFICATE")
-        );
-        assert!(
-            std::fs::read_to_string(&config.key_path)
-                .unwrap()
-                .contains("BEGIN PRIVATE KEY")
-        );
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            assert_eq!(
-                std::fs::metadata(&config.key_path)
+            generate(&config, &["localhost".into(), "127.0.0.1".into()]).unwrap();
+            // The original contents are replaced with certificate and key PEM.
+            assert!(
+                std::fs::read_to_string(&config.cert_path)
                     .unwrap()
-                    .permissions()
-                    .mode()
-                    & 0o777,
-                0o600
+                    .contains("BEGIN CERTIFICATE")
             );
+            assert!(
+                std::fs::read_to_string(&config.key_path)
+                    .unwrap()
+                    .contains("BEGIN PRIVATE KEY")
+            );
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                // The private key remains restricted to its owner.
+                assert_eq!(
+                    std::fs::metadata(&config.key_path)
+                        .unwrap()
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o600
+                );
+            }
         }
-        std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -196,111 +196,119 @@ async fn shutdown_signal(address: SocketAddr) {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    mod contract {
+        use std::sync::{Arc, Mutex};
 
-    use axum::Router;
-    use axum::body::{Body, to_bytes};
-    use axum::http::Request;
-    use axum::routing::get;
-    use opentelemetry::trace::TracerProvider as _;
-    use opentelemetry_sdk::trace::SdkTracerProvider;
-    use tower::ServiceExt as _;
-    use tower_http::trace::TraceLayer;
-    use tracing_subscriber::layer::SubscriberExt as _;
+        use axum::Router;
+        use axum::body::{Body, to_bytes};
+        use axum::http::Request;
+        use axum::routing::get;
+        use opentelemetry::trace::TracerProvider as _;
+        use opentelemetry_sdk::trace::SdkTracerProvider;
+        use tower::ServiceExt as _;
+        use tower_http::trace::TraceLayer;
+        use tracing_subscriber::layer::SubscriberExt as _;
 
-    #[test]
-    fn request_span_records_trace_and_span_ids() {
-        struct Capture(Arc<Mutex<Vec<(String, String)>>>);
-        impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Capture {
-            fn on_record(
-                &self,
-                _id: &tracing::span::Id,
-                values: &tracing::span::Record<'_>,
-                _ctx: tracing_subscriber::layer::Context<'_, S>,
-            ) {
-                struct Visitor<'a>(&'a Mutex<Vec<(String, String)>>);
-                impl tracing::field::Visit for Visitor<'_> {
-                    fn record_debug(
-                        &mut self,
-                        field: &tracing::field::Field,
-                        value: &dyn std::fmt::Debug,
-                    ) {
-                        self.0
-                            .lock()
-                            .unwrap()
-                            .push((field.name().to_owned(), format!("{value:?}")));
+        use super::super::make_request_span;
+
+        #[test]
+        fn request_span_records_trace_and_span_ids() {
+            struct Capture(Arc<Mutex<Vec<(String, String)>>>);
+            impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Capture {
+                fn on_record(
+                    &self,
+                    _id: &tracing::span::Id,
+                    values: &tracing::span::Record<'_>,
+                    _ctx: tracing_subscriber::layer::Context<'_, S>,
+                ) {
+                    struct Visitor<'a>(&'a Mutex<Vec<(String, String)>>);
+                    impl tracing::field::Visit for Visitor<'_> {
+                        fn record_debug(
+                            &mut self,
+                            field: &tracing::field::Field,
+                            value: &dyn std::fmt::Debug,
+                        ) {
+                            self.0
+                                .lock()
+                                .unwrap()
+                                .push((field.name().to_owned(), format!("{value:?}")));
+                        }
                     }
+                    values.record(&mut Visitor(&self.0));
                 }
-                values.record(&mut Visitor(&self.0));
             }
+            let captured = Arc::new(Mutex::new(Vec::new()));
+            let provider = SdkTracerProvider::builder().build();
+            let subscriber = tracing_subscriber::registry()
+                .with(Capture(captured.clone()))
+                .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+            tracing::subscriber::with_default(subscriber, || {
+                let request = Request::builder()
+                    .header(
+                        "traceparent",
+                        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+                    )
+                    .body(Body::empty())
+                    .unwrap();
+                let span = make_request_span(&request);
+                let _guard = span.enter();
+                let ids = crate::tracing::current_trace_ids().unwrap();
+                // The span records both the upstream trace ID and its own span
+                // ID.
+                assert_eq!(ids.trace_id, "4bf92f3577b34da6a3ce929d0e0e4736");
+                assert_eq!(
+                    *captured.lock().unwrap(),
+                    [
+                        ("trace_id".into(), ids.trace_id),
+                        ("span_id".into(), ids.span_id)
+                    ]
+                );
+            });
         }
-        let captured = Arc::new(Mutex::new(Vec::new()));
-        let provider = SdkTracerProvider::builder().build();
-        let subscriber = tracing_subscriber::registry()
-            .with(Capture(captured.clone()))
-            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
-        tracing::subscriber::with_default(subscriber, || {
+
+        async fn trace_id(router: Router, request: Request<Body>) -> String {
+            let response = router.oneshot(request).await.unwrap();
+            // The route responds successfully with a trace ID.
+            assert_eq!(response.status(), axum::http::StatusCode::OK);
+            let body = to_bytes(response.into_body(), 1024).await.unwrap();
+            String::from_utf8(body.to_vec()).unwrap()
+        }
+
+        #[tokio::test]
+        async fn request_trace_id_is_propagated_or_generated() {
+            let provider = SdkTracerProvider::builder().build();
+            let subscriber = tracing_subscriber::registry()
+                .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
+            let _subscriber = tracing::subscriber::set_default(subscriber);
+
+            let router = Router::new()
+                .route(
+                    "/",
+                    get(|| async { crate::tracing::current_trace_ids().unwrap().trace_id }),
+                )
+                .layer(TraceLayer::new_for_http().make_span_with(make_request_span));
+
             let request = Request::builder()
+                .uri("/")
                 .header(
                     "traceparent",
                     "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
                 )
                 .body(Body::empty())
                 .unwrap();
-            let span = super::make_request_span(&request);
-            let _guard = span.enter();
-            let ids = crate::tracing::current_trace_ids().unwrap();
-            assert_eq!(ids.trace_id, "4bf92f3577b34da6a3ce929d0e0e4736");
+            // The HTTP request inherits the incoming trace ID.
             assert_eq!(
-                *captured.lock().unwrap(),
-                [
-                    ("trace_id".into(), ids.trace_id),
-                    ("span_id".into(), ids.span_id)
-                ]
+                trace_id(router.clone(), request).await,
+                "4bf92f3577b34da6a3ce929d0e0e4736"
             );
-        });
-    }
 
-    async fn trace_id(router: Router, request: Request<Body>) -> String {
-        let response = router.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), axum::http::StatusCode::OK);
-        let body = to_bytes(response.into_body(), 1024).await.unwrap();
-        String::from_utf8(body.to_vec()).unwrap()
-    }
-
-    #[tokio::test]
-    async fn request_trace_id_is_propagated_or_generated() {
-        let provider = SdkTracerProvider::builder().build();
-        let subscriber = tracing_subscriber::registry()
-            .with(tracing_opentelemetry::layer().with_tracer(provider.tracer("test")));
-        let _subscriber = tracing::subscriber::set_default(subscriber);
-
-        let router = Router::new()
-            .route(
-                "/",
-                get(|| async { crate::tracing::current_trace_ids().unwrap().trace_id }),
-            )
-            .layer(TraceLayer::new_for_http().make_span_with(super::make_request_span));
-
-        let request = Request::builder()
-            .uri("/")
-            .header(
-                "traceparent",
-                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
-            )
-            .body(Body::empty())
-            .unwrap();
-        assert_eq!(
-            trace_id(router.clone(), request).await,
-            "4bf92f3577b34da6a3ce929d0e0e4736"
-        );
-
-        let request = Request::builder().uri("/").body(Body::empty()).unwrap();
-        let generated = trace_id(router, request).await;
-        println!("generated trace_id: {generated}");
-        assert_eq!(generated.len(), 32);
-        assert!(generated.bytes().all(|byte| byte.is_ascii_hexdigit()));
-        assert_ne!(generated, "00000000000000000000000000000000");
-        assert_ne!(generated, "4bf92f3577b34da6a3ce929d0e0e4736");
+            let request = Request::builder().uri("/").body(Body::empty()).unwrap();
+            let generated = trace_id(router, request).await;
+            // A request without a parent receives a valid, distinct trace ID.
+            assert_eq!(generated.len(), 32);
+            assert!(generated.bytes().all(|byte| byte.is_ascii_hexdigit()));
+            assert_ne!(generated, "00000000000000000000000000000000");
+            assert_ne!(generated, "4bf92f3577b34da6a3ce929d0e0e4736");
+        }
     }
 }

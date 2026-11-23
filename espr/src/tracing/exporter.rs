@@ -25,61 +25,64 @@ pub(super) fn configure(
 
 #[cfg(test)]
 mod tests {
-    use opentelemetry::trace::{Span as _, Tracer as _, TracerProvider as _};
-    use opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::{
-        TraceService, TraceServiceServer,
-    };
-    use opentelemetry_proto::tonic::collector::trace::v1::{
-        ExportTraceServiceRequest, ExportTraceServiceResponse,
-    };
-    use opentelemetry_sdk::trace::SdkTracerProvider;
-    use tokio::sync::mpsc;
-    use tokio_stream::wrappers::TcpListenerStream;
+    mod contract {
+        use opentelemetry::trace::{Span as _, Tracer as _, TracerProvider as _};
+        use opentelemetry_proto::tonic::collector::trace::v1::trace_service_server::{
+            TraceService, TraceServiceServer,
+        };
+        use opentelemetry_proto::tonic::collector::trace::v1::{
+            ExportTraceServiceRequest, ExportTraceServiceResponse,
+        };
+        use opentelemetry_sdk::trace::SdkTracerProvider;
+        use tokio::sync::mpsc;
+        use tokio_stream::wrappers::TcpListenerStream;
 
-    use super::*;
+        use super::super::*;
 
-    struct Collector(mpsc::UnboundedSender<ExportTraceServiceRequest>);
+        struct Collector(mpsc::UnboundedSender<ExportTraceServiceRequest>);
 
-    #[tonic::async_trait]
-    impl TraceService for Collector {
-        async fn export(
-            &self,
-            request: tonic::Request<ExportTraceServiceRequest>,
-        ) -> Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
-            self.0.send(request.into_inner()).unwrap();
-            Ok(tonic::Response::new(ExportTraceServiceResponse::default()))
+        #[tonic::async_trait]
+        impl TraceService for Collector {
+            async fn export(
+                &self,
+                request: tonic::Request<ExportTraceServiceRequest>,
+            ) -> Result<tonic::Response<ExportTraceServiceResponse>, tonic::Status> {
+                self.0.send(request.into_inner()).unwrap();
+                Ok(tonic::Response::new(ExportTraceServiceResponse::default()))
+            }
         }
-    }
 
-    #[tokio::test]
-    async fn exports_spans_on_shutdown() {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let endpoint = format!("http://{}", listener.local_addr().unwrap());
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let server = tokio::spawn(async move {
-            tonic::transport::Server::builder()
-                .add_service(TraceServiceServer::new(Collector(tx)))
-                .serve_with_incoming(TcpListenerStream::new(listener))
+        #[tokio::test]
+        async fn exports_spans_on_shutdown() {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let endpoint = format!("http://{}", listener.local_addr().unwrap());
+            let (tx, mut rx) = mpsc::unbounded_channel();
+            let server = tokio::spawn(async move {
+                tonic::transport::Server::builder()
+                    .add_service(TraceServiceServer::new(Collector(tx)))
+                    .serve_with_incoming(TcpListenerStream::new(listener))
+                    .await
+                    .unwrap();
+            });
+
+            let provider = configure(SdkTracerProvider::builder(), &Config { endpoint })
+                .unwrap()
+                .build();
+            let mut span = provider.tracer("test").start("export-test");
+            span.end();
+            tokio::task::spawn_blocking(move || provider.shutdown().unwrap())
                 .await
                 .unwrap();
-        });
-
-        let provider = configure(SdkTracerProvider::builder(), &Config { endpoint })
-            .unwrap()
-            .build();
-        let mut span = provider.tracer("test").start("export-test");
-        span.end();
-        tokio::task::spawn_blocking(move || provider.shutdown().unwrap())
-            .await
-            .unwrap();
-        let request = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            request.resource_spans[0].scope_spans[0].spans[0].name,
-            "export-test"
-        );
-        server.abort();
+            let request = tokio::time::timeout(std::time::Duration::from_secs(5), rx.recv())
+                .await
+                .unwrap()
+                .unwrap();
+            // Shutdown flushes the completed span to the gRPC receiver.
+            assert_eq!(
+                request.resource_spans[0].scope_spans[0].spans[0].name,
+                "export-test"
+            );
+            server.abort();
+        }
     }
 }

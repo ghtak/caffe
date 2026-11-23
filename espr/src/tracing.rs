@@ -295,20 +295,13 @@ mod tests {
                 return;
             }
 
-            let directory = std::env::temp_dir().join(format!(
-                "espr-tracing-{}-{}",
-                std::process::id(),
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_nanos()
-            ));
+            let directory = crate::test_support::TestDir::new("tracing").unwrap();
             let output = std::process::Command::new(std::env::current_exe().unwrap())
             .args([
                 "--exact",
                     "tracing::tests::contract::file_logging_uses_rust_log_filter_over_configured_filter",
             ])
-            .env(LOG_DIR, &directory)
+            .env(LOG_DIR, directory.path())
             .env("RUST_LOG", "debug")
             .output()
             .unwrap();
@@ -321,7 +314,7 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
 
-            let log_files: Vec<_> = std::fs::read_dir(&directory)
+            let log_files: Vec<_> = std::fs::read_dir(directory.path())
                 .expect("read log directory")
                 .map(|entry| entry.expect("read log directory entry").path())
                 .filter(|path| {
@@ -334,7 +327,6 @@ mod tests {
             // The configured prefix produces one log file.
             assert_eq!(log_files.len(), 1, "expected one test log file");
             let contents = std::fs::read_to_string(&log_files[0]).expect("read test log file");
-            std::fs::remove_dir_all(directory).unwrap();
 
             // RUST_LOG=debug includes debug events and filters out trace
             // events.

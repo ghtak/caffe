@@ -1,34 +1,37 @@
-use super::*;
+mod edge {
+    use super::super::*;
 
-#[tokio::test]
-async fn rejects_zero_pool_size() {
-    let mut config = crate::test_support::oracle_config();
-    config.max_connections = 0;
-    assert!(matches!(
-        Database::new(&config).await,
-        Err(crate::Error::OracleDatabaseError(_))
-    ));
+    #[tokio::test]
+    async fn rejects_zero_pool_size() {
+        let mut config = crate::test_support::oracle_config();
+        config.max_connections = 0;
+        let result = Database::new(&config).await;
+
+        // The Oracle pool rejects a zero connection limit.
+        assert!(matches!(result, Err(crate::Error::OracleDatabaseError(_))));
+    }
 }
 
-#[tokio::test]
-#[ignore = "requires a running Oracle database"]
-async fn connects_to_database() -> Result<()> {
-    let db = Database::new(&crate::test_support::oracle_config()).await?;
-    let value = db
-        .interact(|pool| {
-            let conn = pool.acquire()?;
-            let row = conn.query_row("SELECT 1 FROM DUAL", &[])?;
-            Ok(row.get::<i64>(0)?)
-        })
-        .await?;
-    assert_eq!(value, 1);
-    Ok(())
-}
-
-mod sample {
+mod contract {
     use oracledb::{Connection, OracleTimestamp};
 
-    use super::*;
+    use super::super::*;
+
+    #[tokio::test]
+    #[ignore = "requires a running Oracle database"]
+    async fn connects_to_database() -> Result<()> {
+        let db = Database::new(&crate::test_support::oracle_config()).await?;
+        let value = db
+            .interact(|pool| {
+                let conn = pool.acquire()?;
+                let row = conn.query_row("SELECT 1 FROM DUAL", &[])?;
+                Ok(row.get::<i64>(0)?)
+            })
+            .await?;
+        // A pooled Oracle connection can execute a query and return its value.
+        assert_eq!(value, 1);
+        Ok(())
+    }
 
     fn setup(conn: &Connection) -> Result<()> {
         conn.execute(
@@ -63,7 +66,7 @@ mod sample {
         use super::{Connection, OracleTimestamp};
         use crate::Result;
 
-        fn from_oracle(value: OracleTimestamp) -> anyhow::Result<jiff::Timestamp> {
+        pub(super) fn from_oracle(value: OracleTimestamp) -> anyhow::Result<jiff::Timestamp> {
             let datetime = jiff::civil::DateTime::new(
                 value.year(),
                 value.month().try_into()?,
@@ -76,7 +79,7 @@ mod sample {
             Ok(jiff::tz::offset(0).to_timestamp(datetime)?)
         }
 
-        fn to_oracle(value: jiff::Timestamp) -> OracleTimestamp {
+        pub(super) fn to_oracle(value: jiff::Timestamp) -> OracleTimestamp {
             let datetime = jiff::tz::offset(0).to_datetime(value);
             OracleTimestamp::new_timestamp(
                 datetime.year(),
@@ -87,17 +90,6 @@ mod sample {
                 datetime.second() as u8,
                 datetime.subsec_nanosecond() as u32,
             )
-        }
-
-        #[test]
-        fn oracle_timestamp_round_trips_utc_with_nanoseconds() {
-            let timestamp: jiff::Timestamp = "2024-01-01T12:34:56.123456789Z".parse().unwrap();
-            let oracle = to_oracle(timestamp);
-
-            // 시간대 없는 Oracle 값은 UTC 구성 요소로 읽는다.
-            assert_eq!(oracle.hour(), 12);
-            assert_eq!(oracle.nanoseconds(), 123_456_789);
-            assert_eq!(from_oracle(oracle).unwrap(), timestamp);
         }
 
         pub fn find_by_id(conn: &Connection, id: i64) -> Result<Option<Sample>> {
@@ -139,14 +131,15 @@ mod sample {
         }
     }
 
-    fn sample() -> entity::Sample {
-        let time = jiff::Timestamp::from_second(1_704_067_200).unwrap();
-        entity::Sample {
-            id: 1,
-            name: "sample".into(),
-            created_at: time,
-            updated_at: time,
-        }
+    #[test]
+    fn oracle_timestamp_round_trips_utc_with_nanoseconds() {
+        let timestamp: jiff::Timestamp = "2024-01-01T12:34:56.123456789Z".parse().unwrap();
+        let oracle = repository::to_oracle(timestamp);
+
+        // 시간대 없는 Oracle 값은 UTC 구성 요소로 읽는다.
+        assert_eq!(oracle.hour(), 12);
+        assert_eq!(oracle.nanoseconds(), 123_456_789);
+        assert_eq!(repository::from_oracle(oracle).unwrap(), timestamp);
     }
 
     #[tokio::test]
@@ -156,12 +149,20 @@ mod sample {
         db.interact(|pool| {
             let conn = pool.acquire()?;
             setup(&conn)?;
-            let mut sample = sample();
+            let timestamp = jiff::Timestamp::from_second(1_704_067_200).unwrap();
+            let mut sample = entity::Sample {
+                id: 1,
+                name: "sample".into(),
+                created_at: timestamp,
+                updated_at: timestamp,
+            };
 
             // Insert and commit, then verify the record remains visible.
             repository::insert(&conn, &sample)?;
             conn.commit()?;
             let stored = repository::find_by_id(&conn, sample.id)?;
+
+            // The committed record remains visible on the connection.
             assert_eq!(stored.as_ref(), Some(&sample));
 
             // Update and roll back, then verify the committed record is
@@ -169,9 +170,13 @@ mod sample {
             sample.name = "rolled back".into();
             repository::update(&conn, &sample)?;
             let changed = repository::find_by_id(&conn, sample.id)?;
+
+            // The pending update is visible before rollback.
             assert_eq!(changed.as_ref(), Some(&sample));
             conn.rollback()?;
             let after_rollback = repository::find_by_id(&conn, sample.id)?;
+
+            // Rollback restores the previously committed record.
             assert_eq!(after_rollback, stored);
             teardown(&conn)
         })

@@ -73,34 +73,44 @@ impl super::PasswordHasher for Hasher {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::hash::PasswordHasher;
+    mod contract {
+        use super::super::*;
+        use crate::hash::PasswordHasher;
 
-    #[test]
-    fn hashes_and_verifies_using_stored_parameters() {
-        let hasher = Hasher::new(&Config {
-            memory_kib: 32,
-            iterations: 2,
-            parallelism: 1,
-            output_len: 32,
-        })
-        .unwrap();
-        let hash = hasher.hash("password").unwrap();
-        assert_ne!(hash, hasher.hash("password").unwrap());
-        let verifier = Hasher::new(&Config::default()).unwrap();
-        assert!(verifier.verify("password", &hash).unwrap());
-        assert!(!verifier.verify("wrong", &hash).unwrap());
-        assert!(verifier.verify("password", "invalid").is_err());
+        #[test]
+        fn hashes_and_verifies_using_stored_parameters() {
+            let hasher = Hasher::new(&Config {
+                memory_kib: 32,
+                iterations: 2,
+                parallelism: 1,
+                output_len: 32,
+            })
+            .unwrap();
+            let hash = hasher.hash("password").unwrap();
+            // Repeated hashes use different salts.
+            assert_ne!(hash, hasher.hash("password").unwrap());
+            let verifier = Hasher::new(&Config::default()).unwrap();
+            // The stored parameters verify the right password and reject
+            // incorrect inputs.
+            assert!(verifier.verify("password", &hash).unwrap());
+            assert!(!verifier.verify("wrong", &hash).unwrap());
+            assert!(verifier.verify("password", "invalid").is_err());
+        }
     }
 
-    #[test]
-    fn rejects_invalid_parameters() {
-        assert!(
-            Hasher::new(&Config {
-                output_len: 0,
-                ..Config::default()
-            })
-            .is_err()
-        );
+    mod edge {
+        use super::super::*;
+
+        #[test]
+        fn rejects_invalid_parameters() {
+            // Zero parameters are rejected at construction.
+            assert!(
+                Hasher::new(&Config {
+                    output_len: 0,
+                    ..Config::default()
+                })
+                .is_err()
+            );
+        }
     }
 }

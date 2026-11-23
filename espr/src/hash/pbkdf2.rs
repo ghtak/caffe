@@ -89,49 +89,59 @@ impl super::PasswordHasher for Hasher {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::hash::PasswordHasher;
+    mod contract {
+        use super::super::*;
+        use crate::hash::PasswordHasher;
 
-    #[test]
-    fn hashes_and_verifies_using_stored_parameters() {
-        let hasher = Hasher::new(&Config {
-            iterations: 10,
-            output_len: 24,
-        })
-        .unwrap();
-        let hash = hasher.hash("password").unwrap();
-        assert_ne!(hash, hasher.hash("password").unwrap());
-        let verifier = Hasher::new(&Config::default()).unwrap();
-        assert!(verifier.verify("password", &hash).unwrap());
-        assert!(!verifier.verify("wrong", &hash).unwrap());
-        assert!(verifier.verify("password", "invalid").is_err());
-        assert!(
-            verifier
-                .verify("password", &hash.replace("i=10", "i=0"))
-                .is_err()
-        );
-        assert!(
-            verifier
-                .verify("password", &hash.replace("pbkdf2-sha256", "pbkdf2-sha512"))
-                .is_err()
-        );
+        #[test]
+        fn hashes_and_verifies_using_stored_parameters() {
+            let hasher = Hasher::new(&Config {
+                iterations: 10,
+                output_len: 24,
+            })
+            .unwrap();
+            let hash = hasher.hash("password").unwrap();
+            // Repeated hashes use different salts.
+            assert_ne!(hash, hasher.hash("password").unwrap());
+            let verifier = Hasher::new(&Config::default()).unwrap();
+            // The stored parameters verify the right password and reject
+            // incorrect inputs.
+            assert!(verifier.verify("password", &hash).unwrap());
+            assert!(!verifier.verify("wrong", &hash).unwrap());
+            assert!(verifier.verify("password", "invalid").is_err());
+            assert!(
+                verifier
+                    .verify("password", &hash.replace("i=10", "i=0"))
+                    .is_err()
+            );
+            assert!(
+                verifier
+                    .verify("password", &hash.replace("pbkdf2-sha256", "pbkdf2-sha512"))
+                    .is_err()
+            );
+        }
     }
 
-    #[test]
-    fn rejects_invalid_parameters() {
-        assert!(
-            Hasher::new(&Config {
-                iterations: 0,
-                ..Config::default()
-            })
-            .is_err()
-        );
-        assert!(
-            Hasher::new(&Config {
-                output_len: 0,
-                ..Config::default()
-            })
-            .is_err()
-        );
+    mod edge {
+        use super::super::*;
+
+        #[test]
+        fn rejects_invalid_parameters() {
+            // Zero parameters are rejected at construction.
+            assert!(
+                Hasher::new(&Config {
+                    iterations: 0,
+                    ..Config::default()
+                })
+                .is_err()
+            );
+            assert!(
+                Hasher::new(&Config {
+                    output_len: 0,
+                    ..Config::default()
+                })
+                .is_err()
+            );
+        }
     }
 }

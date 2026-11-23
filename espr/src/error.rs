@@ -40,23 +40,26 @@ pub type Result<R> = std::result::Result<R, Error>;
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    mod contract {
+        use super::super::*;
 
-    #[test]
-    fn anyhow_error_converts_with_context() {
-        fn fallible_operation() -> anyhow::Result<()> {
-            Err(anyhow::anyhow!("root cause").context("operation failed"))
+        #[test]
+        fn anyhow_error_converts_with_context() {
+            fn fallible_operation() -> anyhow::Result<()> {
+                Err(anyhow::anyhow!("root cause").context("operation failed"))
+            }
+
+            fn operation() -> Result<()> {
+                fallible_operation()?;
+                Ok(())
+            }
+
+            // Conversion keeps both the outer context and the root cause.
+            let Error::Internal(error) = operation().unwrap_err() else {
+                panic!("expected an internal error");
+            };
+            let chain: Vec<_> = error.chain().map(ToString::to_string).collect();
+            assert_eq!(chain, ["operation failed", "root cause"]);
         }
-
-        fn operation() -> super::Result<()> {
-            fallible_operation()?;
-            Ok(())
-        }
-
-        let Error::Internal(error) = operation().unwrap_err() else {
-            panic!("expected an internal error");
-        };
-        let chain: Vec<_> = error.chain().map(ToString::to_string).collect();
-        assert_eq!(chain, ["operation failed", "root cause"]);
     }
 }
