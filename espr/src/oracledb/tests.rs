@@ -11,6 +11,7 @@ async fn rejects_zero_pool_size() {
 }
 
 #[tokio::test]
+#[ignore = "requires a running Oracle database"]
 async fn connects_to_database() -> Result<()> {
     let db = Database::new(&crate::test_support::oracle_config()).await?;
     let value = db
@@ -149,6 +150,7 @@ mod sample {
     }
 
     #[tokio::test]
+    #[ignore = "requires a running Oracle database"]
     async fn transaction_commit_and_rollback() -> Result<()> {
         let db = Database::new(&crate::test_support::oracle_config()).await?;
         db.interact(|pool| {

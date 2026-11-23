@@ -12,6 +12,9 @@ pub(crate) fn database_config(max_connections: u32) -> crate::sqlxdb::Config {
     }
 }
 
+/// Oracle 컨테이너의 기동 및 리소스 비용 때문에 `testenv/docker-compose.yml`에서
+/// Oracle 서비스는 기본 비활성화되어 있다. 통합 테스트는 별도로 준비한 서버에
+/// 맞게 `TESTENV_ORACLE_*`를 설정한 뒤 `cargo test -p espr oracledb::tests -- --ignored`로 실행한다.
 pub(crate) fn oracle_config() -> crate::oracledb::Config {
     crate::oracledb::Config {
         username: std::env::var("TESTENV_ORACLE_USERNAME").unwrap_or_else(|_| "test".into()),
