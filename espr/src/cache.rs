@@ -165,10 +165,27 @@ mod tests {
         async fn set_with_ttl_returns_value_before_expiry_and_none_after() -> Result<()> {
             let cache = Cache::new(&crate::test_support::cache_config()).await?;
             let key = format!("espr:test:{}:expiry", crate::test_support::unique_id());
+            let ttl = Duration::from_secs(2);
 
-            cache
-                .set_with_ttl(&key, b"value", Duration::from_secs(2))
-                .await?;
+            let started = std::time::Instant::now();
+            cache.set_with_ttl(&key, b"value", ttl).await?;
+            let remaining_ms: i64 = {
+                let mut conn = cache.pool.get().await?;
+                redis::cmd("PTTL").arg(&key).query_async(&mut conn).await?
+            };
+            let elapsed = started.elapsed();
+            let minimum_ttl = ttl.saturating_sub(elapsed + Duration::from_millis(1));
+            let remaining = Duration::from_millis(
+                u64::try_from(remaining_ms).expect("Redis should report a remaining TTL"),
+            );
+
+            // Redis stores the requested TTL, allowing for elapsed time and
+            // millisecond rounding.
+            assert!(
+                !remaining.is_zero() && (minimum_ttl..=ttl).contains(&remaining),
+                "expected a positive remaining TTL between {minimum_ttl:?} and {ttl:?}, got {remaining:?}"
+            );
+
             let stored: Option<Vec<u8>> = cache.get(&key).await?;
 
             // Before the TTL elapses, the original value is readable.
