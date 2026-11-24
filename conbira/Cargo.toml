@@ -21,6 +21,7 @@ jiff-sqlx = { version = "0.2", features = ["postgres"] }
 dotenvy = "0.15"
 espr = { path = "../espr" }
 espr-derive = { path = "../espr-derive" }
+openidconnect = { version = "4.1", features = ["timing-resistant-secret-traits"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0"
 rand_core = { version = "0.6", features = ["getrandom", "std"] }

@@ -8,6 +8,7 @@ pub mod service;
 pub struct Config {
     pub refresh_token: service::refresh_token::Config,
     pub password_hash: service::password_hash::Config,
+    pub google_oidc: Option<service::google_oidc::Config>,
 }
 
 mod feature;

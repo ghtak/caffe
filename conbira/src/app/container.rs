@@ -1,5 +1,6 @@
 use espr::{cache, sqlxdb};
 
+use crate::app::auth::service::google_oidc::GoogleOidcService;
 use crate::config::Config;
 use crate::error::ResultExt;
 
@@ -18,6 +19,7 @@ pub struct Container {
     pub dummy_password_hash: String,
     pub jwt_token_service: espr::jwt::TokenService,
     pub refresh_token_service: crate::app::auth::service::refresh_token::RefreshTokenService,
+    pub google_oidc_service: Option<GoogleOidcService>,
 }
 
 impl Container {
@@ -54,6 +56,10 @@ impl Container {
             crate::app::auth::service::refresh_token::RefreshTokenService::new(
                 config.auth.refresh_token.clone(),
             );
+        let google_oidc_service = match &config.auth.google_oidc {
+            Some(config) => Some(GoogleOidcService::new(config).await?),
+            None => None,
+        };
 
         Ok(Self {
             config: config.clone(),
@@ -64,6 +70,7 @@ impl Container {
             dummy_password_hash,
             jwt_token_service,
             refresh_token_service,
+            google_oidc_service,
         })
     }
 }
