@@ -28,3 +28,5 @@ var/
 *.pem
 
 .env
+
+output/
