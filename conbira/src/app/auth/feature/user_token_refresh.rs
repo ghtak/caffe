@@ -74,19 +74,23 @@ pub mod usecase {
             return Err(unauthorized());
         }
         let now = jiff::Timestamp::now();
+        if record.absolute_expires_at <= now {
+            return Err(unauthorized());
+        }
         let remaining = record.expires_at.duration_since(now);
         let renew = renewal_required(remaining).ok_or_else(unauthorized)?;
-        let issued = if renew {
-            // 기존 토큰은 유지하고 신규 토큰을 전달
+        if renew {
             refresh_token_service
-                .issue(&mut handle, user.id)
-                .await?
-                .token
-        } else {
-            refresh_token.to_owned()
-        };
-        let tokens =
-            login_tokens::issue_tokens(&mut handle, jwt_token_service, &user, issued).await?;
+                .extend_expiration(&mut handle, &record, now)
+                .await?;
+        }
+        let tokens = login_tokens::issue_tokens(
+            &mut handle,
+            jwt_token_service,
+            &user,
+            refresh_token.to_owned(),
+        )
+        .await?;
         tx.commit()
             .await
             .map_err_internal("Failed to commit refresh", crate::here!())?;

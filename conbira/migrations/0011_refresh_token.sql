@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS conbira_auth_refresh_tokens (
     user_id BIGINT NOT NULL REFERENCES conbira_auth_users (id),
     token_hash TEXT NOT NULL UNIQUE,
     expires_at TIMESTAMPTZ NOT NULL,
+    absolute_expires_at TIMESTAMPTZ NOT NULL,
     revoked_at TIMESTAMPTZ,
     revoke_reason TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -19,6 +20,7 @@ COMMENT ON COLUMN conbira_auth_refresh_tokens.id IS '갱신 토큰 ID';
 COMMENT ON COLUMN conbira_auth_refresh_tokens.user_id IS '토큰이 발급된 사용자 ID';
 COMMENT ON COLUMN conbira_auth_refresh_tokens.token_hash IS '갱신 토큰의 해시';
 COMMENT ON COLUMN conbira_auth_refresh_tokens.expires_at IS '개별 갱신 토큰의 만료 시각';
+COMMENT ON COLUMN conbira_auth_refresh_tokens.absolute_expires_at IS '갱신 토큰의 절대 만료 시각';
 COMMENT ON COLUMN conbira_auth_refresh_tokens.revoked_at IS '토큰이 취소된 시각';
 COMMENT ON COLUMN conbira_auth_refresh_tokens.revoke_reason IS '토큰 취소 사유';
 COMMENT ON COLUMN conbira_auth_refresh_tokens.created_at IS '토큰 발급 시각';

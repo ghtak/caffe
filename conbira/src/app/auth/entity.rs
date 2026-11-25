@@ -55,6 +55,7 @@ pub struct RefreshToken {
     pub user_id: i64,
     pub token_hash: String,
     pub expires_at: jiff::Timestamp,
+    pub absolute_expires_at: jiff::Timestamp,
     pub revoked_at: Option<jiff::Timestamp>,
     pub revoke_reason: Option<String>,
     pub created_at: jiff::Timestamp,

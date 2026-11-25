@@ -145,7 +145,10 @@ mod tests {
             drop(connection);
             let jwt = crate::test_support::jwt_service("test", "test", 900)?;
             let refresh = auth::service::refresh_token::RefreshTokenService::new(
-                auth::service::refresh_token::Config { ttl_seconds: 3600 },
+                auth::service::refresh_token::Config {
+                    ttl_seconds: 604800,
+                    absolute_ttl_seconds: 2592000,
+                },
             );
             let hasher = Arc::new(espr::hash::argon2::Hasher::new(&Default::default())?);
             let password_service =
@@ -245,8 +248,7 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn refresh_issues_replacement_only_near_expiration_and_keeps_original_valid()
-        -> anyhow::Result<()> {
+        async fn refresh_extends_same_token_only_near_expiration() -> anyhow::Result<()> {
             let fixture = LoginFixture::new().await?;
             fixture.create_user(UserStatus::Active).await?;
             let tokens = execute(
@@ -274,20 +276,74 @@ mod tests {
             };
             assert_eq!(refresh().await?.refresh_token, tokens.refresh_token);
             let mut conn = fixture.db.conn().await?;
+            let remaining: f64 = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM (expires_at - CURRENT_TIMESTAMP))::float8 FROM conbira_auth_refresh_tokens")
+                .fetch_one(conn.handle().conn()).await?;
+            assert!(remaining > 3.9 * 86400.0 && remaining <= 4.0 * 86400.0);
             sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP + INTERVAL '3 days'").execute(conn.handle().conn()).await?;
             drop(conn);
             let first = refresh().await?.refresh_token;
             let second = refresh().await?.refresh_token;
-            assert_ne!(first, tokens.refresh_token);
-            assert_ne!(second, tokens.refresh_token);
-            assert_ne!(first, second);
-            assert_eq!(fixture.refresh_token_count().await?, 3);
+            assert_eq!(first, tokens.refresh_token);
+            assert_eq!(second, tokens.refresh_token);
+            assert_eq!(fixture.refresh_token_count().await?, 1);
+            let mut conn = fixture.db.conn().await?;
+            let remaining: f64 = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM (expires_at - CURRENT_TIMESTAMP))::float8 FROM conbira_auth_refresh_tokens")
+                .fetch_one(conn.handle().conn()).await?;
+            assert!(remaining > 6.0 * 86400.0);
+            drop(conn);
             crate::app::auth::feature::user_logout::usecase::execute(
                 &fixture.db,
                 &fixture.refresh,
                 &tokens.refresh_token,
             )
             .await?;
+            assert_eq!(
+                refresh().await.err().unwrap().code,
+                crate::Code::Unauthorized
+            );
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn refresh_is_capped_at_absolute_expiration_and_rejected_afterward()
+        -> anyhow::Result<()> {
+            let fixture = LoginFixture::new().await?;
+            fixture.create_user(UserStatus::Active).await?;
+            let tokens = execute(
+                &fixture.db,
+                &fixture.password_service,
+                &fixture.dummy_hash,
+                &fixture.jwt,
+                &fixture.refresh,
+                Command {
+                    email: "alice@example.com".into(),
+                    password: "secret".into(),
+                },
+            )
+            .await?;
+            let mut conn = fixture.db.conn().await?;
+            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP + INTERVAL '1 day', absolute_expires_at = CURRENT_TIMESTAMP + INTERVAL '2 days'")
+                .execute(conn.handle().conn()).await?;
+            drop(conn);
+            let refresh = || {
+                crate::app::auth::feature::user_token_refresh::usecase::execute(
+                    &fixture.db,
+                    &fixture.jwt,
+                    &fixture.refresh,
+                    &tokens.refresh_token,
+                )
+            };
+            assert_eq!(refresh().await?.refresh_token, tokens.refresh_token);
+            let mut conn = fixture.db.conn().await?;
+            let capped: bool = sqlx::query_scalar(
+                "SELECT expires_at = absolute_expires_at FROM conbira_auth_refresh_tokens",
+            )
+            .fetch_one(conn.handle().conn())
+            .await?;
+            assert!(capped);
+            sqlx::query("UPDATE conbira_auth_refresh_tokens SET absolute_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second', expires_at = CURRENT_TIMESTAMP + INTERVAL '1 day'")
+                .execute(conn.handle().conn()).await?;
+            drop(conn);
             assert_eq!(
                 refresh().await.err().unwrap().code,
                 crate::Code::Unauthorized

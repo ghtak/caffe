@@ -142,8 +142,7 @@ mod tests {
                 (UserStatus::Withdrawn, "withdrawn"),
             ] {
                 let map: Map<String, Value> =
-                    UserClaims::new(42, status, vec!["rbac.read".into()])
-                        .try_into()?;
+                    UserClaims::new(42, status, vec!["rbac.read".into()]).try_into()?;
                 // 토큰에 사용자 ID, 상태와 권한 코드가 포함된다.
                 assert_eq!(
                     Value::Object(map.clone()),
