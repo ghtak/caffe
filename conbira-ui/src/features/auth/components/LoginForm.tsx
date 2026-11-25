@@ -62,19 +62,23 @@ export function LoginForm({ onLogin, loginSignal, cancel }: {
 
   return (
     <form className="w-full" onSubmit={submit} noValidate>
-      <Card className="gap-5 shadow-none">
-        <CardHeader><h1 className="text-xl font-semibold">로그인</h1></CardHeader>
-        <CardContent className="grid gap-4">
+      <Card className="gap-7 py-8 shadow-lg shadow-foreground/5 sm:py-10">
+        <CardHeader className="items-center gap-3 text-center">
+          <h1 className="text-3xl font-bold tracking-tight">로그인</h1>
+          <span aria-hidden="true" className="h-1 w-12 rounded-full bg-primary/60" />
+          <p className="text-sm leading-6 text-muted-foreground">Conbira에 오신 것을 환영합니다.<br />계정으로 로그인하여 서비스를 이용하세요.</p>
+        </CardHeader>
+        <CardContent className="grid gap-5">
           <div className="grid gap-2">
             <label className="text-sm font-medium" htmlFor="login-email">이메일</label>
-            <Input id="login-email" className="h-11" type="email" autoComplete="username"
+            <Input id="login-email" className="h-12" placeholder="이메일을 입력하세요." type="email" autoComplete="username"
               aria-invalid={!!errors.email} aria-describedby={errors.email ? 'login-email-error' : undefined}
               required {...register('email')} />
             {errors.email && <p id="login-email-error" className="text-sm text-destructive" role="alert">{errors.email.message}</p>}
           </div>
           <div className="grid gap-2">
             <label className="text-sm font-medium" htmlFor="login-password">비밀번호</label>
-            <Input id="login-password" className="h-11" type="password" autoComplete="current-password"
+            <Input id="login-password" className="h-12" placeholder="비밀번호를 입력하세요." type="password" autoComplete="current-password"
               aria-invalid={!!errors.password} aria-describedby={errors.password ? 'login-password-error' : undefined}
               required {...register('password')} />
             {errors.password && <p id="login-password-error" className="text-sm text-destructive" role="alert">{errors.password.message}</p>}
@@ -83,14 +87,17 @@ export function LoginForm({ onLogin, loginSignal, cancel }: {
             <Alert variant="destructive"><AlertDescription>{errors.root.message}</AlertDescription></Alert>
           )}
         </CardContent>
-        <CardFooter className="flex-wrap justify-end gap-2">
-          <Button type="button" variant="outline" disabled={googlePending || isSubmitting} onClick={startGoogle}>
-            {googlePending ? 'Google 로그인 중…' : 'Google로 로그인'}
-          </Button>
-          {cancel}
-          <Button type="submit" disabled={isSubmitting || googlePending}>
+        <CardFooter className="grid gap-5">
+          <Button className="h-12 w-full" type="submit" disabled={isSubmitting || googlePending}>
             {isSubmitting ? '로그인 중…' : '로그인'}
           </Button>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground" aria-hidden="true">
+            <span className="h-px flex-1 bg-border" />또는<span className="h-px flex-1 bg-border" />
+          </div>
+          <Button className="h-12 w-full" type="button" variant="outline" disabled={googlePending || isSubmitting} onClick={startGoogle}>
+            {googlePending ? 'Google 로그인 중…' : 'Google로 로그인'}
+          </Button>
+          <div className="text-center">{cancel}</div>
         </CardFooter>
       </Card>
     </form>

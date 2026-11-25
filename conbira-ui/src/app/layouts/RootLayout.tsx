@@ -18,10 +18,10 @@ export function RootLayout() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl p-3 sm:p-6">
-      <Card className="gap-0 overflow-hidden py-0 shadow-none">
-        <header className="flex min-h-16 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b px-4 py-2 sm:px-6">
-          <Button asChild variant="ghost" className="px-0 text-base font-semibold hover:bg-transparent dark:hover:bg-transparent">
+    <div className="min-h-screen">
+      <Card className="min-h-screen gap-0 overflow-hidden rounded-none border-0 bg-background py-0 shadow-none">
+        <header className="flex min-h-18 flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b bg-card px-5 py-2 sm:px-8">
+          <Button asChild variant="ghost" className="px-0 text-xl font-bold tracking-tight hover:bg-transparent dark:hover:bg-transparent">
             <Link to="/" aria-label="Conbira 홈">Conbira</Link>
           </Button>
           <nav aria-label="상단 메뉴" className="ml-auto flex flex-wrap items-center justify-end gap-2">

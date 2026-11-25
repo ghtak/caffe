@@ -34,22 +34,22 @@ export function CatalogList({ catalog, token }: { catalog: Catalog; token: strin
             등록된 {label}이 없습니다.
           </p>
         ) : (
-          <div className="overflow-hidden rounded-lg border">
+          <div className="overflow-hidden rounded-lg border bg-card">
             <Table className="caption-top wrap-anywhere">
-              <TableCaption className="m-0 border-b px-3 py-2 text-left">{label} 목록</TableCaption>
+              <TableCaption className="m-0 border-b px-5 py-4 text-left font-semibold text-foreground">{label} 목록</TableCaption>
               <TableHeader className="bg-muted/60">
                 <TableRow>
-                  <TableHead className="px-3" scope="col">코드</TableHead>
-                  <TableHead className="px-3" scope="col">이름</TableHead>
-                  <TableHead className="px-3" scope="col">설명</TableHead>
+                  <TableHead className="h-12 px-5" scope="col">코드</TableHead>
+                  <TableHead className="h-12 px-5" scope="col">이름</TableHead>
+                  <TableHead className="h-12 px-5" scope="col">설명</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {list.data.map(({ code, name, description }) => (
                   <TableRow key={code}>
-                    <TableCell className="px-3 whitespace-normal"><code>{code}</code></TableCell>
-                    <TableCell className="px-3 whitespace-normal">{name}</TableCell>
-                    <TableCell className="px-3 whitespace-normal text-muted-foreground">{description}</TableCell>
+                    <TableCell className="px-5 py-4 whitespace-normal"><code>{code}</code></TableCell>
+                    <TableCell className="px-5 py-4 font-semibold whitespace-normal">{name}</TableCell>
+                    <TableCell className="px-5 py-4 whitespace-normal text-muted-foreground">{description}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
