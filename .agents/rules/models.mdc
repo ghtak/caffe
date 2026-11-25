@@ -11,6 +11,7 @@ alwaysApply: false
 {
   "general": { "model": "gpt-6.2-sol", "reasoning_effort": "medium" },
   "commit": { "model": "gpt-6.1-terra", "reasoning_effort": "medium" },
-  "review": { "model": "gpt-6.1-terra", "reasoning_effort": "medium" }
+  "review": { "model": "gpt-6.2-sol", "reasoning_effort": "medium" },
+  "impl": { "model": "gpt-6.1-terra", "reasoning_effort": "medium" }
 }
 ```
