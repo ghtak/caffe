@@ -66,12 +66,12 @@ pub mod usecase {
         pub page_size: u32,
     }
 
-    pub struct SearchResult {
+    pub struct Output {
         pub items: Vec<Sample>,
         pub has_next: bool,
     }
 
-    pub async fn execute(db: &Database, query: Query) -> crate::Result<SearchResult> {
+    pub async fn execute(db: &Database, query: Query) -> crate::Result<Output> {
         if query.page == 0 || !(1..=100).contains(&query.page_size) {
             return Err(
                 Error::new(Code::InvalidRequest, "Invalid page or page size").at(crate::here!()),
@@ -90,6 +90,6 @@ pub mod usecase {
         .await?;
         let has_next = items.len() > query.page_size as usize;
         items.truncate(query.page_size as usize);
-        Ok(SearchResult { items, has_next })
+        Ok(Output { items, has_next })
     }
 }

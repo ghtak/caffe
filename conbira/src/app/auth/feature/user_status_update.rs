@@ -20,19 +20,10 @@ pub mod endpoint {
         ApiPath(id): ApiPath<i64>,
         ApiJson(request): ApiJson<RequestBody>,
     ) -> ApiResult<()> {
-        if !claims.has_permission("auth.user.manage") {
-            return Err(
-                crate::Error::new(crate::Code::Forbidden, "Permission denied")
-                    .at(crate::here!())
-                    .into(),
-            );
-        }
+        claims.require_permission("auth.user.manage", crate::here!())?;
         super::usecase::execute(
             &container.db,
-            super::usecase::Command {
-                id,
-                status: request.status,
-            },
+            super::usecase::Command::new(id, request.status),
         )
         .await?;
         Ok(ApiResponse::empty())
@@ -48,6 +39,10 @@ pub mod usecase {
     pub struct Command {
         pub id: i64,
         pub status: UserStatus,
+    }
+
+    impl Command {
+        pub fn new(id: i64, status: UserStatus) -> Self { Self { id, status } }
     }
 
     pub async fn execute(db: &Database, command: Command) -> crate::Result<()> {

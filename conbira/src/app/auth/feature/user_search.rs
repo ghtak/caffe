@@ -1,4 +1,5 @@
 pub mod endpoint {
+    use std::num::NonZeroU32;
     use std::sync::Arc;
 
     use axum::extract::State;
@@ -8,9 +9,10 @@ pub mod endpoint {
     use crate::app::auth::entity::UserStatus;
     use crate::app::http::extract::ApiQuery;
     use crate::app::http::response::ApiResult;
+    use crate::{Code, Error};
 
     #[derive(serde::Serialize)]
-    pub struct UserSearchItem {
+    pub struct UserDto {
         pub id: i64,
         pub nickname: String,
         pub emails: Vec<String>,
@@ -29,7 +31,7 @@ pub mod endpoint {
 
     #[derive(serde::Serialize)]
     pub struct ResponseData {
-        pub items: Vec<UserSearchItem>,
+        pub items: Vec<UserDto>,
         pub page: u32,
         pub page_size: u32,
         pub has_next: bool,
@@ -40,15 +42,21 @@ pub mod endpoint {
         claims: UserClaims,
         ApiQuery(request): ApiQuery<RequestQuery>,
     ) -> ApiResult<ResponseData> {
-        if !claims.has_permission("auth.user.read") {
+        claims.require_permission("auth.user.read", crate::here!())?;
+
+        let page_raw = request.page.unwrap_or(1);
+        let page_size = request.page_size.unwrap_or(20);
+        let page = NonZeroU32::new(page_raw).ok_or_else(|| {
+            Error::new(Code::InvalidRequest, "Invalid page or page size").at(crate::here!())
+        })?;
+        if !(1..=100).contains(&page_size) {
             return Err(
-                crate::Error::new(crate::Code::Forbidden, "Permission denied")
+                Error::new(Code::InvalidRequest, "Invalid page or page size")
                     .at(crate::here!())
                     .into(),
             );
         }
-        let page = request.page.unwrap_or(1);
-        let page_size = request.page_size.unwrap_or(20);
+
         let result = super::usecase::execute(
             &container.db,
             super::usecase::Query {
@@ -60,11 +68,12 @@ pub mod endpoint {
             },
         )
         .await?;
+
         Ok(ResponseData {
             items: result
                 .items
                 .into_iter()
-                .map(|user| UserSearchItem {
+                .map(|user| UserDto {
                     id: user.id,
                     nickname: user.nickname,
                     emails: user.emails,
@@ -72,7 +81,7 @@ pub mod endpoint {
                     created_at: user.created_at,
                 })
                 .collect(),
-            page,
+            page: page.get(),
             page_size,
             has_next: result.has_next,
         }
@@ -81,17 +90,18 @@ pub mod endpoint {
 }
 
 pub mod usecase {
+    use std::num::NonZeroU32;
+
     use crate::app::DatabaseExt as _;
     use crate::app::auth::entity::UserStatus;
     use crate::app::auth::repository::user;
     use crate::app::container::db::Database;
-    use crate::{Code, Error};
 
     pub struct Query {
         pub name: Option<String>,
         pub email: Option<String>,
         pub status: Option<UserStatus>,
-        pub page: u32,
+        pub page: NonZeroU32,
         pub page_size: u32,
     }
 
@@ -100,31 +110,20 @@ pub mod usecase {
         pub has_next: bool,
     }
 
+    fn normalize_filter(value: Option<&str>) -> Option<&str> {
+        value.map(str::trim).filter(|s| !s.is_empty())
+    }
+
     pub async fn execute(db: &Database, query: Query) -> crate::Result<Output> {
-        if query.page == 0 || !(1..=100).contains(&query.page_size) {
-            return Err(
-                Error::new(Code::InvalidRequest, "Invalid page or page size").at(crate::here!()),
-            );
-        }
         let mut connection = db.acquire_conn(crate::here!()).await?;
-        let name = query
-            .name
-            .as_deref()
-            .map(str::trim)
-            .filter(|name| !name.is_empty());
-        let email = query
-            .email
-            .as_deref()
-            .map(str::trim)
-            .filter(|email| !email.is_empty());
         let mut items = user::search(
             &mut connection.handle(),
             &user::Criteria {
-                name,
-                email,
+                name: normalize_filter(query.name.as_deref()),
+                email: normalize_filter(query.email.as_deref()),
                 status: query.status,
                 limit: i64::from(query.page_size) + 1,
-                offset: i64::from(query.page - 1) * i64::from(query.page_size),
+                offset: i64::from(query.page.get() - 1) * i64::from(query.page_size),
             },
         )
         .await?;
@@ -200,11 +199,35 @@ mod tests {
                     assert_eq!(users[1]["emails"], serde_json::json!([]));
                 }
             }
+
             let claims = serde_json::json!({"id": 42, "status": "active", "roles": ["admin"], "permissions": ["auth.user.read"]});
             let token = container
                 .jwt_token_service
                 .issue("42", claims.as_object().unwrap().clone())?
                 .token;
+
+            for invalid_query in [
+                "page=0",
+                "page_size=0",
+                "page_size=101",
+                "page=0&page_size=101",
+            ] {
+                let response = router
+                    .clone()
+                    .oneshot(
+                        Request::get(format!("/api/auth/users?{invalid_query}"))
+                            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                            .body(Body::empty())?,
+                    )
+                    .await?;
+                // 허용 범위를 벗어난 페이지 번호나 페이지 크기는 거부한다.
+                assert_eq!(
+                    response.status(),
+                    StatusCode::BAD_REQUEST,
+                    "expected 400 for query: {invalid_query}"
+                );
+            }
+
             for (query, expected, has_next) in [
                 ("name=s&status=registered&page=1&page_size=1", "first", true),
                 (
@@ -234,6 +257,7 @@ mod tests {
                 assert_eq!(body["data"]["items"][0]["nickname"], expected);
                 assert_eq!(body["data"]["has_next"], has_next);
             }
+
             let response = router
                 .clone()
                 .oneshot(
@@ -246,6 +270,7 @@ mod tests {
                 serde_json::from_slice(&to_bytes(response.into_body(), 4096).await?)?;
             // 일치하는 상태가 없으면 빈 목록을 반환한다.
             assert_eq!(body["data"]["items"], serde_json::json!([]));
+
             let response = router
                 .oneshot(
                     Request::get("/api/auth/users?email=OTHER%40EXAMPLE")
