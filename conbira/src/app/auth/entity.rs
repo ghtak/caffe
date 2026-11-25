@@ -21,6 +21,7 @@ pub struct UserInfo {
 #[sqlx(type_name = "text", rename_all = "lowercase")]
 pub enum Provider {
     Local,
+    Google,
 }
 
 #[derive(Debug, PartialEq, sqlx::FromRow)]

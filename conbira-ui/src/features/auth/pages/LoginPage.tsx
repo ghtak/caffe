@@ -30,7 +30,7 @@ export function LoginPage({ onLogin }: {
 
   return (
     <main className="grid min-h-90 grid-cols-[minmax(0,var(--container-sm))] place-content-center p-4">
-      <LoginForm onLogin={submit} cancel={
+      <LoginForm onLogin={submit} loginSignal={() => loginScope.current?.signal} cancel={
         <Button asChild variant="outline">
           <Link to="/" onClick={(event) => {
             if (!event.defaultPrevented && event.button === 0 &&

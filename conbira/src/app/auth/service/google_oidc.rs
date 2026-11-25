@@ -83,6 +83,10 @@ pub struct LoginState {
     pkce_verifier: PkceCodeVerifier,
 }
 
+impl LoginState {
+    pub(crate) fn value(&self) -> &str { self.csrf_token.secret() }
+}
+
 pub struct GoogleProfile {
     pub subject: String,
     pub email: String,
@@ -267,12 +271,15 @@ impl GoogleOidcService {
 }
 
 #[cfg(test)]
+pub(crate) use tests::service_with_key as test_service_with_key;
+
+#[cfg(test)]
 mod tests {
     use openidconnect::{AuthUrl, TokenUrl};
 
     use super::*;
 
-    fn service(
+    pub(crate) fn service(
         jwks_uri: &str,
         signing_algorithms: Vec<CoreJwsSigningAlgorithm>,
     ) -> GoogleOidcService {
@@ -286,7 +293,10 @@ mod tests {
         );
         let client = CoreClient::new(client_id, issuer.clone(), CoreJsonWebKeySet::default())
             .set_auth_uri(AuthUrl::new("https://example.com/authorize".into()).unwrap())
-            .set_token_uri(TokenUrl::new("http://127.0.0.1:0/token".into()).unwrap());
+            .set_token_uri(TokenUrl::new("http://127.0.0.1:0/token".into()).unwrap())
+            .set_redirect_uri(
+                RedirectUrl::new("https://example.com/login/google/callback".into()).unwrap(),
+            );
 
         GoogleOidcService {
             client,
@@ -296,6 +306,23 @@ mod tests {
             jwks_uri: JsonWebKeySetUrl::new(jwks_uri.into()).unwrap(),
             verifier: RwLock::new(Arc::new(verifier)),
         }
+    }
+
+    pub(crate) fn service_with_key(token_url: &str, keys: CoreJsonWebKeySet) -> GoogleOidcService {
+        let mut service = service(
+            "http://127.0.0.1:0/jwks",
+            vec![CoreJwsSigningAlgorithm::EdDsa],
+        );
+        service.verifier = RwLock::new(Arc::new(GoogleOidcService::token_verifier(
+            service.client.client_id(),
+            &service.issuer,
+            &service.signing_algorithms,
+            keys,
+        )));
+        service.client = service
+            .client
+            .set_token_uri(TokenUrl::new(token_url.into()).unwrap());
+        service
     }
 
     mod contract {

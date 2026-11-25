@@ -44,7 +44,7 @@ test.describe('contract', () => {
     await page.goto('/login')
     await page.getByLabel('이메일').fill(email)
     await page.getByLabel('비밀번호').fill(password)
-    await page.getByRole('button', { name: '로그인' }).click()
+    await page.getByRole('button', { name: '로그인', exact: true }).click()
     await page.getByRole('link', { name: '관리', exact: true }).click()
     await page.getByRole('navigation', { name: '관리 메뉴' }).getByRole('link', { name: '역할 관리' }).click()
     await expect(page).toHaveURL('/admin/roles')
@@ -90,7 +90,7 @@ test.describe('regression', () => {
     await page.getByRole('link', { name: '로그인' }).click()
     await page.getByLabel('이메일').fill('member@example.test')
     await page.getByLabel('비밀번호').fill('example-password')
-    await page.getByRole('button', { name: '로그인' }).click()
+    await page.getByRole('button', { name: '로그인', exact: true }).click()
 
     // 토큰을 저장할 수 없어도 현재 페이지에서 로그인 상태로 전환한다.
     await expect(page).toHaveURL('/')
@@ -103,7 +103,7 @@ test.describe('regression', () => {
     await page.getByRole('link', { name: '로그인' }).click()
     await page.getByLabel('이메일').fill('member@example.test')
     await page.getByLabel('비밀번호').fill('example-password')
-    await page.getByRole('button', { name: '로그인' }).click()
+    await page.getByRole('button', { name: '로그인', exact: true }).click()
     await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible()
     await page.reload()
 

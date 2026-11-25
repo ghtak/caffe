@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { createRootRouteWithContext, createRoute, createRouter, Navigate, type RouterHistory } from '@tanstack/react-router'
-import { LoginPage } from '@/features/auth'
+import { z } from 'zod'
+import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
 import { AdminCatalogPage, AdminHomePage, catalogOptions, type Catalog } from '@/features/rbac'
 import { AdminLayout } from '../layouts/AdminLayout'
@@ -43,6 +44,19 @@ const indexRoute = createRoute({
   component: HomePage,
 })
 const loginRoute = createRoute({ getParentRoute: () => rootRoute, path: '/login', component: LoginRoute })
+const googleCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/login/google/callback',
+  validateSearch: z.object({ code: z.string().optional().catch(undefined), state: z.string().optional().catch(undefined), error: z.string().optional().catch(undefined) }),
+  component: GoogleCallbackRoute,
+})
+
+function GoogleCallbackRoute() {
+  const search = googleCallbackRoute.useSearch()
+  const { signInGoogle } = useSession()
+  const navigate = googleCallbackRoute.useNavigate()
+  return <GoogleCallbackPage search={search} signIn={signInGoogle} clearUrl={() => void navigate({ search: {}, replace: true })} />
+}
 const adminRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin', component: AdminRoute })
 const adminIndexRoute = createRoute({
   getParentRoute: () => adminRoute,
@@ -62,7 +76,7 @@ const permissionsRoute = createRoute({
   component: () => <AdminCatalogRoute catalog="permissions" />,
 })
 const routeTree = rootRoute.addChildren([
-  indexRoute, loginRoute, adminRoute.addChildren([adminIndexRoute, rolesRoute, permissionsRoute]),
+  indexRoute, loginRoute, googleCallbackRoute, adminRoute.addChildren([adminIndexRoute, rolesRoute, permissionsRoute]),
 ])
 
 export function createAppRouter(queryClient: QueryClient, history?: RouterHistory) {

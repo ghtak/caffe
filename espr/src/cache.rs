@@ -79,6 +79,16 @@ impl Cache {
         Ok(redis::cmd("GET").arg(key).query_async(&mut conn).await?)
     }
 
+    /// Atomically removes a key and returns its value, if it still exists.
+    pub async fn take<K, V>(&self, key: K) -> Result<Option<V>>
+    where
+        K: ToRedisArgs + Send + Sync,
+        V: FromRedisValue,
+    {
+        let mut conn = self.pool.get().await?;
+        Ok(redis::cmd("GETDEL").arg(key).query_async(&mut conn).await?)
+    }
+
     /// Stores a value without an expiration time.
     pub async fn set<K, V>(&self, key: K, value: V) -> Result<()>
     where

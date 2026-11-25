@@ -11,6 +11,16 @@ pub struct NewIdentity {
     pub password_hash: Option<String>,
 }
 
+/// 같은 subject의 식별자 생성을 트랜잭션 종료까지 직렬화한다.
+pub async fn lock_subject(handle: &mut Handle<'_>, subject: &str) -> Result<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+        .bind(subject)
+        .execute(handle.conn())
+        .await
+        .map_err_internal("Failed to lock identity subject", crate::here!())?;
+    Ok(())
+}
+
 pub async fn insert(handle: &mut Handle<'_>, identity: &NewIdentity) -> Result<Identity> {
     sqlx::query_as::<_, Identity>(
         "INSERT INTO conbira_auth_user_identities

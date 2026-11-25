@@ -29,4 +29,22 @@ pub fn router() -> axum::Router<Arc<Container>> {
             "/login/local",
             axum::routing::post(feature::user_login_local::endpoint::handler),
         )
+        .route(
+            "/login/google",
+            axum::routing::post(feature::user_login_google::endpoint::handler)
+                .layer(axum::middleware::map_response(no_store)),
+        )
+        .route(
+            "/login/google/complete",
+            axum::routing::post(feature::user_login_google_complete::endpoint::handler)
+                .layer(axum::middleware::map_response(no_store)),
+        )
+}
+
+async fn no_store(mut response: axum::response::Response) -> axum::response::Response {
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response
 }

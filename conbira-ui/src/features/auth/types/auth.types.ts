@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+export const googleLoginStorageKey = 'conbira.google-login'
+
 export const credentialsSchema = z.object({
   email: z.string().trim().pipe(z.email('이메일 주소를 입력해 주세요.')),
   password: z.string().min(1, '비밀번호를 입력해 주세요.'),

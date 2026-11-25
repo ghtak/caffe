@@ -35,7 +35,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS conbira_auth_user_identities_local_email_uniqu
 COMMENT ON TABLE conbira_auth_user_identities IS '사용자에게 연결된 로그인 식별 정보';
 COMMENT ON COLUMN conbira_auth_user_identities.id IS '로그인 식별 정보 ID';
 COMMENT ON COLUMN conbira_auth_user_identities.user_id IS '연결된 내부 사용자 ID';
-COMMENT ON COLUMN conbira_auth_user_identities.provider IS '로그인 공급자 식별자: 직접 로그인은 local, OIDC는 iss, 기타 OAuth는 고정 식별자';
+COMMENT ON COLUMN conbira_auth_user_identities.provider IS '로그인 공급자 식별자: 직접 로그인은 local, Google 로그인은 google';
 COMMENT ON COLUMN conbira_auth_user_identities.provider_subject IS '공급자 내 계정 식별자: local은 user_id의 문자열, OIDC는 sub';
 COMMENT ON COLUMN conbira_auth_user_identities.email IS '정규화된 이메일. 직접 로그인에서는 로그인 식별자로 사용';
 COMMENT ON COLUMN conbira_auth_user_identities.password_hash IS '직접 로그인에 사용하는 비밀번호 해시';
