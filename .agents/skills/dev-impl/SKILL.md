@@ -60,7 +60,7 @@ Phase 1과 Phase 2 중 어디로 진입하든 코드 작성 전에 반드시 먼
 ### Phase 3. 코드 리뷰 (위임 게이트)
 
 - **실행 조건:** 사용자가 리뷰를 요청한 경우에만 실행(건너뛰기 요청 시 생략, 목록에는 사유 표시). 구현자 자체 점검은 Phase 2 완료 근거로만 사용.
-- **위임 규칙:** 같은 작업 트리에서 [공통 Herdr 위임 절차](#3-공통-herdr-위임-절차) 사용(모델 키: `review`). 스택별 지침에 지정된 리뷰 스킬(`$rust-review` 또는 `$fe-review`)을 첫 메시지에 적용하고, 변경 목적·계약, 비교 기준, 검토 대상을 전달한다(풀스택 변경 시 스택별로 분리 위임). 리뷰 중 검토 대상 수정 금지.
+- **위임 규칙:** 같은 작업 트리에서 [공통 Herdr 위임 절차](#3-공통-herdr-위임-절차) 사용(모델 키: `review`). 스택별 지침에 지정된 리뷰 스킬(`$dev-review`)을 첫 메시지에 적용하고, 변경 목적·계약, 비교 기준, 검토 대상을 전달한다(풀스택 변경 시 스택별로 분리 위임). 리뷰 중 검토 대상 수정 금지.
 - **예외 처리:** 모델 설정이 유효하지 않거나 위임 또는 결과 확인이 불가능하면 사유를 보고하고 리뷰를 미완료 상태로 유지.
 - **결과 확인 및 종료:**
   - 서브에이전트로부터 각 리뷰 스킬의 출력 양식에 따른 보고를 받아 검토 범위와 근거를 확인한 뒤 사용자에게 전달.
@@ -77,21 +77,31 @@ Phase 1과 Phase 2 중 어디로 진입하든 코드 작성 전에 반드시 먼
 - **결과 확인 및 종료:** 커밋 해시·메시지·남은 변경을 전달받고 Git에서 확인한 뒤 사용자에게 보고하고 터미널 정리. 범위 질문이나 권한·검증 실패로 중단되면 터미널을 유지하고 사유 전달.
 
 ---
-
 ## 3. 공통 Herdr 위임 절차
 
 1. **모델 설정:** 작업 트리의 [모델 매핑 기준](../../rules/models.mdc)에서 해당 키(`review` / `commit`)의 `model`과 `reasoning_effort`를 읽어 `delegate_model`, `delegate_effort`에 설정.
-2. **백그라운드 실행:** 부모의 `HC_TERMINAL_ID`를 첫 프롬프트에 전달하고, 완료 시 최종 결과(리뷰 양식 또는 커밋 해시·메시지)를 `hc send <부모 주소>` 본문에 직접 담아 보고하며 중단 시에만 사유를 전달하도록 지시. 고유한 터미널 이름과 작업 트리 루트를 지정하고 호출자 셸의 `PATH`를 전달해 Codex 실행:
-   ```sh
-   hc run --bg --name "$delegate_agent" --cwd "$worktree_root" -- \
-     /usr/bin/env "PATH=$PATH" codex --no-daemon --model "$delegate_model" \
-       --config "model_reasoning_effort=\"$delegate_effort\"" "$delegate_task"
-   hc wait --timeout 30 "$delegate_agent"
+2. **세션 실행:** 부모의 `HC_TERMINAL_ID`와 Herdr 공간·탭 라벨을 확인하고 첫 프롬프트에 부모 주소를 전달한 뒤, 완료 시 최종 결과(리뷰 양식 또는 커밋 해시·메시지)를 `hc send <부모 주소>` 본문에 직접 담아 보고하며 중단 시에만 사유를 전달하도록 지시. 고유한 터미널 이름과 작업 트리 루트를 지정해 Codex를 백그라운드로 실행. 부모 주소나 공간·탭 라벨이 없거나 유효하지 않으면 임의로 선택하지 말고 위임 불가 사유를 보고:
+
+```sh
+parent_info=$(hc get "$HC_TERMINAL_ID" --json) || exit 1
+herdr_space=$(printf '%s' "$parent_info" | python3 -c 'import json,sys; print(json.load(sys.stdin)["labels"]["herdr.space"])') || exit 1
+herdr_tab=$(printf '%s' "$parent_info" | python3 -c 'import json,sys; print(json.load(sys.stdin)["labels"]["herdr.tab"])') || exit 1
+[ -n "$herdr_space" ] && [ -n "$herdr_tab" ] || exit 1
+
+hc run --bg --parent "$HC_TERMINAL_ID" \
+  --label "herdr.space=$herdr_space" --label "herdr.tab=$herdr_tab" \
+  --name "$delegate_agent" --cwd "$worktree_root" -- \
+  sh -c '
+    /usr/bin/env "PATH=$6" codex --no-daemon --model "$1" \
+      --config "model_reasoning_effort=\"$2\"" "$3" ||
+    hc send "$4" "[ABORT] $5 비정상 종료 (exit: $?)"
+  ' _ "$delegate_model" "$delegate_effort" "$delegate_task" \
+    "$HC_TERMINAL_ID" "$delegate_agent" "$PATH"
 
 ```
+3. **이벤트 대기 및 상태 확인:** `hc run` 실행 직후에는 `hc wait`나 반복 폴링을 수행하지 않고 즉시 현재 응답 턴을 종료해 `hc send` 보고를 대기. 완료 또는 `[ABORT]` 보고가 입력되면 해당 단계의 처리 기준을 적용. 보고 없이 사용자 입력 등으로 턴이 재개되어 상태가 불명확한 경우에만 `hc get "$delegate_agent"`나 필요한 범위의 `hc read "$delegate_agent"`로 단발 확인하며, 결과가 불명확한 동안 동일 작업 재실행 금지.
+4. **터미널 정리:** 각 단계 기준에 따라 결과 처리를 마친 뒤 `hc kill "$delegate_agent"`와 `hc rm "$delegate_agent"`로 위임 터미널 정리. 사용자 개입 대기 시에는 터미널을 유지하고 필요한 조치 전달.
 
-3. **상태 확인:** 시작 직후 대기 상태나 시간 초과만으로 완료 판단 금지. 보고가 없고 상태가 불명확하면 `hc get`이나 필요한 범위의 `hc read`로 확인. 시간 초과 후에도 작업 중이면 같은 터미널을 대상으로 `hc wait` 재실행. 완료·중단 보고를 받거나 사용자 개입이 필요해지면 해당 단계의 처리 기준 적용. 실행 여부나 결과가 불명확한 동안 동일 작업 재실행 금지.
-4. **터미널 정리:** 각 단계 기준에 따라 결과 확인 후 `hc kill`과 `hc rm`으로 터미널 정리. 사용자 개입 대기 시 터미널을 유지하고 필요한 조치 전달.
 
 ---
 
