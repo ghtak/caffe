@@ -10,7 +10,7 @@ export const credentialsSchema = z.object({
 export type Credentials = z.infer<typeof credentialsSchema>
 
 export const loginResponse = z.object({
-  data: z.object({ access_token: z.string().min(1), refresh_token: z.string().min(1) }),
+  data: z.object({ access_token: z.string().min(1) }),
 })
 
 export const sessionClaims = z.object({

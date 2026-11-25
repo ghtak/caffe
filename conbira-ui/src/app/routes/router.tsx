@@ -90,8 +90,9 @@ const googleCallbackRoute = createRoute({
 
 function GoogleCallbackRoute() {
   const search = googleCallbackRoute.useSearch()
-  const { signInGoogle } = useSession()
+  const { signInGoogle, session } = useSession()
   const navigate = googleCallbackRoute.useNavigate()
+  if (session.status === 'loading') return <main className="min-h-90" />
   return (
     <GoogleCallbackPage
       search={search}

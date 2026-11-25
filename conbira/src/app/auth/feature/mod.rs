@@ -7,3 +7,4 @@ pub mod user_logout;
 pub mod user_search;
 pub mod user_status_update;
 pub mod user_token_refresh;
+pub mod web_session;

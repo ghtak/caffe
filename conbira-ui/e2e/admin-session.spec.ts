@@ -5,11 +5,11 @@ import { server } from '../test/msw/server'
 test.beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 test.beforeEach(async ({ page }) => {
   // 브라우저의 API 요청을 Node의 MSW 핸들러에 전달한다.
-  await page.route('**/api/**', async (route) => {
+  await page.context().route('**/api/**', async (route) => {
     const request = route.request()
     const response = await fetch(request.url(), {
       method: request.method(),
-      headers: request.headers(),
+      headers: await request.allHeaders(),
       body: request.postData() ?? undefined,
     })
     await route.fulfill({
@@ -30,13 +30,21 @@ test.describe('contract', () => {
     const password = 'example-password'
     const token = 'admin-access-token'
     server.use(
-      http.post('*/api/auth/login/local', () =>
-        HttpResponse.json({
-          code: 'OK',
-          data: { access_token: token, refresh_token: 'admin-refresh' },
-        }),
+      http.post('*/api/auth/web/login/local', () =>
+        HttpResponse.json(
+          {
+            code: 'OK',
+            data: { access_token: token },
+          },
+          { headers: { 'Set-Cookie': `test-session=${token}; Path=/; HttpOnly; SameSite=Strict` } },
+        ),
       ),
-      http.post('*/api/auth/logout', () => HttpResponse.json({ code: 'OK' })),
+      http.post('*/api/auth/web/logout', () =>
+        HttpResponse.json(
+          { code: 'OK' },
+          { headers: { 'Set-Cookie': 'test-session=; Path=/; Max-Age=0' } },
+        ),
+      ),
       http.get('*/api/auth/me', ({ request }) => {
         if (request.headers.get('authorization') !== `Bearer ${token}`) {
           return HttpResponse.json({ code: 'UNAUTHORIZED' }, { status: 401 })
@@ -61,6 +69,10 @@ test.describe('contract', () => {
       .getByRole('link', { name: '역할 관리' })
       .click()
     await expect(page).toHaveURL('/admin/roles')
+    const secondTab = await page.context().newPage()
+    await secondTab.goto('/admin/roles')
+    await expect(secondTab.getByRole('heading', { name: '역할 관리' })).toBeVisible()
+    await secondTab.close()
     await page.reload()
 
     // 새로고침 후 브라우저에 저장된 세션으로 보호된 주소를 다시 연다.
@@ -95,12 +107,24 @@ test.describe('regression', () => {
       })
     })
     server.use(
-      http.post('*/api/auth/login/local', () =>
-        HttpResponse.json({
-          data: { access_token: 'member-token', refresh_token: 'member-refresh' },
-        }),
+      http.post('*/api/auth/web/login/local', () =>
+        HttpResponse.json(
+          {
+            data: { access_token: 'member-token' },
+          },
+          {
+            headers: {
+              'Set-Cookie': 'test-session=member-token; Path=/; HttpOnly; SameSite=Strict',
+            },
+          },
+        ),
       ),
-      http.post('*/api/auth/logout', () => HttpResponse.json({ code: 'OK' })),
+      http.post('*/api/auth/web/logout', () =>
+        HttpResponse.json(
+          { code: 'OK' },
+          { headers: { 'Set-Cookie': 'test-session=; Path=/; Max-Age=0' } },
+        ),
+      ),
       http.get('*/api/auth/me', () =>
         HttpResponse.json({
           data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
@@ -131,19 +155,22 @@ test.describe('regression', () => {
     await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible()
     await page.reload()
 
-    // 저장되지 않은 세션은 새로고침 시 복원되지 않는다.
-    await expect(page.getByRole('link', { name: '로그인' })).toBeVisible()
+    // 쿠키 세션은 저장소가 차단되어도 새로고침 후 복원된다.
+    await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible()
   })
 })
 
 test('역할 상세는 높이가 바뀌어도 상단 정렬을 유지하고 모달을 닫는다', async ({ page }) => {
   const role = { id: 1, code: 'operator', name: '운영자', description: '' }
   server.use(
-    http.post('*/api/auth/login/local', () =>
-      HttpResponse.json({
-        code: 'OK',
-        data: { access_token: 'token', refresh_token: 'refresh-token' },
-      }),
+    http.post('*/api/auth/web/login/local', () =>
+      HttpResponse.json(
+        {
+          code: 'OK',
+          data: { access_token: 'token' },
+        },
+        { headers: { 'Set-Cookie': 'test-session=token; Path=/; HttpOnly; SameSite=Strict' } },
+      ),
     ),
     http.get('*/api/auth/me', () =>
       HttpResponse.json({

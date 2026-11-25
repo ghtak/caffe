@@ -20,6 +20,26 @@ use crate::app::Container;
 
 pub fn router() -> axum::Router<Arc<Container>> {
     axum::Router::new()
+        .route(
+            "/web/login/local",
+            axum::routing::post(feature::web_session::login_local)
+                .layer(axum::middleware::map_response(no_store)),
+        )
+        .route(
+            "/web/login/google/complete",
+            axum::routing::post(feature::web_session::login_google)
+                .layer(axum::middleware::map_response(no_store)),
+        )
+        .route(
+            "/web/refresh",
+            axum::routing::post(feature::web_session::refresh)
+                .layer(axum::middleware::map_response(no_store)),
+        )
+        .route(
+            "/web/logout",
+            axum::routing::post(feature::web_session::logout)
+                .layer(axum::middleware::map_response(no_store)),
+        )
         .route("/me", axum::routing::get(feature::me::handler))
         .route(
             "/refresh",
@@ -57,6 +77,7 @@ pub fn router() -> axum::Router<Arc<Container>> {
             axum::routing::post(feature::user_login_google_complete::endpoint::handler)
                 .layer(axum::middleware::map_response(no_store)),
         )
+        .layer(tower_cookies::CookieManagerLayer::new())
 }
 
 async fn no_store(mut response: axum::response::Response) -> axum::response::Response {

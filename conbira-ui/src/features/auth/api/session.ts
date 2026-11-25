@@ -27,7 +27,9 @@ export async function startGoogleLogin(signal: AbortSignal) {
 }
 
 export async function login(credentials: Credentials, signal: AbortSignal) {
-  const body = await apiClient.post('/api/auth/login/local', { json: credentials, signal }).json()
+  const body = await apiClient
+    .post('/api/auth/web/login/local', { json: credentials, signal, headers: webHeaders })
+    .json()
   return resolveLogin(body, signal)
 }
 
@@ -36,30 +38,29 @@ export async function completeGoogleLogin(
   signal: AbortSignal,
 ) {
   const body = await apiClient
-    .post('/api/auth/login/google/complete', { json: input, signal })
+    .post('/api/auth/web/login/google/complete', { json: input, signal, headers: webHeaders })
     .json()
   return resolveLogin(body, signal)
 }
 
 async function resolveLogin(body: unknown, signal: AbortSignal) {
-  const { access_token: accessToken, refresh_token: refreshToken } = loginResponse.parse(body).data
+  const { access_token: accessToken } = loginResponse.parse(body).data
   signal.throwIfAborted()
   const claims = await fetchSession(accessToken, signal)
-  return { accessToken, refreshToken, claims }
+  return { accessToken, claims }
 }
 
-export async function refreshSession(refreshToken: string, signal: AbortSignal) {
+const webHeaders = { 'x-conbira-request': '1' }
+
+export async function refreshSession(signal: AbortSignal) {
   const body = await apiClient
-    .post('/api/auth/refresh', { json: { refresh_token: refreshToken }, signal, retry: 0 })
+    .post('/api/auth/web/refresh', { signal, retry: 0, headers: webHeaders })
     .json()
   return refreshResponse.parse(body).data
 }
 
-export async function logoutSession(refreshToken: string) {
-  await apiClient.post('/api/auth/logout', {
-    json: { refresh_token: refreshToken },
-    retry: 0,
-  })
+export async function logoutSession() {
+  await apiClient.post('/api/auth/web/logout', { retry: 0, headers: webHeaders })
 }
 
 async function fetchSession(token: string, signal: AbortSignal) {

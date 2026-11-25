@@ -13,11 +13,11 @@ describe('contract', () => {
     let submitted: unknown
     let requests = 0
     server.use(
-      http.post('*/api/auth/login/google/complete', async ({ request }) => {
+      http.post('*/api/auth/web/login/google/complete', async ({ request }) => {
         requests++
         submitted = await request.json()
         return HttpResponse.json({
-          data: { access_token: 'google-token', refresh_token: 'refresh-token' },
+          data: { access_token: 'google-token' },
         })
       }),
       http.get('*/api/auth/me', () =>
@@ -46,7 +46,7 @@ describe('edge', () => {
     )
     let requests = 0
     server.use(
-      http.post('*/api/auth/login/google/complete', () => {
+      http.post('*/api/auth/web/login/google/complete', () => {
         requests++
         return HttpResponse.json({})
       }),

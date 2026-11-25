@@ -11,11 +11,11 @@ describe('contract', () => {
     const credentials = { email: 'member@example.test', password: 'example-password' }
     let submitted: unknown
     server.use(
-      http.post('*/api/auth/login/local', async ({ request }) => {
+      http.post('*/api/auth/web/login/local', async ({ request }) => {
         submitted = await request.json()
         return HttpResponse.json({
           code: 'OK',
-          data: { access_token: 'member-token', refresh_token: 'refresh-token' },
+          data: { access_token: 'member-token' },
         })
       }),
       http.get('*/api/auth/me', ({ request }) => {
@@ -62,7 +62,7 @@ describe('edge', () => {
   it('인증이 거부되면 로그인 화면에 오류와 재시도 가능한 제출 버튼을 표시한다', async () => {
     const user = userEvent.setup()
     server.use(
-      http.post('*/api/auth/login/local', () =>
+      http.post('*/api/auth/web/login/local', () =>
         HttpResponse.json({ code: 'UNAUTHORIZED' }, { status: 401 }),
       ),
     )
@@ -99,10 +99,10 @@ describe('regression', () => {
       }
 
       server.use(
-        http.post('*/api/auth/login/local', async ({ request }) => {
+        http.post('*/api/auth/web/login/local', async ({ request }) => {
           if (stage === '로그인 응답') await delayResponse(request)
           return HttpResponse.json({
-            data: { access_token: token, refresh_token: 'refresh-token' },
+            data: { access_token: token },
           })
         }),
         http.get('*/api/auth/me', async ({ request }) => {

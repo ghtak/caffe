@@ -1,5 +1,9 @@
 import { expect, test } from '@playwright/test'
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/api/auth/web/refresh', (route) => route.fulfill({ status: 401 }))
+})
+
 test.describe('regression', () => {
   test('캐시 복원 이벤트 후 Google 로그인을 다시 시작한다', async ({ page }) => {
     let starts = 0
@@ -48,9 +52,9 @@ test.describe('contract', () => {
       })
     })
     await page.route('**/fake-google', (route) => route.fulfill({ status: 200, body: 'Google' }))
-    await page.route('**/api/auth/login/google/complete', async (route) => {
+    await page.route('**/api/auth/web/login/google/complete', async (route) => {
       await route.fulfill({
-        json: { data: { access_token: 'google-token', refresh_token: 'google-refresh' } },
+        json: { data: { access_token: 'google-token' } },
       })
     })
     await page.route('**/api/auth/me', (route) =>

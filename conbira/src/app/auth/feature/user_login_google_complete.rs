@@ -63,7 +63,7 @@ pub mod usecase {
     use crate::error::ResultExt as _;
     use crate::{Code, Error};
 
-    pub(super) async fn execute(
+    pub(crate) async fn execute(
         container: &Container,
         oidc: &GoogleOidcService,
         code: String,

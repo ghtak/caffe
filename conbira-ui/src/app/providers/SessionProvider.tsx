@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useLayoutEffect,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -28,7 +29,6 @@ export type Session =
   | { status: 'authenticated'; token: string; permissions: string[] }
 
 const storageKey = 'conbira.access-token'
-const refreshKey = 'conbira.refresh-token'
 
 function readToken() {
   try {
@@ -65,29 +65,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const previousToken = useRef<string | null>(null)
   const [refreshError, setRefreshError] = useState(false)
   const [logoutError, setLogoutError] = useState(false)
-  const refreshToken = useRef<string | null>(null)
+  const [initializing, setInitializing] = useState(true)
+  const [initialAttempt, setInitialAttempt] = useState(0)
+  const [initialError, setInitialError] = useState(false)
   const pending = useRef<Promise<string | null> | null>(null)
   const signingOut = useRef(false)
   const generation = useRef(0)
-  if (refreshToken.current === null) {
-    try {
-      refreshToken.current = sessionStorage.getItem(refreshKey)
-    } catch {
-      /* Storage unavailable. */
-    }
-  }
-  const claims = useQuery(sessionOptions(token))
+  const claims = useQuery(sessionOptions(initializing ? null : token))
 
   const clearSession = useCallback(() => {
     generation.current += 1
     setRefreshError(false)
     setLogoutError(false)
-    refreshToken.current = null
-    try {
-      sessionStorage.removeItem(refreshKey)
-    } catch {
-      /* Storage unavailable. */
-    }
     persistToken(null)
     accessToken.current = null
     previousToken.current = null
@@ -102,8 +91,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     signingOut.current = true
     try {
       await pending.current?.catch(() => null)
-      const current = refreshToken.current
-      if (current) await logoutSession(current)
+      await logoutSession()
       clearSession()
     } catch {
       setLogoutError(true)
@@ -119,22 +107,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (failedToken !== accessToken.current)
         return Promise.resolve(failedToken === previousToken.current ? accessToken.current : null)
       if (pending.current) return pending.current
-      const current = refreshToken.current
-      if (!current) {
-        clearSession()
-        return Promise.resolve(null)
-      }
       const version = generation.current
       setRefreshError(false)
-      const task = refreshSession(current, new AbortController().signal)
+      const task = refreshSession(new AbortController().signal)
         .then((tokens) => {
           if (version !== generation.current) return null
-          refreshToken.current = tokens.refresh_token
-          try {
-            sessionStorage.setItem(refreshKey, tokens.refresh_token)
-          } catch {
-            /* Storage unavailable. */
-          }
           persistToken(tokens.access_token)
           previousToken.current = failedToken
           accessToken.current = tokens.access_token
@@ -165,6 +142,34 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return () => setRefreshHandler(null)
   }, [refresh])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    const version = generation.current
+    refreshSession(controller.signal)
+      .then((tokens) => {
+        if (version !== generation.current) return
+        persistToken(tokens.access_token)
+        accessToken.current = tokens.access_token
+        queryClient.setQueryData(authKeys.session(tokens.access_token), {
+          exp: tokens.expires_at,
+          user: tokens.claims,
+        })
+        setToken(tokens.access_token)
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || version !== generation.current) return
+        if (isHTTPError(error) && error.response.status === 401) clearSession()
+        else {
+          setInitialError(true)
+          setRefreshError(true)
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setInitializing(false)
+      })
+    return () => controller.abort()
+  }, [clearSession, initialAttempt, queryClient])
+
   const expired = isHTTPError(claims.error) && claims.error.response.status === 401
 
   async function signIn(credentials: Credentials, signal: AbortSignal) {
@@ -179,18 +184,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   function saveLogin(
-    { accessToken, refreshToken: newRefreshToken, claims }: Awaited<ReturnType<typeof login>>,
+    { accessToken, claims }: Awaited<ReturnType<typeof login>>,
     signal: AbortSignal,
   ) {
     signal.throwIfAborted()
     generation.current += 1
     previousToken.current = null
-    refreshToken.current = newRefreshToken
-    try {
-      sessionStorage.setItem(refreshKey, newRefreshToken)
-    } catch {
-      /* Storage unavailable. */
-    }
     persistToken(accessToken)
     accessTokenRefUpdate(accessToken)
     queryClient.setQueryData(authKeys.session(accessToken), claims)
@@ -202,7 +201,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   let session: Session
-  if (!token) {
+  if (initializing) {
+    session = { status: 'loading' }
+  } else if (refreshError) {
+    session = { status: 'error', reason: 'session' }
+  } else if (!token) {
     session = { status: 'guest' }
   } else if (logoutError) {
     session = { status: 'error', reason: 'logout' }
@@ -229,7 +232,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (logoutError) void signOut()
           else {
             setRefreshError(false)
-            void claims.refetch()
+            if (initialError) {
+              setInitialError(false)
+              setInitializing(true)
+              setInitialAttempt((value) => value + 1)
+            } else void claims.refetch()
           }
         },
       }}

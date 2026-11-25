@@ -4,6 +4,7 @@ test.describe('contract', () => {
   test('시스템 테마를 따르고 수동 선택을 새로고침과 화면 이동 후에도 유지한다', async ({
     page,
   }) => {
+    await page.route('**/api/auth/web/refresh', (route) => route.fulfill({ status: 401 }))
     await page.emulateMedia({ colorScheme: 'light' })
     await page.goto('/')
     const theme = page.getByRole('combobox', { name: '화면 테마' })

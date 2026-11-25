@@ -108,6 +108,70 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn web_session_refresh_and_logout_use_http_only_cookie() -> anyhow::Result<()> {
+            let (router, token) = auth_router().await?;
+            let cookie = format!("__Host-conbira-refresh={token}");
+            let refresh = router
+                .clone()
+                .oneshot(
+                    Request::post("/api/auth/web/refresh")
+                        .header("x-conbira-request", "1")
+                        .header(header::COOKIE, &cookie)
+                        .body(Body::empty())?,
+                )
+                .await?;
+            assert_eq!(refresh.status(), StatusCode::OK);
+            let set_cookie = refresh.headers()[header::SET_COOKIE].to_str()?;
+            assert!(
+                set_cookie.contains("HttpOnly")
+                    && set_cookie.contains("Secure")
+                    && set_cookie.contains("SameSite=Strict")
+            );
+            let body: serde_json::Value =
+                serde_json::from_slice(&to_bytes(refresh.into_body(), 4096).await?)?;
+            assert!(body["data"]["access_token"].is_string());
+            assert!(body["data"].get("refresh_token").is_none());
+            let logout = router
+                .clone()
+                .oneshot(
+                    Request::post("/api/auth/web/logout")
+                        .header("x-conbira-request", "1")
+                        .header(header::COOKIE, &cookie)
+                        .body(Body::empty())?,
+                )
+                .await?;
+            assert_eq!(logout.status(), StatusCode::OK);
+            assert!(
+                logout.headers()[header::SET_COOKIE]
+                    .to_str()?
+                    .contains("Max-Age=0")
+            );
+            let refresh = router
+                .oneshot(
+                    Request::post("/api/auth/web/refresh")
+                        .header("x-conbira-request", "1")
+                        .header(header::COOKIE, cookie)
+                        .body(Body::empty())?,
+                )
+                .await?;
+            assert_eq!(refresh.status(), StatusCode::UNAUTHORIZED);
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn web_session_rejects_requests_without_csrf_header() -> anyhow::Result<()> {
+            let router = super::super::router(crate::test_support::container().await?)?;
+            for path in ["/api/auth/web/refresh", "/api/auth/web/logout"] {
+                let response = router
+                    .clone()
+                    .oneshot(Request::post(path).body(Body::empty())?)
+                    .await?;
+                assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            }
+            Ok(())
+        }
+
+        #[tokio::test]
         async fn refresh_success_has_no_store_header() -> anyhow::Result<()> {
             let (router, token) = auth_router().await?;
             let response = router
