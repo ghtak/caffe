@@ -39,13 +39,29 @@ impl UserClaims {
         }
     }
 
+    pub fn require_permissions(&self, codes: &[&str], at: &'static str) -> crate::Result<()> {
+        if self.has_permissions(codes) {
+            Ok(())
+        } else {
+            Err(crate::Error::new(crate::Code::Forbidden, "Permission denied").at(at))
+        }
+    }
+
+    pub fn require_any_permission(&self, codes: &[&str], at: &'static str) -> crate::Result<()> {
+        if self.has_any_permission(codes) {
+            Ok(())
+        } else {
+            Err(crate::Error::new(crate::Code::Forbidden, "Permission denied").at(at))
+        }
+    }
+
     /// 빈 목록은 false를 반환한다.
     pub fn has_any_permission(&self, codes: &[&str]) -> bool {
         codes.iter().any(|code| self.has_permission(code))
     }
 
     /// 빈 목록은 true를 반환한다.
-    pub fn has_all_permissions(&self, codes: &[&str]) -> bool {
+    pub fn has_permissions(&self, codes: &[&str]) -> bool {
         codes.iter().all(|code| self.has_permission(code))
     }
 }

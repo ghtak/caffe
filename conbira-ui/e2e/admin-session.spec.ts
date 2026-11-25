@@ -111,3 +111,44 @@ test.describe('regression', () => {
     await expect(page.getByRole('link', { name: '로그인' })).toBeVisible()
   })
 })
+
+test('역할 상세는 높이가 바뀌어도 상단 정렬을 유지하고 모달을 닫는다', async ({ page }) => {
+  const role = { id: 1, code: 'operator', name: '운영자', description: '' }
+  server.use(
+    http.post('*/api/auth/login/local', () => HttpResponse.json({ code: 'OK', data: { access_token: 'token' } })),
+    http.get('*/api/auth/me', () => HttpResponse.json({ code: 'OK', data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['admin'], permissions: ['rbac.read', 'auth.user.read', 'rbac.user_role.manage'] } } })),
+    http.get('*/api/rbac/roles/1', () => HttpResponse.json({ code: 'OK', data: role })),
+    http.get('*/api/rbac/roles/1/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
+    http.get('*/api/rbac/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
+    http.get('*/api/rbac/roles/1/users', () => HttpResponse.json({ code: 'OK', data: { items: [], has_next: false } })),
+    http.get('*/api/rbac/roles/1/users/search', () => HttpResponse.json({ code: 'OK', data: { items: [{ id: 3, nickname: '홍길동', emails: [], assigned: true }], has_next: false } })),
+  )
+  await page.goto('/login')
+  await page.getByLabel('이메일').fill('admin@example.test')
+  await page.getByLabel('비밀번호').fill('example-password')
+  await page.getByRole('button', { name: '로그인', exact: true }).click()
+  await page.goto('/admin/roles/1')
+  await page.getByRole('button', { name: '사용자 설정' }).click()
+  const heading = page.getByRole('heading', { name: '운영자' })
+  const before = await heading.boundingBox()
+  await page.setViewportSize({ width: 1280, height: 1000 })
+  const after = await heading.boundingBox()
+  expect(Math.abs((after?.y ?? 0) - (before?.y ?? 0))).toBeLessThan(2)
+  await page.getByRole('button', { name: '+ 사용자 추가' }).click()
+  const dialog = page.getByRole('dialog', { name: '사용자 추가' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: '홍길동 할당됨' })).toBeDisabled()
+  for (const width of [1280, 375]) {
+    await page.setViewportSize({ width, height: 1000 })
+    const input = await dialog.getByLabel('사용자 이름 검색').boundingBox()
+    const button = await dialog.getByRole('button', { name: '검색', exact: true }).boundingBox()
+    expect(input).not.toBeNull()
+    expect(button).not.toBeNull()
+    // 검색 입력과 버튼은 같은 높이로 한 줄에 표시된다.
+    expect(Math.abs(input!.y - button!.y)).toBeLessThan(1)
+    expect(Math.abs(input!.height - button!.height)).toBeLessThan(1)
+    expect(button!.x).toBeGreaterThanOrEqual(input!.x + input!.width)
+  }
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+})

@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { AdminHomePage } from '@/features/admin'
 import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
-import { AdminCatalogPage, catalogOptions, type Catalog } from '@/features/rbac'
+import { AdminCatalogPage, RoleDetailPage, catalogOptions, type Catalog } from '@/features/rbac'
 import { UserListPage } from '@/features/users'
 import { AdminLayout } from '../layouts/AdminLayout'
 import { RootLayout } from '../layouts/RootLayout'
@@ -83,6 +83,15 @@ const rolesRoute = createRoute({
   loader: ({ context }) => loadCatalog(context, 'roles'),
   component: () => <AdminCatalogRoute catalog="roles" />,
 })
+function RoleDetailRoute() {
+  const { roleId } = roleDetailRoute.useParams()
+  const { session } = useSession()
+  const id = Number(roleId)
+  if (session.status !== 'authenticated') return null
+  if (!Number.isSafeInteger(id) || id < 1) return <p role="alert" className="p-8">역할을 찾을 수 없습니다.</p>
+  return <RoleDetailPage id={id} token={session.token} permissions={session.permissions} />
+}
+const roleDetailRoute = createRoute({ getParentRoute: () => adminRoute, path: 'roles/$roleId', component: RoleDetailRoute })
 const usersRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: 'users',
@@ -95,7 +104,7 @@ const permissionsRoute = createRoute({
   component: () => <AdminCatalogRoute catalog="permissions" />,
 })
 const routeTree = rootRoute.addChildren([
-  indexRoute, loginRoute, googleCallbackRoute, adminRoute.addChildren([adminIndexRoute, usersRoute, rolesRoute, permissionsRoute]),
+  indexRoute, loginRoute, googleCallbackRoute, adminRoute.addChildren([adminIndexRoute, usersRoute, rolesRoute, roleDetailRoute, permissionsRoute]),
 ])
 
 export function createAppRouter(queryClient: QueryClient, history?: RouterHistory) {

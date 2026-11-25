@@ -11,7 +11,20 @@ pub fn router() -> axum::Router<std::sync::Arc<crate::app::Container>> {
         )
         .route(
             "/roles/{id}",
-            axum::routing::delete(feature::role_delete::endpoint::handler),
+            axum::routing::get(feature::role_detail::endpoint::handler)
+                .delete(feature::role_delete::endpoint::handler),
+        )
+        .route(
+            "/roles/{role_id}/permissions",
+            axum::routing::get(feature::role_permission_list::endpoint::handler),
+        )
+        .route(
+            "/roles/{role_id}/users",
+            axum::routing::get(feature::role_user_list::endpoint::handler),
+        )
+        .route(
+            "/roles/{role_id}/users/search",
+            axum::routing::get(feature::role_user_search::endpoint::handler),
         )
         .route(
             "/roles/{role_id}/permissions/{permission_id}",

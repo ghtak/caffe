@@ -38,10 +38,10 @@ describe('contract', () => {
     server.use(
       claims(['user', 'admin'], ['rbac.read']),
       http.get('*/api/rbac/roles', () => HttpResponse.json({
-        code: 'OK', data: [{ code: 'admin', name: '관리자', description: '서비스 관리' }],
+        code: 'OK', data: [{ id: 1, code: 'admin', name: '관리자', description: '서비스 관리' }],
       })),
       http.get('*/api/rbac/permissions', () => HttpResponse.json({
-        code: 'OK', data: [{ code: 'rbac.read', name: '권한 설정 조회', description: '역할과 권한 조회' }],
+        code: 'OK', data: [{ id: 1, code: 'rbac.read', name: '권한 설정 조회', description: '역할과 권한 조회' }],
       })),
     )
     const { router } = renderWithProviders('/', 'admin-token')

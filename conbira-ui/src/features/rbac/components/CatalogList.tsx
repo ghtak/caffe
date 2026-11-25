@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { isHTTPError } from 'ky'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
@@ -45,9 +46,9 @@ export function CatalogList({ catalog, token }: { catalog: Catalog; token: strin
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {list.data.map(({ code, name, description }) => (
+                {list.data.map(({ id, code, name, description }) => (
                   <TableRow key={code}>
-                    <TableCell className="px-5 py-4 whitespace-normal"><code>{code}</code></TableCell>
+                    <TableCell className="px-5 py-4 whitespace-normal">{catalog === 'roles' ? <Link className="underline" to="/admin/roles/$roleId" params={{ roleId: String(id) }}><code>{code}</code></Link> : <code>{code}</code>}</TableCell>
                     <TableCell className="px-5 py-4 font-semibold whitespace-normal">{name}</TableCell>
                     <TableCell className="px-5 py-4 whitespace-normal text-muted-foreground">{description}</TableCell>
                   </TableRow>

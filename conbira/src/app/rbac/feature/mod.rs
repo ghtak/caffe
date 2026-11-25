@@ -3,9 +3,13 @@ pub mod permission_delete;
 pub mod permission_list;
 pub mod role_create;
 pub mod role_delete;
+pub mod role_detail;
 pub mod role_list;
 pub mod role_permission_add;
+pub mod role_permission_list;
 pub mod role_permission_remove;
+pub mod role_user_list;
+pub mod role_user_search;
 pub mod user_role_add;
 pub mod user_role_list;
 pub mod user_role_remove;
@@ -15,6 +19,7 @@ mod tests {
     mod contract {
         mod permission_write;
         mod role;
+        mod role_detail;
         mod user_role;
     }
 }

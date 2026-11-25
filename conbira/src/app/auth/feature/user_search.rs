@@ -1,5 +1,4 @@
 pub mod endpoint {
-    use std::num::NonZeroU32;
     use std::sync::Arc;
 
     use axum::extract::State;
@@ -44,12 +43,9 @@ pub mod endpoint {
     ) -> ApiResult<ResponseData> {
         claims.require_permission("auth.user.read", crate::here!())?;
 
-        let page_raw = request.page.unwrap_or(1);
+        let page = request.page.unwrap_or(1);
         let page_size = request.page_size.unwrap_or(20);
-        let page = NonZeroU32::new(page_raw).ok_or_else(|| {
-            Error::new(Code::InvalidRequest, "Invalid page or page size").at(crate::here!())
-        })?;
-        if !(1..=100).contains(&page_size) {
+        if page == 0 || !(1..=100).contains(&page_size) {
             return Err(
                 Error::new(Code::InvalidRequest, "Invalid page or page size")
                     .at(crate::here!())
@@ -81,7 +77,7 @@ pub mod endpoint {
                     created_at: user.created_at,
                 })
                 .collect(),
-            page: page.get(),
+            page,
             page_size,
             has_next: result.has_next,
         }
@@ -90,18 +86,18 @@ pub mod endpoint {
 }
 
 pub mod usecase {
-    use std::num::NonZeroU32;
 
     use crate::app::DatabaseExt as _;
     use crate::app::auth::entity::UserStatus;
     use crate::app::auth::repository::user;
     use crate::app::container::db::Database;
+    use crate::app::utils::trim_nonempty;
 
     pub struct Query {
         pub name: Option<String>,
         pub email: Option<String>,
         pub status: Option<UserStatus>,
-        pub page: NonZeroU32,
+        pub page: u32,
         pub page_size: u32,
     }
 
@@ -110,20 +106,16 @@ pub mod usecase {
         pub has_next: bool,
     }
 
-    fn normalize_filter(value: Option<&str>) -> Option<&str> {
-        value.map(str::trim).filter(|s| !s.is_empty())
-    }
-
     pub async fn execute(db: &Database, query: Query) -> crate::Result<Output> {
         let mut connection = db.acquire_conn(crate::here!()).await?;
         let mut items = user::search(
             &mut connection.handle(),
             &user::Criteria {
-                name: normalize_filter(query.name.as_deref()),
-                email: normalize_filter(query.email.as_deref()),
+                name: trim_nonempty(query.name.as_deref()),
+                email: trim_nonempty(query.email.as_deref()),
                 status: query.status,
                 limit: i64::from(query.page_size) + 1,
-                offset: i64::from(query.page.get() - 1) * i64::from(query.page_size),
+                offset: i64::from(query.page - 1) * i64::from(query.page_size),
             },
         )
         .await?;
