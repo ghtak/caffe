@@ -65,7 +65,7 @@ export function LoginForm({ onLogin, loginSignal, cancel }: {
       <Card className="gap-7 py-8 shadow-lg shadow-foreground/5 sm:py-10">
         <CardHeader className="items-center gap-3 text-center">
           <h1 className="text-3xl font-bold tracking-tight">로그인</h1>
-          <span aria-hidden="true" className="h-1 w-12 rounded-full bg-primary/60" />
+          <span aria-hidden="true" className="h-1 w-24 justify-self-center rounded-full bg-primary/60" />
           <p className="text-sm leading-6 text-muted-foreground">Conbira에 오신 것을 환영합니다.<br />계정으로 로그인하여 서비스를 이용하세요.</p>
         </CardHeader>
         <CardContent className="grid gap-5">
