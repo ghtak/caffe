@@ -35,7 +35,9 @@ function AdminCatalogRoute({ catalog }: { catalog: Catalog }) {
 
 function AdminUsersRoute() {
   const { session } = useSession()
-  return session.status === 'authenticated' ? <UserListPage token={session.token} /> : null
+  if (session.status !== 'authenticated') return null
+  if (!session.permissions.includes('auth.user.read')) return <p role="alert" className="p-8">사용자 목록을 조회할 권한이 없습니다.</p>
+  return <UserListPage token={session.token} canEdit={session.permissions.includes('auth.user.manage')} />
 }
 
 function loadCatalog({ queryClient, session }: RouterContext, catalog: Catalog) {
@@ -68,8 +70,13 @@ const adminRoute = createRoute({ getParentRoute: () => rootRoute, path: '/admin'
 const adminIndexRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: '/',
-  component: AdminHomePage,
+  component: () => <AdminHomeRoute />,
 })
+
+function AdminHomeRoute() {
+  const { session } = useSession()
+  return session.status === 'authenticated' ? <AdminHomePage canReadUsers={session.permissions.includes('auth.user.read')} /> : null
+}
 const rolesRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: 'roles',

@@ -40,7 +40,7 @@ pub mod endpoint {
         claims: UserClaims,
         ApiQuery(request): ApiQuery<RequestQuery>,
     ) -> ApiResult<ResponseData> {
-        if !claims.has_role("admin") {
+        if !claims.has_permission("auth.user.read") {
             return Err(
                 crate::Error::new(crate::Code::Forbidden, "Permission denied")
                     .at(crate::here!())
@@ -142,7 +142,7 @@ mod tests {
         use tower::ServiceExt as _;
 
         #[tokio::test]
-        async fn search_requires_admin_and_returns_only_public_fields_in_id_order()
+        async fn search_requires_permission_and_returns_only_public_fields_in_id_order()
         -> anyhow::Result<()> {
             let container = crate::test_support::container().await?;
             let router = crate::app::http::router(container.clone())?;
@@ -166,11 +166,11 @@ mod tests {
                 .execute(connection.handle().conn()).await?;
             drop(connection);
 
-            for (roles, expected) in [
-                (vec!["user"], StatusCode::FORBIDDEN),
-                (vec!["admin"], StatusCode::OK),
+            for (roles, permissions, expected) in [
+                (vec!["admin"], vec![], StatusCode::FORBIDDEN),
+                (vec!["user"], vec!["auth.user.read"], StatusCode::OK),
             ] {
-                let claims = serde_json::json!({"id": 42, "status": "active", "roles": roles});
+                let claims = serde_json::json!({"id": 42, "status": "active", "roles": roles, "permissions": permissions});
                 let token = container
                     .jwt_token_service
                     .issue("42", claims.as_object().unwrap().clone())?
@@ -183,7 +183,7 @@ mod tests {
                             .body(Body::empty())?,
                     )
                     .await?;
-                // 관리자만 목록을 조회하고 응답은 승인된 필드만 포함한다.
+                // 조회 권한이 있는 사용자만 목록을 조회할 수 있다.
                 assert_eq!(response.status(), expected);
                 if expected == StatusCode::OK {
                     let body: serde_json::Value =
@@ -200,7 +200,7 @@ mod tests {
                     assert_eq!(users[1]["emails"], serde_json::json!([]));
                 }
             }
-            let claims = serde_json::json!({"id": 42, "status": "active", "roles": ["admin"]});
+            let claims = serde_json::json!({"id": 42, "status": "active", "roles": ["admin"], "permissions": ["auth.user.read"]});
             let token = container
                 .jwt_token_service
                 .issue("42", claims.as_object().unwrap().clone())?

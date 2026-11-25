@@ -30,6 +30,10 @@ pub fn router() -> axum::Router<Arc<Container>> {
             axum::routing::post(feature::user_create_local::endpoint::handler),
         )
         .route(
+            "/users/{id}/status",
+            axum::routing::patch(feature::user_status_update::endpoint::handler),
+        )
+        .route(
             "/login/local",
             axum::routing::post(feature::user_login_local::endpoint::handler),
         )

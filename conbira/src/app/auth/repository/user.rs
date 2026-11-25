@@ -98,6 +98,18 @@ pub async fn update(handle: &mut Handle<'_>, user: &User) -> Result<Option<User>
     .map_err_internal("Failed to update user", crate::here!())
 }
 
+pub async fn update_status(handle: &mut Handle<'_>, id: i64, status: UserStatus) -> Result<bool> {
+    let result = sqlx::query(
+        "UPDATE conbira_auth_users SET status = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+    )
+    .bind(id)
+    .bind(status)
+    .execute(handle.conn())
+    .await
+    .map_err_internal("Failed to update user status", crate::here!())?;
+    Ok(result.rows_affected() > 0)
+}
+
 #[cfg(test)]
 mod tests {
     mod contract {
