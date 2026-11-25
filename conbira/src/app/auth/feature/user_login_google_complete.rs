@@ -407,7 +407,7 @@ mod tests {
             assert_eq!(me.status(), StatusCode::OK);
             let me: Value = serde_json::from_slice(&to_bytes(me.into_body(), 16384).await?)?;
             assert_eq!(me["data"]["sub"], google_id.to_string());
-            assert_eq!(me["data"]["user"]["roles"], json!(["user"]));
+            assert!(me["data"]["user"].get("roles").is_none());
             assert_eq!(
                 router
                     .clone()

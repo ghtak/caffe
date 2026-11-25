@@ -329,7 +329,7 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn allowed_accounts_receive_tokens_with_roles_at_issue_time() -> anyhow::Result<()> {
+        async fn allowed_accounts_receive_tokens_without_role_claims() -> anyhow::Result<()> {
             for (status, status_claim) in [
                 (UserStatus::Registered, "registered"),
                 (UserStatus::Active, "active"),
@@ -364,7 +364,7 @@ mod tests {
                 assert!(user_claims.remove("family_id").is_none());
                 assert_eq!(
                     serde_json::Value::Object(user_claims),
-                    serde_json::json!({"id": user.id, "status": status_claim, "roles": ["user"], "permissions": []})
+                    serde_json::json!({"id": user.id, "status": status_claim, "permissions": []})
                 );
                 let new_tokens = execute(
                     &fixture.db,
@@ -380,7 +380,7 @@ mod tests {
                 .await?;
                 let new_claims = fixture.jwt.verify(&new_tokens.access_token)?;
                 // 역할을 회수한 후 발급한 토큰에는 역할과 권한이 없다.
-                assert_eq!(new_claims.user["roles"], serde_json::json!([]));
+                assert!(new_claims.user.get("roles").is_none());
                 assert_eq!(new_claims.user["permissions"], serde_json::json!([]));
 
                 let mut connection = fixture.db.conn().await?;

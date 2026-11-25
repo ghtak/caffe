@@ -12,7 +12,7 @@ describe('contract', () => {
     server.use(
       http.get('*/api/auth/me', () =>
         HttpResponse.json({
-          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: [], permissions: [] } },
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { permissions: [] } },
         }),
       ),
       http.post('*/api/auth/refresh', () =>
@@ -21,7 +21,7 @@ describe('contract', () => {
             access_token: 'new-access',
             refresh_token: 'old-refresh',
             expires_at: Math.floor(Date.now() / 1000) + 900,
-            claims: { roles: [], permissions: [] },
+            claims: { permissions: [] },
           },
         }),
       ),
@@ -48,7 +48,7 @@ describe('contract', () => {
     server.use(
       http.get('*/api/auth/me', () =>
         HttpResponse.json({
-          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: [], permissions: [] } },
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { permissions: [] } },
         }),
       ),
       http.post('*/api/auth/refresh', async () => {
@@ -59,7 +59,7 @@ describe('contract', () => {
             access_token: 'new-access',
             refresh_token: 'new-refresh',
             expires_at: Math.floor(Date.now() / 1000) + 900,
-            claims: { roles: [], permissions: [] },
+            claims: { permissions: [] },
           },
         })
       }),
@@ -105,7 +105,7 @@ describe('contract', () => {
             access_token: 'new-access',
             refresh_token: 'new-refresh',
             expires_at: Math.floor(Date.now() / 1000) + 900,
-            claims: { roles: [], permissions: [] },
+            claims: { permissions: [] },
           },
         })
       }),
@@ -139,7 +139,7 @@ describe('regression', () => {
     server.use(
       http.get('*/api/auth/me', () =>
         HttpResponse.json({
-          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: [], permissions: [] } },
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { permissions: [] } },
         }),
       ),
       http.post('*/api/auth/logout', async ({ request }) => {
@@ -180,7 +180,7 @@ describe('regression', () => {
         return HttpResponse.json({
           data: {
             exp: Math.floor(Date.now() / 1000) + 900,
-            user: { roles: ['admin'], permissions },
+            user: { permissions },
           },
         })
       }),
@@ -193,7 +193,7 @@ describe('regression', () => {
             access_token: 'new-access',
             refresh_token: 'new-refresh',
             expires_at: Math.floor(Date.now() / 1000) + 900,
-            claims: { roles: ['admin'], permissions },
+            claims: { permissions },
           },
         }),
       ),

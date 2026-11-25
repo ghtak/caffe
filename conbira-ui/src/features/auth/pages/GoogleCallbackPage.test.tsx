@@ -22,7 +22,7 @@ describe('contract', () => {
       }),
       http.get('*/api/auth/me', () =>
         HttpResponse.json({
-          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { permissions: [] } },
         }),
       ),
     )

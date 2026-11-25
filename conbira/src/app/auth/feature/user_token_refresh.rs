@@ -77,6 +77,7 @@ pub mod usecase {
         let remaining = record.expires_at.duration_since(now);
         let renew = renewal_required(remaining).ok_or_else(unauthorized)?;
         let issued = if renew {
+            // 기존 토큰은 유지하고 신규 토큰을 전달
             refresh_token_service
                 .issue(&mut handle, user.id)
                 .await?

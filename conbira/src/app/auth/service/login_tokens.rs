@@ -4,7 +4,7 @@ use crate::app::auth::entity::{User, UserStatus};
 use crate::app::auth::repository::user;
 use crate::app::auth::service::refresh_token::RefreshTokenService;
 use crate::app::container::db::{Database, Handle};
-use crate::app::rbac::repository::{permission, user_role};
+use crate::app::rbac::repository::permission;
 use crate::error::ResultExt as _;
 
 #[derive(serde::Serialize)]
@@ -59,17 +59,12 @@ pub async fn issue_tokens(
     user: &User,
     refresh_token: String,
 ) -> crate::Result<LoginTokens> {
-    let roles = user_role::list_by_user_id(handle, user.id)
-        .await?
-        .into_iter()
-        .map(|role| role.code)
-        .collect();
     let permissions = permission::find_by_user_id(handle, user.id)
         .await?
         .into_iter()
         .map(|permission| permission.code)
         .collect();
-    let claims = UserClaims::new(user.id, user.status, roles, permissions);
+    let claims = UserClaims::new(user.id, user.status, permissions);
     let issued = jwt_token_service
         .issue(&user.id.to_string(), claims.clone().try_into()?)
         .map_err_internal("Failed to issue access token", crate::here!())?;

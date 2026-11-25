@@ -26,7 +26,7 @@ describe('contract', () => {
           code: 'OK',
           data: {
             exp: Math.floor(Date.now() / 1000) + 900,
-            user: { roles: ['user'], permissions: ['rbac.read'] },
+            user: { permissions: ['rbac.read'] },
           },
         })
       }),
@@ -108,7 +108,7 @@ describe('regression', () => {
         http.get('*/api/auth/me', async ({ request }) => {
           if (stage === '세션 확인 응답') await delayResponse(request)
           return HttpResponse.json({
-            data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
+            data: { exp: Math.floor(Date.now() / 1000) + 900, user: { permissions: [] } },
           })
         }),
       )
