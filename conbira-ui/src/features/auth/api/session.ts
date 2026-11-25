@@ -10,9 +10,15 @@ export const authKeys = {
 
 export async function startGoogleLogin(signal: AbortSignal) {
   const body = await apiClient.post('/api/auth/login/google', { signal }).json()
-  return z.object({ data: z.object({
-    authorization_url: z.url(), state: z.string().min(1), browser_proof: z.string().min(1),
-  }) }).parse(body).data
+  return z
+    .object({
+      data: z.object({
+        authorization_url: z.url(),
+        state: z.string().min(1),
+        browser_proof: z.string().min(1),
+      }),
+    })
+    .parse(body).data
 }
 
 export async function login(credentials: Credentials, signal: AbortSignal) {
@@ -20,8 +26,13 @@ export async function login(credentials: Credentials, signal: AbortSignal) {
   return resolveLogin(body, signal)
 }
 
-export async function completeGoogleLogin(input: { code: string; state: string; browser_proof: string }, signal: AbortSignal) {
-  const body = await apiClient.post('/api/auth/login/google/complete', { json: input, signal }).json()
+export async function completeGoogleLogin(
+  input: { code: string; state: string; browser_proof: string },
+  signal: AbortSignal,
+) {
+  const body = await apiClient
+    .post('/api/auth/login/google/complete', { json: input, signal })
+    .json()
   return resolveLogin(body, signal)
 }
 
@@ -33,10 +44,12 @@ async function resolveLogin(body: unknown, signal: AbortSignal) {
 }
 
 async function fetchSession(token: string, signal: AbortSignal) {
-  const body = await apiClient.get('/api/auth/me', {
-    headers: { Authorization: `Bearer ${token}` },
-    signal,
-  }).json()
+  const body = await apiClient
+    .get('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+      signal,
+    })
+    .json()
   return sessionResponse.parse(body).data
 }
 

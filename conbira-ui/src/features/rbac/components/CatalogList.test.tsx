@@ -6,10 +6,12 @@ import { server } from '../../../../test/msw/server'
 import { renderWithProviders } from '../../../../test/renderWithProviders'
 
 function claims(roles: string[], permissions: string[]) {
-  return http.get('*/api/auth/me', () => HttpResponse.json({
-    code: 'OK',
-    data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles, permissions } },
-  }))
+  return http.get('*/api/auth/me', () =>
+    HttpResponse.json({
+      code: 'OK',
+      data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles, permissions } },
+    }),
+  )
 }
 
 describe('contract', () => {
@@ -23,7 +25,10 @@ describe('contract', () => {
   })
 
   it('rbac.read가 있는 일반 계정은 권한 관리에 접근할 수 있다', async () => {
-    server.use(claims(['user'], ['rbac.read']), http.get('*/api/rbac/permissions', () => HttpResponse.json({ code: 'OK', data: [] })))
+    server.use(
+      claims(['user'], ['rbac.read']),
+      http.get('*/api/rbac/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
+    )
     const { router } = renderWithProviders('/admin/permissions', 'member-token')
 
     // 역할이 없어도 조회 권한으로 메뉴와 화면을 이용한다.
@@ -54,7 +59,12 @@ describe('contract', () => {
   it('사용자 조회 권한이 없으면 역할의 사용자 설정을 표시하지 않는다', async () => {
     server.use(
       claims(['user'], ['rbac.read', 'rbac.user_role.manage']),
-      http.get('*/api/rbac/roles/1', () => HttpResponse.json({ code: 'OK', data: { id: 1, code: 'operator', name: '운영자', description: '' } })),
+      http.get('*/api/rbac/roles/1', () =>
+        HttpResponse.json({
+          code: 'OK',
+          data: { id: 1, code: 'operator', name: '운영자', description: '' },
+        }),
+      ),
       http.get('*/api/rbac/roles/1/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
       http.get('*/api/rbac/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
     )
@@ -69,12 +79,20 @@ describe('contract', () => {
     const user = userEvent.setup()
     server.use(
       claims(['user', 'admin'], ['rbac.read']),
-      http.get('*/api/rbac/roles', () => HttpResponse.json({
-        code: 'OK', data: [{ id: 1, code: 'admin', name: '관리자', description: '서비스 관리' }],
-      })),
-      http.get('*/api/rbac/permissions', () => HttpResponse.json({
-        code: 'OK', data: [{ id: 1, code: 'rbac.read', name: '권한 설정 조회', description: '역할과 권한 조회' }],
-      })),
+      http.get('*/api/rbac/roles', () =>
+        HttpResponse.json({
+          code: 'OK',
+          data: [{ id: 1, code: 'admin', name: '관리자', description: '서비스 관리' }],
+        }),
+      ),
+      http.get('*/api/rbac/permissions', () =>
+        HttpResponse.json({
+          code: 'OK',
+          data: [
+            { id: 1, code: 'rbac.read', name: '권한 설정 조회', description: '역할과 권한 조회' },
+          ],
+        }),
+      ),
     )
     const { router } = renderWithProviders('/', 'admin-token')
     await user.click(await screen.findByRole('link', { name: '관리' }))

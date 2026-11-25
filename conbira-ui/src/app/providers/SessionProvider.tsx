@@ -1,7 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { isHTTPError } from 'ky'
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
-import { authKeys, completeGoogleLogin, login, sessionOptions, type Credentials } from '@/features/auth'
+import {
+  authKeys,
+  completeGoogleLogin,
+  login,
+  sessionOptions,
+  type Credentials,
+} from '@/features/auth'
 import { rbacKeys } from '@/features/rbac'
 import { userKeys } from '@/features/users'
 
@@ -31,7 +37,10 @@ function persistToken(token: string | null) {
 const SessionContext = createContext<{
   session: Session
   signIn: (credentials: Credentials, signal: AbortSignal) => Promise<void>
-  signInGoogle: (input: { code: string; state: string; browser_proof: string }, signal: AbortSignal) => Promise<void>
+  signInGoogle: (
+    input: { code: string; state: string; browser_proof: string },
+    signal: AbortSignal,
+  ) => Promise<void>
   signOut: () => void
   retry: () => void
 } | null>(null)
@@ -67,11 +76,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     saveLogin(await login(credentials, signal), signal)
   }
 
-  async function signInGoogle(input: { code: string; state: string; browser_proof: string }, signal: AbortSignal) {
+  async function signInGoogle(
+    input: { code: string; state: string; browser_proof: string },
+    signal: AbortSignal,
+  ) {
     saveLogin(await completeGoogleLogin(input, signal), signal)
   }
 
-  function saveLogin({ accessToken, claims }: Awaited<ReturnType<typeof login>>, signal: AbortSignal) {
+  function saveLogin(
+    { accessToken, claims }: Awaited<ReturnType<typeof login>>,
+    signal: AbortSignal,
+  ) {
     signal.throwIfAborted()
     persistToken(accessToken)
     queryClient.setQueryData(authKeys.session(), claims)
@@ -94,7 +109,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <SessionContext.Provider value={{ session, signIn, signInGoogle, signOut, retry: () => void claims.refetch() }}>
+    <SessionContext.Provider
+      value={{ session, signIn, signInGoogle, signOut, retry: () => void claims.refetch() }}
+    >
       {children}
     </SessionContext.Provider>
   )

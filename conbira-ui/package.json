@@ -6,10 +6,12 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "verify:agent": "npm run typecheck && npm run lint && npm test",
+    "verify:agent": "npm run format:check && npm run typecheck && npm run lint && npm test",
     "verify:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --max-warnings 0"
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "type": "module",
   "dependencies": {
@@ -41,6 +43,7 @@
     "globals": "^17.14.0",
     "jsdom": "^29.1.1",
     "msw": "^3.0.7",
+    "prettier": "3.10.1",
     "tailwindcss": "^4.3.5",
     "typescript": "~6.0.0",
     "typescript-eslint": "^8.73.0",

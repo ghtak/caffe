@@ -23,20 +23,26 @@ test.afterEach(() => server.resetHandlers())
 test.afterAll(() => server.close())
 
 test.describe('contract', () => {
-  test('관리자 세션은 새로고침 후 유지되고 로그아웃하면 보호된 화면 접근이 차단된다', async ({ page }) => {
+  test('관리자 세션은 새로고침 후 유지되고 로그아웃하면 보호된 화면 접근이 차단된다', async ({
+    page,
+  }) => {
     const email = 'admin@example.test'
     const password = 'example-password'
     const token = 'admin-access-token'
     server.use(
       http.post('*/api/auth/login/local', () =>
-        HttpResponse.json({ code: 'OK', data: { access_token: token } })),
+        HttpResponse.json({ code: 'OK', data: { access_token: token } }),
+      ),
       http.get('*/api/auth/me', ({ request }) => {
         if (request.headers.get('authorization') !== `Bearer ${token}`) {
           return HttpResponse.json({ code: 'UNAUTHORIZED' }, { status: 401 })
         }
         return HttpResponse.json({
           code: 'OK',
-          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['admin'], permissions: ['rbac.read'] } },
+          data: {
+            exp: Math.floor(Date.now() / 1000) + 900,
+            user: { roles: ['admin'], permissions: ['rbac.read'] },
+          },
         })
       }),
       http.get('*/api/rbac/roles', () => HttpResponse.json({ code: 'OK', data: [] })),
@@ -46,7 +52,10 @@ test.describe('contract', () => {
     await page.getByLabel('비밀번호').fill(password)
     await page.getByRole('button', { name: '로그인', exact: true }).click()
     await page.getByRole('link', { name: '관리', exact: true }).click()
-    await page.getByRole('navigation', { name: '관리 메뉴' }).getByRole('link', { name: '역할 관리' }).click()
+    await page
+      .getByRole('navigation', { name: '관리 메뉴' })
+      .getByRole('link', { name: '역할 관리' })
+      .click()
     await expect(page).toHaveURL('/admin/roles')
     await page.reload()
 
@@ -71,17 +80,25 @@ test.describe('contract', () => {
 })
 
 test.describe('regression', () => {
-  test('세션 저장소가 차단돼도 홈을 열고 현재 페이지에서 로그인·로그아웃할 수 있다', async ({ page }) => {
+  test('세션 저장소가 차단돼도 홈을 열고 현재 페이지에서 로그인·로그아웃할 수 있다', async ({
+    page,
+  }) => {
     await page.addInitScript(() => {
       Object.defineProperty(window, 'sessionStorage', {
-        get() { throw new DOMException('Storage access denied', 'SecurityError') },
+        get() {
+          throw new DOMException('Storage access denied', 'SecurityError')
+        },
       })
     })
     server.use(
-      http.post('*/api/auth/login/local', () => HttpResponse.json({ data: { access_token: 'member-token' } })),
-      http.get('*/api/auth/me', () => HttpResponse.json({
-        data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
-      })),
+      http.post('*/api/auth/login/local', () =>
+        HttpResponse.json({ data: { access_token: 'member-token' } }),
+      ),
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
+        }),
+      ),
     )
 
     await page.goto('/')
@@ -115,13 +132,36 @@ test.describe('regression', () => {
 test('역할 상세는 높이가 바뀌어도 상단 정렬을 유지하고 모달을 닫는다', async ({ page }) => {
   const role = { id: 1, code: 'operator', name: '운영자', description: '' }
   server.use(
-    http.post('*/api/auth/login/local', () => HttpResponse.json({ code: 'OK', data: { access_token: 'token' } })),
-    http.get('*/api/auth/me', () => HttpResponse.json({ code: 'OK', data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['admin'], permissions: ['rbac.read', 'auth.user.read', 'rbac.user_role.manage'] } } })),
+    http.post('*/api/auth/login/local', () =>
+      HttpResponse.json({ code: 'OK', data: { access_token: 'token' } }),
+    ),
+    http.get('*/api/auth/me', () =>
+      HttpResponse.json({
+        code: 'OK',
+        data: {
+          exp: Math.floor(Date.now() / 1000) + 900,
+          user: {
+            roles: ['admin'],
+            permissions: ['rbac.read', 'auth.user.read', 'rbac.user_role.manage'],
+          },
+        },
+      }),
+    ),
     http.get('*/api/rbac/roles/1', () => HttpResponse.json({ code: 'OK', data: role })),
     http.get('*/api/rbac/roles/1/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
     http.get('*/api/rbac/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
-    http.get('*/api/rbac/roles/1/users', () => HttpResponse.json({ code: 'OK', data: { items: [], has_next: false } })),
-    http.get('*/api/rbac/roles/1/users/search', () => HttpResponse.json({ code: 'OK', data: { items: [{ id: 3, nickname: '홍길동', emails: [], assigned: true }], has_next: false } })),
+    http.get('*/api/rbac/roles/1/users', () =>
+      HttpResponse.json({ code: 'OK', data: { items: [], has_next: false } }),
+    ),
+    http.get('*/api/rbac/roles/1/users/search', () =>
+      HttpResponse.json({
+        code: 'OK',
+        data: {
+          items: [{ id: 3, nickname: '홍길동', emails: [], assigned: true }],
+          has_next: false,
+        },
+      }),
+    ),
   )
   await page.goto('/login')
   await page.getByLabel('이메일').fill('admin@example.test')

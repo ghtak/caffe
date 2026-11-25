@@ -12,10 +12,12 @@ export function catalogOptions(catalog: Catalog, token: string) {
     queryKey: rbacKeys.catalog(catalog),
     retry: false,
     queryFn: async ({ signal }) => {
-      const body = await apiClient.get(`/api/rbac/${catalog}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal,
-      }).json()
+      const body = await apiClient
+        .get(`/api/rbac/${catalog}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal,
+        })
+        .json()
       return catalogResponse.parse(body).data
     },
   })

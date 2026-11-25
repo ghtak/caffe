@@ -59,7 +59,11 @@ export default defineConfig([
   globalIgnores(['dist', 'node_modules']),
   {
     files: ['**/*.{ts,tsx}'],
-    extends: [js.configs.recommended, tseslint.configs.recommended, reactHooks.configs.flat.recommended],
+    extends: [
+      js.configs.recommended,
+      tseslint.configs.recommended,
+      reactHooks.configs.flat.recommended,
+    ],
     languageOptions: { globals: globals.browser },
   },
   {

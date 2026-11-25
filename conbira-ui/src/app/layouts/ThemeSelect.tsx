@@ -32,14 +32,23 @@ export function ThemeSelect() {
 
   return (
     <div className="relative shrink-0">
-      <select aria-label="화면 테마" value={theme} onChange={changeTheme}
-        className={cn(buttonVariants({ variant: 'outline' }), 'block appearance-none pr-8 py-0 text-foreground')}>
+      <select
+        aria-label="화면 테마"
+        value={theme}
+        onChange={changeTheme}
+        className={cn(
+          buttonVariants({ variant: 'outline' }),
+          'block appearance-none pr-8 py-0 text-foreground',
+        )}
+      >
         <option value="system">시스템</option>
         <option value="light">라이트</option>
         <option value="dark">다크</option>
       </select>
-      <span aria-hidden="true"
-        className="pointer-events-none absolute end-3 top-1/2 size-1.5 -translate-y-2/3 rotate-45 border-e border-b border-current text-muted-foreground" />
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute end-3 top-1/2 size-1.5 -translate-y-2/3 rotate-45 border-e border-b border-current text-muted-foreground"
+      />
     </div>
   )
 }

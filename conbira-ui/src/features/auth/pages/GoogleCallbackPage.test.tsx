@@ -6,7 +6,10 @@ import { renderWithProviders } from '../../../../test/renderWithProviders'
 
 describe('contract', () => {
   it('일치하는 콜백을 한 번 완료하고 기존 세션으로 홈에 로그인한다', async () => {
-    sessionStorage.setItem('conbira.google-login', JSON.stringify({ state: 'tab-state', browser_proof: 'proof' }))
+    sessionStorage.setItem(
+      'conbira.google-login',
+      JSON.stringify({ state: 'tab-state', browser_proof: 'proof' }),
+    )
     let submitted: unknown
     let requests = 0
     server.use(
@@ -15,9 +18,11 @@ describe('contract', () => {
         submitted = await request.json()
         return HttpResponse.json({ data: { access_token: 'google-token' } })
       }),
-      http.get('*/api/auth/me', () => HttpResponse.json({
-        data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
-      })),
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
+        }),
+      ),
     )
     renderWithProviders('/login/google/callback?code=auth-code&state=tab-state')
 
@@ -33,12 +38,17 @@ describe('edge', () => {
     ['/login/google/callback?code=auth-code&state=other', false],
     ['/login/google/callback?error=access_denied&state=tab-state', true],
   ])('유효하지 않은 콜백 %s는 완료 요청 없이 오류를 표시한다', async (path, consumed) => {
-    sessionStorage.setItem('conbira.google-login', JSON.stringify({ state: 'tab-state', browser_proof: 'proof' }))
+    sessionStorage.setItem(
+      'conbira.google-login',
+      JSON.stringify({ state: 'tab-state', browser_proof: 'proof' }),
+    )
     let requests = 0
-    server.use(http.post('*/api/auth/login/google/complete', () => {
-      requests++
-      return HttpResponse.json({})
-    }))
+    server.use(
+      http.post('*/api/auth/login/google/complete', () => {
+        requests++
+        return HttpResponse.json({})
+      }),
+    )
     const { router } = renderWithProviders(path)
 
     // 실패 시 자격증명이 URL에 남지 않고 완료 요청을 보내지 않는다.

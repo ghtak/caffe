@@ -6,7 +6,9 @@ import { createAppRouter } from '../src/app/routes/router'
 
 export function renderWithProviders(path: string, accessToken?: string) {
   if (accessToken) sessionStorage.setItem('conbira.access-token', accessToken)
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } })
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  })
   const router = createAppRouter(queryClient, createMemoryHistory({ initialEntries: [path] }))
   return { ...render(<App appRouter={router} appQueryClient={queryClient} />), router }
 }
