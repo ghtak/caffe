@@ -67,6 +67,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [logoutError, setLogoutError] = useState(false)
   const refreshToken = useRef<string | null>(null)
   const pending = useRef<Promise<string | null> | null>(null)
+  const signingOut = useRef(false)
   const generation = useRef(0)
   if (refreshToken.current === null) {
     try {
@@ -97,20 +98,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [queryClient])
 
   const signOut = useCallback(async () => {
-    const current = token
-    if (current) {
-      try {
-        await logoutSession(current)
-      } catch {
-        setLogoutError(true)
-        return
-      }
+    if (signingOut.current) return
+    signingOut.current = true
+    try {
+      await pending.current?.catch(() => null)
+      const current = refreshToken.current
+      if (current) await logoutSession(current)
+      clearSession()
+    } catch {
+      setLogoutError(true)
+    } finally {
+      signingOut.current = false
     }
-    clearSession()
-  }, [clearSession, token])
+  }, [clearSession])
 
   const refresh = useCallback(
     (failedToken: string): Promise<string | null> => {
+      if (signingOut.current) return Promise.resolve(null)
       if (!accessToken.current) return Promise.resolve(null)
       if (failedToken !== accessToken.current)
         return Promise.resolve(failedToken === previousToken.current ? accessToken.current : null)

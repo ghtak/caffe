@@ -192,7 +192,7 @@ mod tests {
         #[tokio::test]
         async fn user_claims_extractors_accept_matching_user() -> anyhow::Result<()> {
             let (router, container) = user_claims_router().await?;
-            let user = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active"});
+            let user = serde_json::json!({"id": 42, "status": "active"});
             let token = container
                 .jwt_token_service
                 .issue("42", user.as_object().unwrap().clone())?
@@ -223,10 +223,7 @@ mod tests {
         {
             let (router, container) = user_claims_router().await?;
             for (subject, user) in [
-                (
-                    "43",
-                    serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active"}),
-                ),
+                ("43", serde_json::json!({"id": 42, "status": "active"})),
                 ("42", serde_json::json!({})),
                 ("42", serde_json::json!({"id": 42, "status": "unknown"})),
                 ("42", serde_json::json!({"id": "42", "status": "active"})),

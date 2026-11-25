@@ -104,7 +104,6 @@ pub mod usecase {
             jwt_token_service,
             refresh_token_service,
             identity.user_id,
-            identity.email,
         )
         .await
     }
@@ -146,10 +145,7 @@ mod tests {
             drop(connection);
             let jwt = crate::test_support::jwt_service("test", "test", 900)?;
             let refresh = auth::service::refresh_token::RefreshTokenService::new(
-                auth::service::refresh_token::Config {
-                    ttl_seconds: 3600,
-                    family_ttl_seconds: 7200,
-                },
+                auth::service::refresh_token::Config { ttl_seconds: 3600 },
             );
             let hasher = Arc::new(espr::hash::argon2::Hasher::new(&Default::default())?);
             let password_service =
@@ -202,6 +198,102 @@ mod tests {
         use auth::entity::UserStatus;
 
         use super::*;
+
+        #[tokio::test]
+        async fn refresh_rejects_expired_token_and_inactive_user() -> anyhow::Result<()> {
+            let fixture = LoginFixture::new().await?;
+            fixture.create_user(UserStatus::Active).await?;
+            let tokens = execute(
+                &fixture.db,
+                &fixture.password_service,
+                &fixture.dummy_hash,
+                &fixture.jwt,
+                &fixture.refresh,
+                Command {
+                    email: "alice@example.com".into(),
+                    password: "secret".into(),
+                },
+            )
+            .await?;
+            let refresh = || {
+                crate::app::auth::feature::user_token_refresh::usecase::execute(
+                    &fixture.db,
+                    &fixture.jwt,
+                    &fixture.refresh,
+                    &tokens.refresh_token,
+                )
+            };
+            let mut conn = fixture.db.conn().await?;
+            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'").execute(conn.handle().conn()).await?;
+            drop(conn);
+            assert_eq!(
+                refresh().await.err().unwrap().code,
+                crate::Code::Unauthorized
+            );
+            let mut conn = fixture.db.conn().await?;
+            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP + INTERVAL '1 day'").execute(conn.handle().conn()).await?;
+            sqlx::query("UPDATE conbira_auth_users SET status = 'inactive'")
+                .execute(conn.handle().conn())
+                .await?;
+            drop(conn);
+            assert_eq!(
+                refresh().await.err().unwrap().code,
+                crate::Code::Unauthorized
+            );
+            assert_eq!(fixture.refresh_token_count().await?, 1);
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn refresh_issues_replacement_only_near_expiration_and_keeps_original_valid()
+        -> anyhow::Result<()> {
+            let fixture = LoginFixture::new().await?;
+            fixture.create_user(UserStatus::Active).await?;
+            let tokens = execute(
+                &fixture.db,
+                &fixture.password_service,
+                &fixture.dummy_hash,
+                &fixture.jwt,
+                &fixture.refresh,
+                Command {
+                    email: "alice@example.com".into(),
+                    password: "secret".into(),
+                },
+            )
+            .await?;
+            let mut conn = fixture.db.conn().await?;
+            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP + INTERVAL '4 days'").execute(conn.handle().conn()).await?;
+            drop(conn);
+            let refresh = || {
+                crate::app::auth::feature::user_token_refresh::usecase::execute(
+                    &fixture.db,
+                    &fixture.jwt,
+                    &fixture.refresh,
+                    &tokens.refresh_token,
+                )
+            };
+            assert_eq!(refresh().await?.refresh_token, tokens.refresh_token);
+            let mut conn = fixture.db.conn().await?;
+            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP + INTERVAL '3 days'").execute(conn.handle().conn()).await?;
+            drop(conn);
+            let first = refresh().await?.refresh_token;
+            let second = refresh().await?.refresh_token;
+            assert_ne!(first, tokens.refresh_token);
+            assert_ne!(second, tokens.refresh_token);
+            assert_ne!(first, second);
+            assert_eq!(fixture.refresh_token_count().await?, 3);
+            crate::app::auth::feature::user_logout::usecase::execute(
+                &fixture.db,
+                &fixture.refresh,
+                &tokens.refresh_token,
+            )
+            .await?;
+            assert_eq!(
+                refresh().await.err().unwrap().code,
+                crate::Code::Unauthorized
+            );
+            Ok(())
+        }
 
         #[tokio::test]
         async fn refresh_session_matches_new_access_token_claims() -> anyhow::Result<()> {
@@ -269,16 +361,11 @@ mod tests {
                 // 담고, 사용자 응답은 같은 사용자를 가리킨다.
                 assert_eq!(claims.sub, user.id.to_string());
                 let mut user_claims = claims.user;
-                let family_id = user_claims.remove("family_id").unwrap();
-                assert!(uuid::Uuid::parse_str(family_id.as_str().unwrap()).is_ok());
+                assert!(user_claims.remove("family_id").is_none());
                 assert_eq!(
                     serde_json::Value::Object(user_claims),
                     serde_json::json!({"id": user.id, "status": status_claim, "roles": ["user"], "permissions": []})
                 );
-                let user_info = tokens.user.as_ref().unwrap();
-                assert_eq!(user_info.id, user.id);
-                assert_eq!(user_info.email, "alice@example.com");
-                assert_eq!(user_info.nickname, "Alice");
                 let new_tokens = execute(
                     &fixture.db,
                     &fixture.password_service,
@@ -297,10 +384,13 @@ mod tests {
                 assert_eq!(new_claims.user["permissions"], serde_json::json!([]));
 
                 let mut connection = fixture.db.conn().await?;
+                let mut tx = connection.begin().await?;
                 let stored_user_id = fixture
                     .refresh
-                    .find_user_id(&mut connection.handle(), &tokens.refresh_token)
-                    .await?;
+                    .find_valid(&mut tx.handle(), &tokens.refresh_token)
+                    .await?
+                    .map(|record| record.user_id);
+                tx.rollback().await?;
                 drop(connection);
                 // 재로그인 후에도 첫 리프레시 토큰은 같은 사용자를 가리킨다.
                 assert_eq!(stored_user_id, Some(user.id));

@@ -31,7 +31,6 @@ output_len = 32
 
 [auth.refresh_token]
 ttl_seconds = 604800
-family_ttl_seconds = 604800
 
 [auth.password_hash]
 max_concurrency = 4

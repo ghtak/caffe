@@ -42,6 +42,116 @@ mod tests {
 
         use crate::app::auth::claims::AuthClaims;
 
+        async fn auth_router() -> anyhow::Result<(axum::Router, String)> {
+            let container = crate::test_support::container().await?;
+            let mut conn = container.db.conn().await?;
+            for migration in [
+                include_str!("../../migrations/0010_user.sql"),
+                include_str!("../../migrations/0011_refresh_token.sql"),
+                include_str!("../../migrations/0012_rbac.sql"),
+            ] {
+                let sql = migration.replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
+                sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
+                    .execute(conn.handle().conn())
+                    .await?;
+            }
+            let user_id: i64 = sqlx::query_scalar(
+                "INSERT INTO conbira_auth_users (nickname, status) VALUES ('user', 'active') RETURNING id",
+            )
+            .fetch_one(conn.handle().conn())
+            .await?;
+            let mut tx = conn.begin().await?;
+            let token = container
+                .refresh_token_service
+                .issue(&mut tx.handle(), user_id)
+                .await?
+                .token;
+            tx.commit().await?;
+            drop(conn);
+            Ok((super::super::router(container)?, token))
+        }
+
+        #[tokio::test]
+        async fn logout_without_bearer_revokes_token_and_is_idempotent() -> anyhow::Result<()> {
+            let (router, token) = auth_router().await?;
+            for _ in 0..2 {
+                let response = router
+                    .clone()
+                    .oneshot(
+                        Request::post("/api/auth/logout")
+                            .header(header::CONTENT_TYPE, "application/json")
+                            .body(Body::from(
+                                serde_json::json!({"refresh_token": token}).to_string(),
+                            ))?,
+                    )
+                    .await?;
+                // Bearer 없이도 로그아웃과 재시도가 성공한다.
+                assert_eq!(response.status(), StatusCode::OK);
+                assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+                let body: serde_json::Value =
+                    serde_json::from_slice(&to_bytes(response.into_body(), 4096).await?)?;
+                assert_eq!(body, serde_json::json!({"code": "OK"}));
+            }
+            let response = router
+                .oneshot(
+                    Request::post("/api/auth/refresh")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(
+                            serde_json::json!({"refresh_token": token}).to_string(),
+                        ))?,
+                )
+                .await?;
+            // 폐기된 토큰으로는 갱신할 수 없다.
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn refresh_success_has_no_store_header() -> anyhow::Result<()> {
+            let (router, token) = auth_router().await?;
+            let response = router
+                .oneshot(
+                    Request::post("/api/auth/refresh")
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(
+                            serde_json::json!({"refresh_token": token}).to_string(),
+                        ))?,
+                )
+                .await?;
+            // 유효한 토큰의 갱신 응답은 캐시되지 않는다.
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+            let body: serde_json::Value =
+                serde_json::from_slice(&to_bytes(response.into_body(), 4096).await?)?;
+            assert_eq!(body["data"]["refresh_token"], token);
+            Ok(())
+        }
+
+        #[tokio::test]
+        async fn refresh_and_logout_reject_invalid_bodies_without_caching() -> anyhow::Result<()> {
+            let router = super::super::router(crate::test_support::container().await?)?;
+            for path in ["/api/auth/refresh", "/api/auth/logout"] {
+                for body in ["{", "{}", r#"{"refresh_token":""}"#] {
+                    let response = router
+                        .clone()
+                        .oneshot(
+                            Request::post(path)
+                                .header(header::CONTENT_TYPE, "application/json")
+                                .body(Body::from(body))?,
+                        )
+                        .await?;
+                    // 잘못된 본문은 공통 400 응답이며 캐시되지 않는다.
+                    assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{path}: {body}");
+                    assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+                    let result: serde_json::Value =
+                        serde_json::from_slice(&to_bytes(response.into_body(), 4096).await?)?;
+                    assert_eq!(result["code"], "INVALID_REQUEST");
+                }
+            }
+            Ok(())
+        }
+
         #[tokio::test]
         async fn resource_routes_validate_request_bodies() -> anyhow::Result<()> {
             let router = super::super::router(crate::test_support::container().await?)?;

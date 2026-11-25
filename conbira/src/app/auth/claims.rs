@@ -8,7 +8,6 @@ pub struct AuthClaims(pub espr::jwt::Claims);
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct UserClaims {
     pub id: i64,
-    pub family_id: uuid::Uuid,
     pub status: UserStatus,
     #[serde(default)]
     pub roles: Vec<String>,
@@ -17,16 +16,9 @@ pub struct UserClaims {
 }
 
 impl UserClaims {
-    pub fn new(
-        id: i64,
-        family_id: uuid::Uuid,
-        status: UserStatus,
-        roles: Vec<String>,
-        permissions: Vec<String>,
-    ) -> Self {
+    pub fn new(id: i64, status: UserStatus, roles: Vec<String>, permissions: Vec<String>) -> Self {
         Self {
             id,
-            family_id,
             status,
             roles,
             permissions,
@@ -115,35 +107,28 @@ mod tests {
         use super::super::*;
 
         #[test]
-        fn family_id_round_trips_in_user_claims() -> anyhow::Result<()> {
-            let family_id = uuid::Uuid::new_v4();
-            let claims = UserClaims::new(42, family_id, UserStatus::Active, vec![], vec![]);
+        fn claims_do_not_include_family_id() -> anyhow::Result<()> {
+            let claims = UserClaims::new(42, UserStatus::Active, vec![], vec![]);
             let value = serde_json::to_value(claims)?;
-            assert_eq!(value["family_id"], family_id.to_string());
+            assert!(value.get("family_id").is_none());
             let decoded: UserClaims = serde_json::from_value(value)?;
-            assert_eq!(decoded.family_id, family_id);
+            assert_eq!(decoded.id, 42);
             Ok(())
         }
 
         #[test]
-        fn rejects_claims_without_family_id() {
+        fn accepts_claims_without_family_id() {
             assert!(
-                serde_json::from_value::<UserClaims>(serde_json::json!({
-                    "id": 42, "status": "active"
-                }))
-                .is_err()
+                serde_json::from_value::<UserClaims>(
+                    serde_json::json!({ "id": 42, "status": "active" })
+                )
+                .is_ok()
             );
         }
 
         #[test]
         fn require_permission_returns_forbidden_with_caller_location() {
-            let claims = UserClaims::new(
-                42,
-                uuid::Uuid::nil(),
-                UserStatus::Active,
-                vec![],
-                vec!["rbac.read".into()],
-            );
+            let claims = UserClaims::new(42, UserStatus::Active, vec![], vec!["rbac.read".into()]);
             // 보유한 권한은 통과하고, 없는 권한은 호출 위치를 보존해 거부한다.
             assert!(claims.require_permission("rbac.read", "caller").is_ok());
             let error = claims
@@ -161,18 +146,13 @@ mod tests {
                 (UserStatus::Inactive, "inactive"),
                 (UserStatus::Withdrawn, "withdrawn"),
             ] {
-                let map: Map<String, Value> = UserClaims::new(
-                    42,
-                    uuid::Uuid::nil(),
-                    status,
-                    vec!["user".into()],
-                    vec!["rbac.read".into()],
-                )
-                .try_into()?;
+                let map: Map<String, Value> =
+                    UserClaims::new(42, status, vec!["user".into()], vec!["rbac.read".into()])
+                        .try_into()?;
                 // 토큰에 사용자 ID, 상태와 권한 코드가 포함된다.
                 assert_eq!(
                     Value::Object(map.clone()),
-                    serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": name, "roles": ["user"], "permissions": ["rbac.read"]})
+                    serde_json::json!({"id": 42, "status": name, "roles": ["user"], "permissions": ["rbac.read"]})
                 );
                 let decoded: UserClaims = serde_json::from_value(Value::Object(map))?;
                 // 저장된 claim을 동일한 사용자 정보와 권한으로 읽는다.

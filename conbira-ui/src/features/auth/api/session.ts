@@ -55,9 +55,9 @@ export async function refreshSession(refreshToken: string, signal: AbortSignal) 
   return refreshResponse.parse(body).data
 }
 
-export async function logoutSession(accessToken: string) {
+export async function logoutSession(refreshToken: string) {
   await apiClient.post('/api/auth/logout', {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    json: { refresh_token: refreshToken },
     retry: 0,
   })
 }

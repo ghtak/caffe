@@ -28,7 +28,7 @@ async fn role_detail_lists_permissions_and_paginated_users() -> anyhow::Result<(
             sqlx::query(sql).execute(connection.handle().conn()).await?;
         }
     }
-    let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": ["rbac.read", "auth.user.read"]});
+    let claims = serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.read", "auth.user.read"]});
     let token = container
         .jwt_token_service
         .issue("42", claims.as_object().unwrap().clone())?
@@ -134,7 +134,7 @@ async fn role_user_list_requires_both_read_permissions() -> anyhow::Result<()> {
     let container = crate::test_support::container().await?;
     let router = crate::app::http::router(container.clone())?;
     for permissions in [vec!["rbac.read"], vec!["auth.user.read"]] {
-        let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": permissions});
+        let claims = serde_json::json!({"id": 42, "status": "active", "permissions": permissions});
         let token = container
             .jwt_token_service
             .issue("42", claims.as_object().unwrap().clone())?
@@ -157,7 +157,7 @@ async fn role_user_search_requires_both_read_permissions() -> anyhow::Result<()>
     let container = crate::test_support::container().await?;
     let router = crate::app::http::router(container.clone())?;
     for permissions in [vec!["rbac.read"], vec!["auth.user.read"]] {
-        let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": permissions});
+        let claims = serde_json::json!({"id": 42, "status": "active", "permissions": permissions});
         let token = container
             .jwt_token_service
             .issue("42", claims.as_object().unwrap().clone())?

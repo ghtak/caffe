@@ -7,6 +7,86 @@ import { server } from '../../../../test/msw/server'
 import { renderWithProviders } from '../../../../test/renderWithProviders'
 
 describe('contract', () => {
+  it('갱신 응답에 기존 refresh token이 반환되면 기존 토큰을 보존한다', async () => {
+    sessionStorage.setItem('conbira.refresh-token', 'old-refresh')
+    server.use(
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: [], permissions: [] } },
+        }),
+      ),
+      http.post('*/api/auth/refresh', () =>
+        HttpResponse.json({
+          data: {
+            access_token: 'new-access',
+            refresh_token: 'old-refresh',
+            expires_at: Math.floor(Date.now() / 1000) + 900,
+            claims: { roles: [], permissions: [] },
+          },
+        }),
+      ),
+      http.get('*/api/protected/1', ({ request }) =>
+        request.headers.get('Authorization') === 'Bearer new-access'
+          ? HttpResponse.json({ ok: true })
+          : new HttpResponse(null, { status: 401 }),
+      ),
+    )
+    renderWithProviders('/', 'old-access')
+    await screen.findByRole('button', { name: '로그아웃' })
+    await apiClient.get('/api/protected/1', { headers: { Authorization: 'Bearer old-access' } })
+    expect(sessionStorage.getItem('conbira.refresh-token')).toBe('old-refresh')
+  })
+
+  it('갱신 중 로그아웃은 갱신 완료 후 최신 refresh token을 전송한다', async () => {
+    let release!: () => void
+    let refreshStarted = false
+    let logoutToken: unknown
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    sessionStorage.setItem('conbira.refresh-token', 'old-refresh')
+    server.use(
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: [], permissions: [] } },
+        }),
+      ),
+      http.post('*/api/auth/refresh', async () => {
+        refreshStarted = true
+        await waiting
+        return HttpResponse.json({
+          data: {
+            access_token: 'new-access',
+            refresh_token: 'new-refresh',
+            expires_at: Math.floor(Date.now() / 1000) + 900,
+            claims: { roles: [], permissions: [] },
+          },
+        })
+      }),
+      http.post('*/api/auth/logout', async ({ request }) => {
+        logoutToken = await request.json()
+        return HttpResponse.json({ code: 'OK' })
+      }),
+      http.get('*/api/protected/1', ({ request }) =>
+        request.headers.get('Authorization') === 'Bearer new-access'
+          ? HttpResponse.json({ ok: true })
+          : new HttpResponse(null, { status: 401 }),
+      ),
+    )
+    renderWithProviders('/', 'old-access')
+    const button = await screen.findByRole('button', { name: '로그아웃' })
+    const request = apiClient.get('/api/protected/1', {
+      headers: { Authorization: 'Bearer old-access' },
+    })
+    await waitFor(() => expect(refreshStarted).toBe(true))
+    await userEvent.setup().click(button)
+    expect(logoutToken).toBeUndefined()
+    release()
+    await request
+    expect(await screen.findByRole('link', { name: '로그인' })).toBeVisible()
+    expect(logoutToken).toEqual({ refresh_token: 'new-refresh' })
+  })
+
   it('동시 인증 실패 시 한 번 갱신하고 각 요청을 새 토큰으로 재시도한다', async () => {
     let refreshCount = 0
     const tokens: string[] = []
@@ -44,7 +124,7 @@ describe('contract', () => {
       apiClient.get('/api/protected/1', { headers }).json(),
       apiClient.get('/api/protected/2', { headers }).json(),
     ])
-    // 요청 두 개가 하나의 회전을 공유하고 각각 성공한다.
+    // 요청 두 개가 하나의 갱신을 공유하고 각각 성공한다.
     expect(results).toEqual([{ ok: true }, { ok: true }])
     expect(refreshCount).toBe(1)
     expect(tokens.filter((token) => token === 'Bearer new-access')).toHaveLength(2)
@@ -62,8 +142,8 @@ describe('regression', () => {
           data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: [], permissions: [] } },
         }),
       ),
-      http.post('*/api/auth/logout', ({ request }) => {
-        expect(request.headers.get('Authorization')).toBe('Bearer access-token')
+      http.post('*/api/auth/logout', async ({ request }) => {
+        expect(await request.json()).toEqual({ refresh_token: 'refresh-token' })
         requests++
         return requests === 1
           ? new HttpResponse(null, { status: 500 })

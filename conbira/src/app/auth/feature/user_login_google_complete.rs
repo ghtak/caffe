@@ -135,7 +135,6 @@ pub mod usecase {
             &container.jwt_token_service,
             &container.refresh_token_service,
             identity.user_id,
-            identity.email,
         )
         .await
     }
@@ -384,9 +383,9 @@ mod tests {
             let first_body: Value = serde_json::from_slice(&to_bytes(a.into_body(), 16384).await?)?;
             let second_body: Value =
                 serde_json::from_slice(&to_bytes(b.into_body(), 16384).await?)?;
-            let google_id = first_body["data"]["user"]["id"].as_i64().unwrap();
-            assert_eq!(second_body["data"]["user"]["id"], google_id);
-            assert_eq!(first_body["data"]["user"]["status"], "registered");
+            let google_id = first_body["data"]["claims"]["id"].as_i64().unwrap();
+            assert_eq!(second_body["data"]["claims"]["id"], google_id);
+            assert_eq!(first_body["data"]["claims"]["status"], "registered");
             assert!(first_body["data"]["refresh_token"].as_str().is_some());
             let mut conn = container.db.conn().await?;
             let rows: Vec<(i64, String, String)> = sqlx::query_as("SELECT user_id, provider, email FROM conbira_auth_user_identities ORDER BY provider").fetch_all(conn.handle().conn()).await?;
@@ -505,7 +504,7 @@ mod tests {
                 let response = router.clone().oneshot(completion(&first, &code)).await?;
                 let body: Value =
                     serde_json::from_slice(&to_bytes(response.into_body(), 16384).await?)?;
-                let google_id = body["data"]["user"]["id"].as_i64().unwrap();
+                let google_id = body["data"]["claims"]["id"].as_i64().unwrap();
                 // 기대 결과: inactive and withdrawn users cannot log in
                 for status in ["inactive", "withdrawn"] {
                     let mut conn = container.db.conn().await?;

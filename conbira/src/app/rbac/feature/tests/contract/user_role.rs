@@ -11,7 +11,7 @@ async fn setup() -> anyhow::Result<(axum::Router, Arc<crate::app::Container>)> {
 }
 
 fn token(container: &crate::app::Container, permissions: &[&str]) -> anyhow::Result<String> {
-    let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": permissions});
+    let claims = serde_json::json!({"id": 42, "status": "active", "permissions": permissions});
     Ok(container
         .jwt_token_service
         .issue("42", claims.as_object().unwrap().clone())?

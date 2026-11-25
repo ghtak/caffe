@@ -48,11 +48,11 @@ mod tests {
             };
             let denied = issue(
                 "42",
-                serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": []}),
+                serde_json::json!({"id": 42, "status": "active", "permissions": []}),
             )?;
             let invalid_claims = issue(
                 "43",
-                serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": ["rbac.read"]}),
+                serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.read"]}),
             )?;
             for (auth, expected) in [
                 (None, StatusCode::UNAUTHORIZED),
@@ -89,7 +89,8 @@ mod tests {
                 .execute(connection.handle().conn())
                 .await?;
             }
-            let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": ["rbac.read"]});
+            let claims =
+                serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.read"]});
             let allowed = container
                 .jwt_token_service
                 .issue("42", claims.as_object().unwrap().clone())?

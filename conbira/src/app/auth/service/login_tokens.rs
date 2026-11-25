@@ -1,6 +1,6 @@
 use crate::app::DatabaseExt as _;
 use crate::app::auth::claims::UserClaims;
-use crate::app::auth::entity::{User, UserInfo, UserStatus};
+use crate::app::auth::entity::{User, UserStatus};
 use crate::app::auth::repository::user;
 use crate::app::auth::service::refresh_token::RefreshTokenService;
 use crate::app::container::db::{Database, Handle};
@@ -13,8 +13,6 @@ pub struct LoginTokens {
     pub refresh_token: String,
     pub expires_at: i64,
     pub claims: UserClaims,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub user: Option<UserInfo>,
 }
 
 pub async fn issue(
@@ -22,7 +20,6 @@ pub async fn issue(
     jwt_token_service: &espr::jwt::TokenService,
     refresh_token_service: &RefreshTokenService,
     user_id: i64,
-    email: String,
 ) -> crate::Result<LoginTokens> {
     let user = {
         let mut connection = db.acquire_conn(crate::here!()).await?;
@@ -46,21 +43,8 @@ pub async fn issue(
         let refresh = refresh_token_service
             .issue(&mut tx.handle(), user.id)
             .await?;
-        let user_info = UserInfo {
-            id: user.id,
-            nickname: user.nickname.clone(),
-            status: user.status,
-            email,
-            created_at: user.created_at,
-        };
-        let tokens = issue_tokens(
-            &mut tx.handle(),
-            jwt_token_service,
-            &user,
-            refresh,
-            Some(user_info),
-        )
-        .await?;
+        let tokens =
+            issue_tokens(&mut tx.handle(), jwt_token_service, &user, refresh.token).await?;
         tx.commit()
             .await
             .map_err_internal("Failed to commit login", crate::here!())?;
@@ -73,8 +57,7 @@ pub async fn issue_tokens(
     handle: &mut Handle<'_>,
     jwt_token_service: &espr::jwt::TokenService,
     user: &User,
-    refresh: crate::app::auth::service::refresh_token::IssuedRefreshToken,
-    user_info: Option<UserInfo>,
+    refresh_token: String,
 ) -> crate::Result<LoginTokens> {
     let roles = user_role::list_by_user_id(handle, user.id)
         .await?
@@ -86,15 +69,14 @@ pub async fn issue_tokens(
         .into_iter()
         .map(|permission| permission.code)
         .collect();
-    let claims = UserClaims::new(user.id, refresh.family_id, user.status, roles, permissions);
+    let claims = UserClaims::new(user.id, user.status, roles, permissions);
     let issued = jwt_token_service
         .issue(&user.id.to_string(), claims.clone().try_into()?)
         .map_err_internal("Failed to issue access token", crate::here!())?;
     Ok(LoginTokens {
         access_token: issued.token,
-        refresh_token: refresh.token,
+        refresh_token,
         expires_at: issued.expires_at.as_second(),
         claims,
-        user: user_info,
     })
 }

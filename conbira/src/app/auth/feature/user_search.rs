@@ -161,7 +161,7 @@ mod tests {
                 (vec!["admin"], vec![], StatusCode::FORBIDDEN),
                 (vec!["user"], vec!["auth.user.read"], StatusCode::OK),
             ] {
-                let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "roles": roles, "permissions": permissions});
+                let claims = serde_json::json!({"id": 42, "status": "active", "roles": roles, "permissions": permissions});
                 let token = container
                     .jwt_token_service
                     .issue("42", claims.as_object().unwrap().clone())?
@@ -192,7 +192,7 @@ mod tests {
                 }
             }
 
-            let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "roles": ["admin"], "permissions": ["auth.user.read"]});
+            let claims = serde_json::json!({"id": 42, "status": "active", "roles": ["admin"], "permissions": ["auth.user.read"]});
             let token = container
                 .jwt_token_service
                 .issue("42", claims.as_object().unwrap().clone())?
