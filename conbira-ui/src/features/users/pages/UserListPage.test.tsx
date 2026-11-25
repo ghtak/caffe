@@ -109,7 +109,7 @@ describe('edge', () => {
   })
 
   it('조회 권한이 없으면 목록에 접근할 수 없다', async () => {
-    server.use(admin([]))
+    server.use(admin(['rbac.read']))
     renderWithProviders('/admin/users', 'admin-token')
     // 관리자로 진입하더라도 조회 권한 없이는 사용자 목록을 열지 않는다.
     expect(await screen.findByRole('alert')).toHaveTextContent('사용자 목록을 조회할 권한이 없습니다.')

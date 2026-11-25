@@ -2,6 +2,7 @@ import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import { Card } from '@/shared/components/ui/Card'
+import { visibleAdminSections } from '../access'
 import { useSession } from '../providers/SessionProvider'
 import { ThemeSelect } from './ThemeSelect'
 
@@ -30,7 +31,7 @@ export function RootLayout() {
                 <Link to="/login" activeOptions={{ exact: true }}>로그인</Link>
               </Button>
             )}
-            {session.status === 'authenticated' && session.canManage && (
+            {session.status === 'authenticated' && visibleAdminSections(session.permissions).length > 0 && (
               <Button asChild variant="secondary">
                 <Link to="/admin">관리</Link>
               </Button>

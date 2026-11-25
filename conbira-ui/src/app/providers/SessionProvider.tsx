@@ -7,7 +7,7 @@ import { userKeys } from '@/features/users'
 
 export type Session =
   | { status: 'guest' | 'loading' | 'error' }
-  | { status: 'authenticated'; token: string; canManage: boolean; permissions: string[] }
+  | { status: 'authenticated'; token: string; permissions: string[] }
 
 const storageKey = 'conbira.access-token'
 
@@ -87,7 +87,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     session = {
       status: 'authenticated',
       token,
-      canManage: claims.data.user.roles.includes('admin'),
       permissions: claims.data.user.permissions,
     }
   } else {

@@ -22,15 +22,47 @@ describe('contract', () => {
     expect(screen.queryByRole('navigation', { name: '관리 메뉴' })).not.toBeInTheDocument()
   })
 
-  it('rbac.read가 있는 일반 계정의 관리 URL 접근을 차단하고 메뉴를 숨긴다', async () => {
-    server.use(claims(['user'], ['rbac.read']))
+  it('rbac.read가 있는 일반 계정은 권한 관리에 접근할 수 있다', async () => {
+    server.use(claims(['user'], ['rbac.read']), http.get('*/api/rbac/permissions', () => HttpResponse.json({ code: 'OK', data: [] })))
     const { router } = renderWithProviders('/admin/permissions', 'member-token')
 
-    // 조회 권한이 있어도 admin 역할이 없으면 로그인된 홈으로 이동한다.
+    // 역할이 없어도 조회 권한으로 메뉴와 화면을 이용한다.
+    expect(await screen.findByRole('heading', { name: '권한 관리' })).toBeVisible()
+    expect(router.state.location.pathname).toBe('/admin/permissions')
+    expect(screen.getByRole('link', { name: '관리' })).toBeVisible()
+    expect(screen.queryByRole('link', { name: '사용자 목록' })).not.toBeInTheDocument()
+  })
+
+  it('관리 메뉴 권한이 없는 admin은 관리 영역에 접근할 수 없다', async () => {
+    server.use(claims(['admin'], []))
+    renderWithProviders('/admin', 'admin-token')
+
+    // 역할만으로 관리 메뉴를 표시하지 않는다.
     expect(await screen.findByRole('heading', { name: '홈' })).toBeVisible()
-    expect(router.state.location.pathname).toBe('/')
-    expect(screen.getByRole('button', { name: '로그아웃' })).toBeVisible()
     expect(screen.queryByRole('link', { name: '관리' })).not.toBeInTheDocument()
+  })
+
+  it('사용자 조회 권한만 있으면 역할 관리 직접 접근도 거부한다', async () => {
+    server.use(claims(['user'], ['auth.user.read']))
+    renderWithProviders('/admin/roles', 'member-token')
+
+    // 다른 관리 메뉴의 권한은 역할 목록 접근을 허용하지 않는다.
+    expect(await screen.findByRole('alert')).toHaveTextContent('목록을 조회할 권한이 없습니다.')
+    expect(screen.queryByRole('link', { name: '역할 관리' })).not.toBeInTheDocument()
+  })
+
+  it('사용자 조회 권한이 없으면 역할의 사용자 설정을 표시하지 않는다', async () => {
+    server.use(
+      claims(['user'], ['rbac.read', 'rbac.user_role.manage']),
+      http.get('*/api/rbac/roles/1', () => HttpResponse.json({ code: 'OK', data: { id: 1, code: 'operator', name: '운영자', description: '' } })),
+      http.get('*/api/rbac/roles/1/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
+      http.get('*/api/rbac/permissions', () => HttpResponse.json({ code: 'OK', data: [] })),
+    )
+    renderWithProviders('/admin/roles/1', 'member-token')
+
+    // 역할 사용자 조회에 필요한 두 권한이 모두 있어야 탭을 연다.
+    expect(await screen.findByRole('heading', { name: '운영자' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '사용자 설정' })).not.toBeInTheDocument()
   })
 
   it('admin 역할은 관리 홈에서 역할·권한 목록 조회 화면으로 이동할 수 있다', async () => {

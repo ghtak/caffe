@@ -127,6 +127,7 @@ test('역할 상세는 높이가 바뀌어도 상단 정렬을 유지하고 모�
   await page.getByLabel('이메일').fill('admin@example.test')
   await page.getByLabel('비밀번호').fill('example-password')
   await page.getByRole('button', { name: '로그인', exact: true }).click()
+  await expect(page.getByRole('button', { name: '로그아웃' })).toBeVisible()
   await page.goto('/admin/roles/1')
   await page.getByRole('button', { name: '사용자 설정' }).click()
   const heading = page.getByRole('heading', { name: '운영자' })

@@ -6,6 +6,7 @@ import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
 import { AdminCatalogPage, RoleDetailPage, catalogOptions, type Catalog } from '@/features/rbac'
 import { UserListPage } from '@/features/users'
+import { can, visibleAdminSections } from '../access'
 import { AdminLayout } from '../layouts/AdminLayout'
 import { RootLayout } from '../layouts/RootLayout'
 import { useSession, type Session } from '../providers/SessionProvider'
@@ -23,25 +24,26 @@ function AdminRoute() {
   const { session } = useSession()
   if (session.status === 'guest') return <Navigate to="/login" replace />
   if (session.status !== 'authenticated') return <main className="min-h-90" />
-  if (!session.canManage) return <Navigate to="/" replace />
+  if (visibleAdminSections(session.permissions).length === 0) return <Navigate to="/" replace />
   return <AdminLayout />
 }
 
 function AdminCatalogRoute({ catalog }: { catalog: Catalog }) {
   const { session } = useSession()
   if (session.status !== 'authenticated') return null
+  if (!can(session.permissions, ['rbac.read'])) return <p role="alert" className="p-8">목록을 조회할 권한이 없습니다.</p>
   return <AdminCatalogPage catalog={catalog} token={session.token} />
 }
 
 function AdminUsersRoute() {
   const { session } = useSession()
   if (session.status !== 'authenticated') return null
-  if (!session.permissions.includes('auth.user.read')) return <p role="alert" className="p-8">사용자 목록을 조회할 권한이 없습니다.</p>
-  return <UserListPage token={session.token} canEdit={session.permissions.includes('auth.user.manage')} />
+  if (!can(session.permissions, ['auth.user.read'])) return <p role="alert" className="p-8">사용자 목록을 조회할 권한이 없습니다.</p>
+  return <UserListPage token={session.token} canEdit={can(session.permissions, ['auth.user.manage'])} />
 }
 
 function loadCatalog({ queryClient, session }: RouterContext, catalog: Catalog) {
-  if (session.status !== 'authenticated' || !session.canManage) return
+  if (session.status !== 'authenticated' || !can(session.permissions, ['rbac.read'])) return
   // The page owns pending and error UI while the query is warmed.
   void queryClient.ensureQueryData(catalogOptions(catalog, session.token)).catch(() => {})
 }
@@ -75,7 +77,7 @@ const adminIndexRoute = createRoute({
 
 function AdminHomeRoute() {
   const { session } = useSession()
-  return session.status === 'authenticated' ? <AdminHomePage canReadUsers={session.permissions.includes('auth.user.read')} /> : null
+  return session.status === 'authenticated' ? <AdminHomePage sections={visibleAdminSections(session.permissions)} /> : null
 }
 const rolesRoute = createRoute({
   getParentRoute: () => adminRoute,
@@ -89,7 +91,8 @@ function RoleDetailRoute() {
   const id = Number(roleId)
   if (session.status !== 'authenticated') return null
   if (!Number.isSafeInteger(id) || id < 1) return <p role="alert" className="p-8">역할을 찾을 수 없습니다.</p>
-  return <RoleDetailPage id={id} token={session.token} permissions={session.permissions} />
+  if (!can(session.permissions, ['rbac.read'])) return <p role="alert" className="p-8">역할을 조회할 권한이 없습니다.</p>
+  return <RoleDetailPage id={id} token={session.token} canEditPermissions={can(session.permissions, ['rbac.role.manage'])} canReadUsers={can(session.permissions, ['rbac.read', 'auth.user.read'])} canEditUsers={can(session.permissions, ['rbac.user_role.manage'])} />
 }
 const roleDetailRoute = createRoute({ getParentRoute: () => adminRoute, path: 'roles/$roleId', component: RoleDetailRoute })
 const usersRoute = createRoute({
