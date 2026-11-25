@@ -41,3 +41,7 @@ COMMENT ON COLUMN conbira_auth_user_identities.email IS '정규화된 이메일.
 COMMENT ON COLUMN conbira_auth_user_identities.password_hash IS '직접 로그인에 사용하는 비밀번호 해시';
 COMMENT ON COLUMN conbira_auth_user_identities.created_at IS '로그인 수단 연결 시각';
 COMMENT ON COLUMN conbira_auth_user_identities.updated_at IS '로그인 식별 정보의 마지막 변경 시각';
+
+-- 사용자 목록 조회와 이메일 검색에서 user_id로 식별 정보를 찾는 데 사용
+CREATE INDEX IF NOT EXISTS conbira_auth_user_identities_user_id_idx
+    ON conbira_auth_user_identities (user_id);

@@ -1,9 +1,11 @@
 import type { QueryClient } from '@tanstack/react-query'
 import { createRootRouteWithContext, createRoute, createRouter, Navigate, type RouterHistory } from '@tanstack/react-router'
 import { z } from 'zod'
+import { AdminHomePage } from '@/features/admin'
 import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
-import { AdminCatalogPage, AdminHomePage, catalogOptions, type Catalog } from '@/features/rbac'
+import { AdminCatalogPage, catalogOptions, type Catalog } from '@/features/rbac'
+import { UserListPage } from '@/features/users'
 import { AdminLayout } from '../layouts/AdminLayout'
 import { RootLayout } from '../layouts/RootLayout'
 import { useSession, type Session } from '../providers/SessionProvider'
@@ -29,6 +31,11 @@ function AdminCatalogRoute({ catalog }: { catalog: Catalog }) {
   const { session } = useSession()
   if (session.status !== 'authenticated') return null
   return <AdminCatalogPage catalog={catalog} token={session.token} />
+}
+
+function AdminUsersRoute() {
+  const { session } = useSession()
+  return session.status === 'authenticated' ? <UserListPage token={session.token} /> : null
 }
 
 function loadCatalog({ queryClient, session }: RouterContext, catalog: Catalog) {
@@ -69,6 +76,11 @@ const rolesRoute = createRoute({
   loader: ({ context }) => loadCatalog(context, 'roles'),
   component: () => <AdminCatalogRoute catalog="roles" />,
 })
+const usersRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'users',
+  component: AdminUsersRoute,
+})
 const permissionsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: 'permissions',
@@ -76,7 +88,7 @@ const permissionsRoute = createRoute({
   component: () => <AdminCatalogRoute catalog="permissions" />,
 })
 const routeTree = rootRoute.addChildren([
-  indexRoute, loginRoute, googleCallbackRoute, adminRoute.addChildren([adminIndexRoute, rolesRoute, permissionsRoute]),
+  indexRoute, loginRoute, googleCallbackRoute, adminRoute.addChildren([adminIndexRoute, usersRoute, rolesRoute, permissionsRoute]),
 ])
 
 export function createAppRouter(queryClient: QueryClient, history?: RouterHistory) {

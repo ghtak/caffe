@@ -4,7 +4,7 @@ import { adminSections } from '../admin-sections'
 export function AdminHomePage() {
   return (
     <section className="mx-auto grid w-full max-w-7xl content-start gap-8 p-5 sm:p-8 lg:p-12">
-      <header className="grid gap-3"><p className="text-sm font-medium text-primary">관리</p><h1 className="text-3xl font-bold tracking-tight">관리 홈</h1><p className="text-sm text-muted-foreground sm:text-base">역할과 권한을 확인하고 관리할 영역을 선택하세요.</p></header>
+      <header className="grid gap-3"><p className="text-sm font-medium text-primary">관리</p><h1 className="text-3xl font-bold tracking-tight">관리 홈</h1><p className="text-sm text-muted-foreground sm:text-base">사용자, 역할과 권한을 확인할 영역을 선택하세요.</p></header>
       <ul className="grid gap-4 sm:grid-cols-2">
         {adminSections.map(({ to, label, description }) => (
           <li key={to}>

@@ -22,6 +22,10 @@ pub fn router() -> axum::Router<Arc<Container>> {
     axum::Router::new()
         .route("/me", axum::routing::get(feature::me::handler))
         .route(
+            "/users",
+            axum::routing::get(feature::user_search::endpoint::handler),
+        )
+        .route(
             "/users/local",
             axum::routing::post(feature::user_create_local::endpoint::handler),
         )

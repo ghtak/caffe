@@ -33,6 +33,56 @@ pub async fn find_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<User>
     .map_err_internal("Failed to find user", crate::here!())
 }
 
+pub struct Criteria<'a> {
+    pub name: Option<&'a str>,
+    pub email: Option<&'a str>,
+    pub status: Option<UserStatus>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(sqlx::FromRow)]
+pub struct SearchUser {
+    pub id: i64,
+    pub nickname: String,
+    pub status: UserStatus,
+    pub emails: Vec<String>,
+    #[sqlx(try_from = "jiff_sqlx::Timestamp")]
+    pub created_at: jiff::Timestamp,
+}
+
+pub async fn search(handle: &mut Handle<'_>, criteria: &Criteria<'_>) -> Result<Vec<SearchUser>> {
+    let mut query = sqlx::QueryBuilder::<sqlx::Postgres>::new(
+        "SELECT u.id, u.nickname, u.status, u.created_at,
+         ARRAY(SELECT DISTINCT i.email FROM conbira_auth_user_identities i
+               WHERE i.user_id = u.id ORDER BY i.email) AS emails
+         FROM conbira_auth_users u WHERE TRUE",
+    );
+    if let Some(name) = criteria.name {
+        query
+            .push(" AND strpos(lower(nickname), lower(")
+            .push_bind(name)
+            .push(")) > 0");
+    }
+    if let Some(email) = criteria.email {
+        query.push(" AND EXISTS (SELECT 1 FROM conbira_auth_user_identities i WHERE i.user_id = u.id AND strpos(lower(i.email), lower(")
+            .push_bind(email).push(")) > 0)");
+    }
+    if let Some(status) = criteria.status {
+        query.push(" AND status = ").push_bind(status);
+    }
+    query
+        .push(" ORDER BY id LIMIT ")
+        .push_bind(criteria.limit)
+        .push(" OFFSET ")
+        .push_bind(criteria.offset);
+    query
+        .build_query_as::<SearchUser>()
+        .fetch_all(handle.conn())
+        .await
+        .map_err_internal("Failed to search users", crate::here!())
+}
+
 pub async fn update(handle: &mut Handle<'_>, user: &User) -> Result<Option<User>> {
     sqlx::query_as::<_, User>(
         "UPDATE conbira_auth_users

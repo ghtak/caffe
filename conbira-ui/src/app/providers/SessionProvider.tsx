@@ -3,6 +3,7 @@ import { isHTTPError } from 'ky'
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { authKeys, completeGoogleLogin, login, sessionOptions, type Credentials } from '@/features/auth'
 import { rbacKeys } from '@/features/rbac'
+import { userKeys } from '@/features/users'
 
 export type Session =
   | { status: 'guest' | 'loading' | 'error' }
@@ -45,6 +46,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setToken(null)
     queryClient.removeQueries({ queryKey: authKeys.all })
     queryClient.removeQueries({ queryKey: rbacKeys.all })
+    queryClient.removeQueries({ queryKey: userKeys.all })
   }, [queryClient])
 
   const exp = claims.data?.exp
