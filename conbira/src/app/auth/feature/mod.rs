@@ -3,5 +3,7 @@ pub mod user_create_local;
 pub mod user_login_google;
 pub mod user_login_google_complete;
 pub mod user_login_local;
+pub mod user_logout;
 pub mod user_search;
 pub mod user_status_update;
+pub mod user_token_refresh;

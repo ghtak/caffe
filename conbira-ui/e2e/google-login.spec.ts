@@ -49,7 +49,9 @@ test.describe('contract', () => {
     })
     await page.route('**/fake-google', (route) => route.fulfill({ status: 200, body: 'Google' }))
     await page.route('**/api/auth/login/google/complete', async (route) => {
-      await route.fulfill({ json: { data: { access_token: 'google-token' } } })
+      await route.fulfill({
+        json: { data: { access_token: 'google-token', refresh_token: 'google-refresh' } },
+      })
     })
     await page.route('**/api/auth/me', (route) =>
       route.fulfill({

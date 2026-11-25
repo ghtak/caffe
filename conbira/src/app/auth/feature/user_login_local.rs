@@ -204,6 +204,39 @@ mod tests {
         use super::*;
 
         #[tokio::test]
+        async fn refresh_session_matches_new_access_token_claims() -> anyhow::Result<()> {
+            let fixture = LoginFixture::new().await?;
+            fixture.create_user(UserStatus::Active).await?;
+            let tokens = execute(
+                &fixture.db,
+                &fixture.password_service,
+                &fixture.dummy_hash,
+                &fixture.jwt,
+                &fixture.refresh,
+                Command {
+                    email: "alice@example.com".into(),
+                    password: "secret".into(),
+                },
+            )
+            .await?;
+            let refreshed = crate::app::auth::feature::user_token_refresh::usecase::execute(
+                &fixture.db,
+                &fixture.jwt,
+                &fixture.refresh,
+                &tokens.refresh_token,
+            )
+            .await?;
+            let verified = fixture.jwt.verify(&refreshed.access_token)?;
+            // 응답 세션은 새 access token에 서명된 클레임과 같다.
+            assert_eq!(refreshed.expires_at, verified.exp);
+            assert_eq!(
+                serde_json::to_value(refreshed.claims)?,
+                serde_json::Value::Object(verified.user)
+            );
+            Ok(())
+        }
+
+        #[tokio::test]
         async fn allowed_accounts_receive_tokens_with_roles_at_issue_time() -> anyhow::Result<()> {
             for (status, status_claim) in [
                 (UserStatus::Registered, "registered"),
@@ -235,13 +268,17 @@ mod tests {
                 // 발급된 JWT는 역할을 회수한 뒤에도 발급 시점의 역할과 권한을
                 // 담고, 사용자 응답은 같은 사용자를 가리킨다.
                 assert_eq!(claims.sub, user.id.to_string());
+                let mut user_claims = claims.user;
+                let family_id = user_claims.remove("family_id").unwrap();
+                assert!(uuid::Uuid::parse_str(family_id.as_str().unwrap()).is_ok());
                 assert_eq!(
-                    serde_json::Value::Object(claims.user),
-                    serde_json::json!({"id": user.id, "status": status_claim, "roles": ["user"], "permissions": ["rbac.read"]})
+                    serde_json::Value::Object(user_claims),
+                    serde_json::json!({"id": user.id, "status": status_claim, "roles": ["user"], "permissions": []})
                 );
-                assert_eq!(tokens.user.id, user.id);
-                assert_eq!(tokens.user.email, "alice@example.com");
-                assert_eq!(tokens.user.nickname, "Alice");
+                let user_info = tokens.user.as_ref().unwrap();
+                assert_eq!(user_info.id, user.id);
+                assert_eq!(user_info.email, "alice@example.com");
+                assert_eq!(user_info.nickname, "Alice");
                 let new_tokens = execute(
                     &fixture.db,
                     &fixture.password_service,

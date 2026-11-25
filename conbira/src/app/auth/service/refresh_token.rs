@@ -23,6 +23,7 @@ pub struct RefreshTokenService {
 pub struct IssuedRefreshToken {
     pub token: String,
     pub user_id: i64,
+    pub family_id: uuid::Uuid,
     pub expires_at: jiff::Timestamp,
     pub family_expires_at: jiff::Timestamp,
 }
@@ -36,6 +37,18 @@ pub enum RotateOutcome {
 
 impl RefreshTokenService {
     pub fn new(config: Config) -> Self { Self { config } }
+
+    /// 트랜잭션의 handle을 전달하고 계열 취소를 커밋한다.
+    pub async fn revoke(
+        &self,
+        handle: &mut Handle<'_>,
+        family_id: uuid::Uuid,
+        reason: &str,
+    ) -> crate::Result<()> {
+        require_transaction(handle)?;
+        refresh_token::lock_family(handle, family_id).await?;
+        refresh_token::revoke_family(handle, family_id, reason).await
+    }
 
     /// 호출자는 트랜잭션의 handle을 전달하고 성공 시 커밋한다.
     pub async fn issue(
@@ -112,26 +125,6 @@ impl RefreshTokenService {
         Ok(RotateOutcome::Rotated(issued))
     }
 
-    /// 트랜잭션의 handle을 전달하고 계열 취소를 커밋한다.
-    pub async fn revoke(
-        &self,
-        handle: &mut Handle<'_>,
-        token: &str,
-        reason: &str,
-    ) -> crate::Result<bool> {
-        require_transaction(handle)?;
-        let hash = token_hash(token);
-        let Some(existing) = refresh_token::find_by_hash(handle, &hash).await? else {
-            return Ok(false);
-        };
-        refresh_token::lock_family(handle, existing.family_id).await?;
-        let Some(record) = refresh_token::find_by_hash_for_update(handle, &hash).await? else {
-            return Ok(false);
-        };
-        refresh_token::revoke_family(handle, record.family_id, reason).await?;
-        Ok(true)
-    }
-
     async fn insert(
         &self,
         handle: &mut Handle<'_>,
@@ -159,6 +152,7 @@ impl RefreshTokenService {
         Ok(IssuedRefreshToken {
             token,
             user_id,
+            family_id,
             expires_at: stored.expires_at,
             family_expires_at: stored.family_expires_at,
         })
@@ -234,6 +228,36 @@ mod tests {
         use super::*;
 
         #[tokio::test]
+        async fn logout_revokes_only_the_selected_family() -> anyhow::Result<()> {
+            let (db, user_id) = setup().await?;
+            let service = service();
+            let mut tx = db.tx().await?;
+            let selected = service.issue(&mut tx.handle(), user_id).await?;
+            let other = service.issue(&mut tx.handle(), user_id).await?;
+            tx.commit().await?;
+
+            let mut tx = db.tx().await?;
+            service
+                .revoke(&mut tx.handle(), selected.family_id, "logout")
+                .await?;
+            tx.commit().await?;
+
+            let mut tx = db.tx().await?;
+            let revoked =
+                refresh_token::find_by_hash(&mut tx.handle(), &token_hash(&selected.token))
+                    .await?
+                    .unwrap();
+            let retained = refresh_token::find_by_hash(&mut tx.handle(), &token_hash(&other.token))
+                .await?
+                .unwrap();
+            // 선택한 계열만 로그아웃 사유로 취소된다.
+            assert!(revoked.revoked_at.is_some());
+            assert_eq!(revoked.revoke_reason.as_deref(), Some("logout"));
+            assert!(retained.revoked_at.is_none());
+            Ok(())
+        }
+
+        #[tokio::test]
         async fn rotation_preserves_family_and_reuse_revokes_only_that_family() -> anyhow::Result<()>
         {
             let (db, user_id) = setup().await?;
@@ -303,11 +327,9 @@ mod tests {
             let revoked = service.issue(&mut tx.handle(), user_id).await?;
             sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE token_hash = $1")
                 .bind(token_hash(&expired.token)).execute(tx.handle().conn()).await?;
-            assert!(
-                service
-                    .revoke(&mut tx.handle(), &revoked.token, "logout")
-                    .await?
-            );
+            service
+                .revoke(&mut tx.handle(), revoked.family_id, "logout")
+                .await?;
             tx.commit().await?;
             let mut tx = db.tx().await?;
             // 만료·취소된 토큰의 제출은 각각 계열 취소로 처리된다.
@@ -347,7 +369,7 @@ mod tests {
             assert!(service.rotate(&mut handle, "unknown").await.is_err());
             assert!(
                 service
-                    .revoke(&mut handle, "unknown", "logout")
+                    .revoke(&mut handle, uuid::Uuid::new_v4(), "logout")
                     .await
                     .is_err()
             );

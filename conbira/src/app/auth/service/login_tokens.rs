@@ -1,9 +1,9 @@
 use crate::app::DatabaseExt as _;
 use crate::app::auth::claims::UserClaims;
-use crate::app::auth::entity::UserStatus;
+use crate::app::auth::entity::{User, UserInfo, UserStatus};
 use crate::app::auth::repository::user;
 use crate::app::auth::service::refresh_token::RefreshTokenService;
-use crate::app::container::db::Database;
+use crate::app::container::db::{Database, Handle};
 use crate::app::rbac::repository::{permission, user_role};
 use crate::error::ResultExt as _;
 
@@ -11,7 +11,10 @@ use crate::error::ResultExt as _;
 pub struct LoginTokens {
     pub access_token: String,
     pub refresh_token: String,
-    pub user: crate::app::auth::entity::UserInfo,
+    pub expires_at: i64,
+    pub claims: UserClaims,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<UserInfo>,
 }
 
 pub async fn issue(
@@ -21,7 +24,7 @@ pub async fn issue(
     user_id: i64,
     email: String,
 ) -> crate::Result<LoginTokens> {
-    let (user, roles, permissions) = {
+    let user = {
         let mut connection = db.acquire_conn(crate::here!()).await?;
         let mut handle = connection.handle();
         let user = user::find_by_id(&mut handle, user_id)
@@ -36,43 +39,62 @@ pub async fn issue(
             )
             .at(crate::here!()));
         }
-        let roles = user_role::list_by_user_id(&mut handle, user.id)
-            .await?
-            .into_iter()
-            .map(|role| role.code)
-            .collect();
-        let permissions = permission::find_by_user_id(&mut handle, user.id)
-            .await?
-            .into_iter()
-            .map(|permission| permission.code)
-            .collect();
-        (user, roles, permissions)
+        user
     };
-    let claims = UserClaims::new(user.id, user.status, roles, permissions).try_into()?;
-    let access = jwt_token_service
-        .issue(&user.id.to_string(), claims)
-        .map_err_internal("Failed to issue access token", crate::here!())?;
-
-    let refresh = {
+    let tokens = {
         let mut tx = db.begin_tx(crate::here!()).await?;
         let refresh = refresh_token_service
             .issue(&mut tx.handle(), user.id)
             .await?;
-        tx.commit()
-            .await
-            .map_err_internal("Failed to commit login", crate::here!())?;
-        refresh
-    };
-
-    Ok(LoginTokens {
-        access_token: access.token,
-        refresh_token: refresh.token,
-        user: crate::app::auth::entity::UserInfo {
+        let user_info = UserInfo {
             id: user.id,
-            nickname: user.nickname,
+            nickname: user.nickname.clone(),
             status: user.status,
             email,
             created_at: user.created_at,
-        },
+        };
+        let tokens = issue_tokens(
+            &mut tx.handle(),
+            jwt_token_service,
+            &user,
+            refresh,
+            Some(user_info),
+        )
+        .await?;
+        tx.commit()
+            .await
+            .map_err_internal("Failed to commit login", crate::here!())?;
+        tokens
+    };
+    Ok(tokens)
+}
+
+pub async fn issue_tokens(
+    handle: &mut Handle<'_>,
+    jwt_token_service: &espr::jwt::TokenService,
+    user: &User,
+    refresh: crate::app::auth::service::refresh_token::IssuedRefreshToken,
+    user_info: Option<UserInfo>,
+) -> crate::Result<LoginTokens> {
+    let roles = user_role::list_by_user_id(handle, user.id)
+        .await?
+        .into_iter()
+        .map(|role| role.code)
+        .collect();
+    let permissions = permission::find_by_user_id(handle, user.id)
+        .await?
+        .into_iter()
+        .map(|permission| permission.code)
+        .collect();
+    let claims = UserClaims::new(user.id, refresh.family_id, user.status, roles, permissions);
+    let issued = jwt_token_service
+        .issue(&user.id.to_string(), claims.clone().try_into()?)
+        .map_err_internal("Failed to issue access token", crate::here!())?;
+    Ok(LoginTokens {
+        access_token: issued.token,
+        refresh_token: refresh.token,
+        expires_at: issued.expires_at.as_second(),
+        claims,
+        user: user_info,
     })
 }

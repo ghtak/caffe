@@ -31,8 +31,12 @@ test.describe('contract', () => {
     const token = 'admin-access-token'
     server.use(
       http.post('*/api/auth/login/local', () =>
-        HttpResponse.json({ code: 'OK', data: { access_token: token } }),
+        HttpResponse.json({
+          code: 'OK',
+          data: { access_token: token, refresh_token: 'admin-refresh' },
+        }),
       ),
+      http.post('*/api/auth/logout', () => HttpResponse.json({ code: 'OK' })),
       http.get('*/api/auth/me', ({ request }) => {
         if (request.headers.get('authorization') !== `Bearer ${token}`) {
           return HttpResponse.json({ code: 'UNAUTHORIZED' }, { status: 401 })
@@ -92,8 +96,11 @@ test.describe('regression', () => {
     })
     server.use(
       http.post('*/api/auth/login/local', () =>
-        HttpResponse.json({ data: { access_token: 'member-token' } }),
+        HttpResponse.json({
+          data: { access_token: 'member-token', refresh_token: 'member-refresh' },
+        }),
       ),
+      http.post('*/api/auth/logout', () => HttpResponse.json({ code: 'OK' })),
       http.get('*/api/auth/me', () =>
         HttpResponse.json({
           data: { exp: Math.floor(Date.now() / 1000) + 900, user: { roles: ['user'] } },
@@ -133,7 +140,10 @@ test('역할 상세는 높이가 바뀌어도 상단 정렬을 유지하고 모�
   const role = { id: 1, code: 'operator', name: '운영자', description: '' }
   server.use(
     http.post('*/api/auth/login/local', () =>
-      HttpResponse.json({ code: 'OK', data: { access_token: 'token' } }),
+      HttpResponse.json({
+        code: 'OK',
+        data: { access_token: 'token', refresh_token: 'refresh-token' },
+      }),
     ),
     http.get('*/api/auth/me', () =>
       HttpResponse.json({

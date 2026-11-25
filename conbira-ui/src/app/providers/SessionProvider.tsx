@@ -1,21 +1,34 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { isHTTPError } from 'ky'
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   authKeys,
   completeGoogleLogin,
   login,
+  logoutSession,
+  refreshSession,
   sessionOptions,
   type Credentials,
 } from '@/features/auth'
 import { rbacKeys } from '@/features/rbac'
 import { userKeys } from '@/features/users'
+import { setRefreshHandler } from '@/shared/api/client'
 
 export type Session =
-  | { status: 'guest' | 'loading' | 'error' }
+  | { status: 'guest' | 'loading' }
+  | { status: 'error'; reason: 'logout' | 'session' }
   | { status: 'authenticated'; token: string; permissions: string[] }
 
 const storageKey = 'conbira.access-token'
+const refreshKey = 'conbira.refresh-token'
 
 function readToken() {
   try {
@@ -41,36 +54,114 @@ const SessionContext = createContext<{
     input: { code: string; state: string; browser_proof: string },
     signal: AbortSignal,
   ) => Promise<void>
-  signOut: () => void
+  signOut: () => Promise<void>
   retry: () => void
 } | null>(null)
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient()
   const [token, setToken] = useState(readToken)
+  const accessToken = useRef(token)
+  const previousToken = useRef<string | null>(null)
+  const [refreshError, setRefreshError] = useState(false)
+  const [logoutError, setLogoutError] = useState(false)
+  const refreshToken = useRef<string | null>(null)
+  const pending = useRef<Promise<string | null> | null>(null)
+  const generation = useRef(0)
+  if (refreshToken.current === null) {
+    try {
+      refreshToken.current = sessionStorage.getItem(refreshKey)
+    } catch {
+      /* Storage unavailable. */
+    }
+  }
   const claims = useQuery(sessionOptions(token))
 
-  const signOut = useCallback(() => {
+  const clearSession = useCallback(() => {
+    generation.current += 1
+    setRefreshError(false)
+    setLogoutError(false)
+    refreshToken.current = null
+    try {
+      sessionStorage.removeItem(refreshKey)
+    } catch {
+      /* Storage unavailable. */
+    }
     persistToken(null)
+    accessToken.current = null
+    previousToken.current = null
     setToken(null)
     queryClient.removeQueries({ queryKey: authKeys.all })
     queryClient.removeQueries({ queryKey: rbacKeys.all })
     queryClient.removeQueries({ queryKey: userKeys.all })
   }, [queryClient])
 
-  const exp = claims.data?.exp
-  useEffect(() => {
-    if (!token || exp === undefined) return
-    const timeout = window.setTimeout(signOut, Math.max(0, exp * 1000 - Date.now()))
-    return () => window.clearTimeout(timeout)
-  }, [token, exp, signOut])
+  const signOut = useCallback(async () => {
+    const current = token
+    if (current) {
+      try {
+        await logoutSession(current)
+      } catch {
+        setLogoutError(true)
+        return
+      }
+    }
+    clearSession()
+  }, [clearSession, token])
+
+  const refresh = useCallback(
+    (failedToken: string): Promise<string | null> => {
+      if (!accessToken.current) return Promise.resolve(null)
+      if (failedToken !== accessToken.current)
+        return Promise.resolve(failedToken === previousToken.current ? accessToken.current : null)
+      if (pending.current) return pending.current
+      const current = refreshToken.current
+      if (!current) {
+        clearSession()
+        return Promise.resolve(null)
+      }
+      const version = generation.current
+      setRefreshError(false)
+      const task = refreshSession(current, new AbortController().signal)
+        .then((tokens) => {
+          if (version !== generation.current) return null
+          refreshToken.current = tokens.refresh_token
+          try {
+            sessionStorage.setItem(refreshKey, tokens.refresh_token)
+          } catch {
+            /* Storage unavailable. */
+          }
+          persistToken(tokens.access_token)
+          previousToken.current = failedToken
+          accessToken.current = tokens.access_token
+          queryClient.setQueryData(authKeys.session(tokens.access_token), {
+            exp: tokens.expires_at,
+            user: tokens.claims,
+          })
+          setToken(tokens.access_token)
+          return tokens.access_token
+        })
+        .catch((error: unknown) => {
+          if (version === generation.current && isHTTPError(error) && error.response.status === 401)
+            clearSession()
+          else if (version === generation.current) setRefreshError(true)
+          throw error
+        })
+        .finally(() => {
+          pending.current = null
+        })
+      pending.current = task
+      return task
+    },
+    [clearSession, queryClient],
+  )
+
+  useLayoutEffect(() => {
+    setRefreshHandler(refresh)
+    return () => setRefreshHandler(null)
+  }, [refresh])
 
   const expired = isHTTPError(claims.error) && claims.error.response.status === 401
-  useEffect(() => {
-    if (!token || !expired) return
-    const timeout = window.setTimeout(signOut, 0)
-    return () => window.clearTimeout(timeout)
-  }, [token, expired, signOut])
 
   async function signIn(credentials: Credentials, signal: AbortSignal) {
     saveLogin(await login(credentials, signal), signal)
@@ -84,20 +175,35 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }
 
   function saveLogin(
-    { accessToken, claims }: Awaited<ReturnType<typeof login>>,
+    { accessToken, refreshToken: newRefreshToken, claims }: Awaited<ReturnType<typeof login>>,
     signal: AbortSignal,
   ) {
     signal.throwIfAborted()
+    generation.current += 1
+    previousToken.current = null
+    refreshToken.current = newRefreshToken
+    try {
+      sessionStorage.setItem(refreshKey, newRefreshToken)
+    } catch {
+      /* Storage unavailable. */
+    }
     persistToken(accessToken)
-    queryClient.setQueryData(authKeys.session(), claims)
+    accessTokenRefUpdate(accessToken)
+    queryClient.setQueryData(authKeys.session(accessToken), claims)
     setToken(accessToken)
   }
 
+  function accessTokenRefUpdate(value: string) {
+    accessToken.current = value
+  }
+
   let session: Session
-  if (!token || expired) {
+  if (!token) {
     session = { status: 'guest' }
-  } else if (claims.isError) {
-    session = { status: 'error' }
+  } else if (logoutError) {
+    session = { status: 'error', reason: 'logout' }
+  } else if (refreshError || expired || claims.isError) {
+    session = { status: 'error', reason: 'session' }
   } else if (claims.data) {
     session = {
       status: 'authenticated',
@@ -110,7 +216,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   return (
     <SessionContext.Provider
-      value={{ session, signIn, signInGoogle, signOut, retry: () => void claims.refetch() }}
+      value={{
+        session,
+        signIn,
+        signInGoogle,
+        signOut,
+        retry: () => {
+          if (logoutError) void signOut()
+          else {
+            setRefreshError(false)
+            void claims.refetch()
+          }
+        },
+      }}
     >
       {children}
     </SessionContext.Provider>

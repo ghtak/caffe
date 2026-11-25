@@ -13,7 +13,10 @@ describe('contract', () => {
     server.use(
       http.post('*/api/auth/login/local', async ({ request }) => {
         submitted = await request.json()
-        return HttpResponse.json({ code: 'OK', data: { access_token: 'member-token' } })
+        return HttpResponse.json({
+          code: 'OK',
+          data: { access_token: 'member-token', refresh_token: 'refresh-token' },
+        })
       }),
       http.get('*/api/auth/me', ({ request }) => {
         if (request.headers.get('Authorization') !== 'Bearer member-token') {
@@ -98,7 +101,9 @@ describe('regression', () => {
       server.use(
         http.post('*/api/auth/login/local', async ({ request }) => {
           if (stage === '로그인 응답') await delayResponse(request)
-          return HttpResponse.json({ data: { access_token: token } })
+          return HttpResponse.json({
+            data: { access_token: token, refresh_token: 'refresh-token' },
+          })
         }),
         http.get('*/api/auth/me', async ({ request }) => {
           if (stage === '세션 확인 응답') await delayResponse(request)

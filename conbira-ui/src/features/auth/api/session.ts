@@ -1,11 +1,16 @@
 import { queryOptions } from '@tanstack/react-query'
 import { apiClient } from '@/shared/api/client'
 import { z } from 'zod'
-import { loginResponse, sessionResponse, type Credentials } from '../types/auth.types'
+import {
+  loginResponse,
+  refreshResponse,
+  sessionResponse,
+  type Credentials,
+} from '../types/auth.types'
 
 export const authKeys = {
   all: ['auth'] as const,
-  session: () => [...authKeys.all, 'session'] as const,
+  session: (token: string | null) => [...authKeys.all, 'session', token] as const,
 }
 
 export async function startGoogleLogin(signal: AbortSignal) {
@@ -37,10 +42,24 @@ export async function completeGoogleLogin(
 }
 
 async function resolveLogin(body: unknown, signal: AbortSignal) {
-  const accessToken = loginResponse.parse(body).data.access_token
+  const { access_token: accessToken, refresh_token: refreshToken } = loginResponse.parse(body).data
   signal.throwIfAborted()
   const claims = await fetchSession(accessToken, signal)
-  return { accessToken, claims }
+  return { accessToken, refreshToken, claims }
+}
+
+export async function refreshSession(refreshToken: string, signal: AbortSignal) {
+  const body = await apiClient
+    .post('/api/auth/refresh', { json: { refresh_token: refreshToken }, signal, retry: 0 })
+    .json()
+  return refreshResponse.parse(body).data
+}
+
+export async function logoutSession(accessToken: string) {
+  await apiClient.post('/api/auth/logout', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    retry: 0,
+  })
 }
 
 async function fetchSession(token: string, signal: AbortSignal) {
@@ -55,7 +74,7 @@ async function fetchSession(token: string, signal: AbortSignal) {
 
 export function sessionOptions(token: string | null) {
   return queryOptions({
-    queryKey: authKeys.session(),
+    queryKey: authKeys.session(token),
     enabled: token !== null,
     staleTime: 0,
     retry: false,

@@ -66,10 +66,3 @@ FROM conbira_rbac_roles r
 CROSS JOIN conbira_rbac_permissions p
 WHERE r.code = 'admin'
 ON CONFLICT (role_id, permission_id) DO NOTHING;
-
-INSERT INTO conbira_rbac_role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM conbira_rbac_roles r
-JOIN conbira_rbac_permissions p ON p.code = 'rbac.read'
-WHERE r.code = 'user'
-ON CONFLICT (role_id, permission_id) DO NOTHING;

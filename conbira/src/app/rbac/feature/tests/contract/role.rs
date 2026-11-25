@@ -13,7 +13,7 @@ async fn setup() -> anyhow::Result<(axum::Router, Arc<crate::app::Container>)> {
 #[tokio::test]
 async fn role_writes_require_manage_permission() -> anyhow::Result<()> {
     let (router, container) = setup().await?;
-    let claims = serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.read"]});
+    let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": ["rbac.read"]});
     let token = container
         .jwt_token_service
         .issue("42", claims.as_object().unwrap().clone())?
@@ -67,8 +67,7 @@ async fn adds_and_removes_role_permissions_and_rejects_invalid_relationships() -
             sqlx::query(sql).execute(connection.handle().conn()).await?;
         }
     }
-    let claims =
-        serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.role.manage"]});
+    let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": ["rbac.role.manage"]});
     let token = container
         .jwt_token_service
         .issue("42", claims.as_object().unwrap().clone())?
@@ -167,8 +166,7 @@ async fn creates_and_deletes_roles_but_rejects_assigned_role() -> anyhow::Result
         sqlx::query("CREATE TEMPORARY TABLE conbira_rbac_user_roles (user_id BIGINT NOT NULL, role_id BIGINT NOT NULL REFERENCES conbira_rbac_roles(id))")
             .execute(connection.handle().conn()).await?;
     }
-    let claims =
-        serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.role.manage"]});
+    let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": ["rbac.role.manage"]});
     let token = container
         .jwt_token_service
         .issue("42", claims.as_object().unwrap().clone())?
@@ -297,11 +295,11 @@ mod list {
         };
         let denied = issue(
             "42",
-            serde_json::json!({"id": 42, "status": "active", "permissions": []}),
+            serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": []}),
         )?;
         let invalid_claims = issue(
             "43",
-            serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.read"]}),
+            serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": ["rbac.read"]}),
         )?;
         for (auth, expected) in [
             (None, StatusCode::UNAUTHORIZED),
@@ -337,8 +335,7 @@ mod list {
             .execute(connection.handle().conn())
             .await?;
         }
-        let claims =
-            serde_json::json!({"id": 42, "status": "active", "permissions": ["rbac.read"]});
+        let claims = serde_json::json!({"id": 42, "family_id": "00000000-0000-0000-0000-000000000000", "status": "active", "permissions": ["rbac.read"]});
         let allowed = container
             .jwt_token_service
             .issue("42", claims.as_object().unwrap().clone())?

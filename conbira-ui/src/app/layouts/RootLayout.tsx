@@ -14,7 +14,7 @@ export function RootLayout() {
     try {
       await navigate({ to: '/', replace: true })
     } finally {
-      signOut()
+      await signOut()
     }
   }
 
@@ -64,7 +64,11 @@ export function RootLayout() {
         {session.status === 'error' && (
           <div className="grid justify-items-start gap-2 border-b px-4 py-3 sm:px-6">
             <Alert variant="destructive">
-              <AlertDescription>로그인 상태를 확인하지 못했습니다.</AlertDescription>
+              <AlertDescription>
+                {session.reason === 'logout'
+                  ? '로그아웃하지 못했습니다. 다시 시도해 주세요.'
+                  : '로그인 상태를 확인하지 못했습니다.'}
+              </AlertDescription>
             </Alert>
             <Button variant="outline" type="button" onClick={retry}>
               다시 시도

@@ -22,6 +22,16 @@ pub fn router() -> axum::Router<Arc<Container>> {
     axum::Router::new()
         .route("/me", axum::routing::get(feature::me::handler))
         .route(
+            "/refresh",
+            axum::routing::post(feature::user_token_refresh::endpoint::handler)
+                .layer(axum::middleware::map_response(no_store)),
+        )
+        .route(
+            "/logout",
+            axum::routing::post(feature::user_logout::endpoint::handler)
+                .layer(axum::middleware::map_response(no_store)),
+        )
+        .route(
             "/users",
             axum::routing::get(feature::user_search::endpoint::handler),
         )

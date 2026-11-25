@@ -16,7 +16,9 @@ describe('contract', () => {
       http.post('*/api/auth/login/google/complete', async ({ request }) => {
         requests++
         submitted = await request.json()
-        return HttpResponse.json({ data: { access_token: 'google-token' } })
+        return HttpResponse.json({
+          data: { access_token: 'google-token', refresh_token: 'refresh-token' },
+        })
       }),
       http.get('*/api/auth/me', () =>
         HttpResponse.json({

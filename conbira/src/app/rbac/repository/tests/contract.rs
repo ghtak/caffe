@@ -15,6 +15,32 @@ async fn setup(handle: &mut Handle<'_>) -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn default_user_role_has_no_permissions_and_admin_has_rbac_read() -> anyhow::Result<()> {
+    let database = Database::new(&crate::test_support::database_config(1)).await?;
+    let mut connection = database.conn().await?;
+    let mut handle = connection.handle();
+    setup(&mut handle).await?;
+    let user = role::find_by_code(&mut handle, "user").await?.unwrap();
+    let admin = role::find_by_code(&mut handle, "admin").await?.unwrap();
+    let read = permission::find_by_code(&mut handle, "rbac.read")
+        .await?
+        .unwrap();
+    // 기본 일반 사용자 역할에는 권한이 없고 관리자에게는 조회 권한이 있다.
+    assert!(
+        role_permission::list_by_role_id(&mut handle, user.id)
+            .await?
+            .is_empty()
+    );
+    assert!(
+        role_permission::list_by_role_id(&mut handle, admin.id)
+            .await?
+            .iter()
+            .any(|p| p.id == read.id)
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn roles_and_permissions_support_crud_and_unique_codes() -> anyhow::Result<()> {
     let database = Database::new(&crate::test_support::database_config(1)).await?;
     let mut connection = database.conn().await?;
@@ -118,6 +144,8 @@ async fn user_permissions_combine_roles_without_duplicates_and_reflect_removed_l
     let read = permission::find_by_code(&mut handle, "rbac.read")
         .await?
         .unwrap();
+    // 두 역할의 권한 중복은 기본 권한과 무관하게 직접 구성한다.
+    role_permission::insert(&mut handle, user.id, read.id).await?;
     user_role::insert(&mut handle, user_id, admin.id).await?;
     user_role::insert(&mut handle, user_id, user.id).await?;
 
