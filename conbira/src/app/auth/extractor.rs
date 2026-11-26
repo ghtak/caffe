@@ -151,9 +151,10 @@ mod tests {
             assert!(extract_claims(&headers, &service).is_err());
             Ok(())
         }
-        async fn user_claims_router() -> anyhow::Result<(axum::Router, Arc<crate::app::Container>)>
-        {
-            let container = crate::test_support::container().await?;
+        async fn user_claims_router(
+            context: &crate::test_support::TestContext,
+        ) -> anyhow::Result<(axum::Router, Arc<crate::app::Container>)> {
+            let container = std::sync::Arc::new(context.container().await?);
 
             async fn required(user: UserClaims) -> String { user.id.to_string() }
             async fn optional(user: Option<UserClaims>) -> String {
@@ -168,69 +169,38 @@ mod tests {
 
         #[tokio::test]
         async fn user_claims_without_header_are_required_or_anonymous() -> anyhow::Result<()> {
-            let (router, _) = user_claims_router().await?;
-            let required = router
-                .clone()
-                .oneshot(Request::builder().uri("/required").body(Body::empty())?)
-                .await?;
-            // 필수 추출은 인증이 없으면 Bearer 챌린지와 401을 반환한다.
-            assert_eq!(required.status(), StatusCode::UNAUTHORIZED);
-            assert_eq!(required.headers()[header::WWW_AUTHENTICATE], "Bearer");
+            crate::test_support::TestContext::run(1, |context| async move {
+                let (router, _) = user_claims_router(&context).await?;
+                let required = router
+                    .clone()
+                    .oneshot(Request::builder().uri("/required").body(Body::empty())?)
+                    .await?;
+                // 필수 추출은 인증이 없으면 Bearer 챌린지와 401을 반환한다.
+                assert_eq!(required.status(), StatusCode::UNAUTHORIZED);
+                assert_eq!(required.headers()[header::WWW_AUTHENTICATE], "Bearer");
 
-            let optional = router
-                .oneshot(Request::builder().uri("/optional").body(Body::empty())?)
-                .await?;
-            // 선택 추출은 인증이 없으면 익명으로 처리한다.
-            assert_eq!(optional.status(), StatusCode::OK);
-            assert_eq!(
-                to_bytes(optional.into_body(), 4096).await?.as_ref(),
-                b"anonymous"
-            );
-            Ok(())
+                let optional = router
+                    .oneshot(Request::builder().uri("/optional").body(Body::empty())?)
+                    .await?;
+                // 선택 추출은 인증이 없으면 익명으로 처리한다.
+                assert_eq!(optional.status(), StatusCode::OK);
+                assert_eq!(
+                    to_bytes(optional.into_body(), 4096).await?.as_ref(),
+                    b"anonymous"
+                );
+                Ok(())
+            })
+            .await
         }
 
         #[tokio::test]
         async fn user_claims_extractors_accept_matching_user() -> anyhow::Result<()> {
-            let (router, container) = user_claims_router().await?;
-            let user = serde_json::json!({"id": 42, "status": "active"});
-            let token = container
-                .jwt_token_service
-                .issue("42", user.as_object().unwrap().clone())?
-                .token;
-            for path in ["/required", "/optional"] {
-                let response = router
-                    .clone()
-                    .oneshot(
-                        Request::builder()
-                            .uri(path)
-                            .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                            .body(Body::empty())?,
-                    )
-                    .await?;
-                // 두 추출기 모두 검증된 사용자 ID를 전달한다.
-                assert_eq!(response.status(), StatusCode::OK, "{path}");
-                assert_eq!(
-                    to_bytes(response.into_body(), 4096).await?.as_ref(),
-                    b"42",
-                    "{path}"
-                );
-            }
-            Ok(())
-        }
-
-        #[tokio::test]
-        async fn user_claims_extractors_reject_invalid_tokens_and_user_claims() -> anyhow::Result<()>
-        {
-            let (router, container) = user_claims_router().await?;
-            for (subject, user) in [
-                ("43", serde_json::json!({"id": 42, "status": "active"})),
-                ("42", serde_json::json!({})),
-                ("42", serde_json::json!({"id": 42, "status": "unknown"})),
-                ("42", serde_json::json!({"id": "42", "status": "active"})),
-            ] {
+            crate::test_support::TestContext::run(1, |context| async move {
+                let (router, container) = user_claims_router(&context).await?;
+                let user = serde_json::json!({"id": 42, "status": "active"});
                 let token = container
                     .jwt_token_service
-                    .issue(subject, user.as_object().unwrap().clone())?
+                    .issue("42", user.as_object().unwrap().clone())?
                     .token;
                 for path in ["/required", "/optional"] {
                     let response = router
@@ -242,39 +212,79 @@ mod tests {
                                 .body(Body::empty())?,
                         )
                         .await?;
-                    // 불일치하거나 잘못된 사용자 클레임은 Bearer 챌린지와 401을
-                    // 반환한다.
+                    // 두 추출기 모두 검증된 사용자 ID를 전달한다.
+                    assert_eq!(response.status(), StatusCode::OK, "{path}");
                     assert_eq!(
-                        response.status(),
-                        StatusCode::UNAUTHORIZED,
-                        "{path}: {user}"
+                        to_bytes(response.into_body(), 4096).await?.as_ref(),
+                        b"42",
+                        "{path}"
                     );
+                }
+                Ok(())
+            })
+            .await
+        }
+
+        #[tokio::test]
+        async fn user_claims_extractors_reject_invalid_tokens_and_user_claims() -> anyhow::Result<()>
+        {
+            crate::test_support::TestContext::run(1, |context| async move {
+                let (router, container) = user_claims_router(&context).await?;
+                for (subject, user) in [
+                    ("43", serde_json::json!({"id": 42, "status": "active"})),
+                    ("42", serde_json::json!({})),
+                    ("42", serde_json::json!({"id": 42, "status": "unknown"})),
+                    ("42", serde_json::json!({"id": "42", "status": "active"})),
+                ] {
+                    let token = container
+                        .jwt_token_service
+                        .issue(subject, user.as_object().unwrap().clone())?
+                        .token;
+                    for path in ["/required", "/optional"] {
+                        let response = router
+                            .clone()
+                            .oneshot(
+                                Request::builder()
+                                    .uri(path)
+                                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                                    .body(Body::empty())?,
+                            )
+                            .await?;
+                        // 불일치하거나 잘못된 사용자 클레임은 Bearer 챌린지와
+                        // 401을 반환한다.
+                        assert_eq!(
+                            response.status(),
+                            StatusCode::UNAUTHORIZED,
+                            "{path}: {user}"
+                        );
+                        assert_eq!(
+                            response.headers()[header::WWW_AUTHENTICATE],
+                            "Bearer",
+                            "{path}: {user}"
+                        );
+                    }
+                }
+                for path in ["/required", "/optional"] {
+                    let response = router
+                        .clone()
+                        .oneshot(
+                            Request::builder()
+                                .uri(path)
+                                .header(header::AUTHORIZATION, "Bearer invalid")
+                                .body(Body::empty())?,
+                        )
+                        .await?;
+                    // 잘못된 토큰은 Bearer 챌린지와 401을 반환한다.
+                    assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
                     assert_eq!(
                         response.headers()[header::WWW_AUTHENTICATE],
                         "Bearer",
-                        "{path}: {user}"
+                        "{path}"
                     );
                 }
-            }
-            for path in ["/required", "/optional"] {
-                let response = router
-                    .clone()
-                    .oneshot(
-                        Request::builder()
-                            .uri(path)
-                            .header(header::AUTHORIZATION, "Bearer invalid")
-                            .body(Body::empty())?,
-                    )
-                    .await?;
-                // 잘못된 토큰은 Bearer 챌린지와 401을 반환한다.
-                assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{path}");
-                assert_eq!(
-                    response.headers()[header::WWW_AUTHENTICATE],
-                    "Bearer",
-                    "{path}"
-                );
-            }
-            Ok(())
+                Ok(())
+            })
+            .await
         }
     }
 }

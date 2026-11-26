@@ -97,87 +97,80 @@ fn token_hash(token: &str) -> String {
 mod tests {
     mod contract {
         use super::super::*;
-        use crate::app::container::db::Database;
 
         #[tokio::test]
         async fn initial_refresh_token_schema_can_be_applied_twice() -> anyhow::Result<()> {
-            let db = Database::new(&crate::test_support::database_config(1)).await?;
-            let mut conn = db.conn().await?;
-            for migration in [
-                include_str!("../../../../migrations/0010_user.sql"),
-                include_str!("../../../../migrations/0011_refresh_token.sql"),
-                include_str!("../../../../migrations/0011_refresh_token.sql"),
-            ] {
-                let sql = migration.replace(
-                    "CREATE TABLE IF NOT EXISTS",
-                    "CREATE TEMPORARY TABLE IF NOT EXISTS",
-                );
-                sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
-                    .execute(conn.handle().conn())
-                    .await?;
-            }
-            Ok(())
+            crate::test_support::TestContext::run(4, move |context| async move {
+                let db = &context.db;
+                let mut conn = db.conn().await?;
+                for migration in [
+                    include_str!("../../../../migrations/0010_user.sql"),
+                    include_str!("../../../../migrations/0011_refresh_token.sql"),
+                    include_str!("../../../../migrations/0011_refresh_token.sql"),
+                ] {
+                    let sql = migration;
+                    sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
+                        .execute(conn.handle().conn())
+                        .await?;
+                }
+                Ok(())
+            })
+            .await
         }
 
         #[tokio::test]
         async fn tokens_can_be_reused_and_logout_revokes_only_one() -> anyhow::Result<()> {
-            let db = Database::new(&crate::test_support::database_config(1)).await?;
-            let mut conn = db.conn().await?;
-            for migration in [
-                include_str!("../../../../migrations/0010_user.sql"),
-                include_str!("../../../../migrations/0011_refresh_token.sql"),
-            ] {
-                let sql = migration.replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
-                sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
-                    .execute(conn.handle().conn())
-                    .await?;
-            }
-            let user_id: i64 = sqlx::query_scalar(
-                "INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id",
-            )
-            .fetch_one(conn.handle().conn())
-            .await?;
-            let service = RefreshTokenService::new(Config {
-                ttl_seconds: 604800,
-                absolute_ttl_seconds: 2592000,
-            });
-            let mut tx = conn.begin().await?;
-            let first = service.issue(&mut tx.handle(), user_id).await?;
-            let second = service.issue(&mut tx.handle(), user_id).await?;
-            tx.commit().await?;
-            let mut tx = conn.begin().await?;
-            assert!(
-                service
-                    .find_valid(&mut tx.handle(), &first.token)
-                    .await?
-                    .is_some()
-            );
-            assert!(
-                service
-                    .find_valid(&mut tx.handle(), &first.token)
-                    .await?
-                    .is_some()
-            );
-            tx.commit().await?;
-            let mut tx = conn.begin().await?;
-            service.revoke(&mut tx.handle(), &first.token).await?;
-            service.revoke(&mut tx.handle(), &first.token).await?;
-            tx.commit().await?;
-            let mut tx = conn.begin().await?;
-            assert!(
-                service
-                    .find_valid(&mut tx.handle(), &first.token)
-                    .await?
-                    .is_none()
-            );
-            assert!(
-                service
-                    .find_valid(&mut tx.handle(), &second.token)
-                    .await?
-                    .is_some()
-            );
-            tx.rollback().await?;
-            Ok(())
+            crate::test_support::TestContext::run(4, move |context| async move {
+                let db = &context.db;
+                let mut conn = db.conn().await?;
+                let user_id: i64 = sqlx::query_scalar(
+                    "INSERT INTO conbira_auth_users (nickname) VALUES ('user') RETURNING id",
+                )
+                .fetch_one(conn.handle().conn())
+                .await?;
+                let service = RefreshTokenService::new(Config {
+                    ttl_seconds: 604800,
+                    absolute_ttl_seconds: 2592000,
+                });
+                let mut tx = conn.begin().await?;
+                let first = service.issue(&mut tx.handle(), user_id).await?;
+                let second = service.issue(&mut tx.handle(), user_id).await?;
+                tx.commit().await?;
+                let mut tx = conn.begin().await?;
+                assert!(
+                    service
+                        .find_valid(&mut tx.handle(), &first.token)
+                        .await?
+                        .is_some()
+                );
+                assert!(
+                    service
+                        .find_valid(&mut tx.handle(), &first.token)
+                        .await?
+                        .is_some()
+                );
+                tx.commit().await?;
+                let mut tx = conn.begin().await?;
+                service.revoke(&mut tx.handle(), &first.token).await?;
+                service.revoke(&mut tx.handle(), &first.token).await?;
+                tx.commit().await?;
+                let mut tx = conn.begin().await?;
+                assert!(
+                    service
+                        .find_valid(&mut tx.handle(), &first.token)
+                        .await?
+                        .is_none()
+                );
+                assert!(
+                    service
+                        .find_valid(&mut tx.handle(), &second.token)
+                        .await?
+                        .is_some()
+                );
+                tx.rollback().await?;
+                Ok(())
+            })
+            .await
         }
     }
 }

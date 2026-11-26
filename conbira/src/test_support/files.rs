@@ -7,8 +7,7 @@ use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse as _, Response};
 use uuid::Uuid;
 
-use super::config::{Config, S3Config};
-use crate::app::db::Database;
+use crate::app::files::config::{Config, S3Config};
 
 pub fn config(endpoint: Option<String>) -> Config {
     Config {
@@ -28,86 +27,34 @@ pub fn config(endpoint: Option<String>) -> Config {
     }
 }
 
-pub struct TestDatabase {
-    pub db: Database,
-    schema: String,
+pub struct FileFixture {
+    pub db: Arc<crate::app::db::Database>,
     pub user_id: i64,
 }
 
-impl TestDatabase {
-    pub async fn new() -> anyhow::Result<Self> {
-        let db = Database::new(&crate::test_support::database_config(4)).await?;
-        let schema = format!("files_test_{}", Uuid::new_v4().simple());
-        let mut connection = db.conn().await?;
-        let mut handle = connection.handle();
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "CREATE SCHEMA {schema}; SET search_path TO {schema}"
-        )))
-        .execute(handle.conn())
-        .await?;
-        sqlx::raw_sql(include_str!("../../../migrations/0010_user.sql"))
-            .execute(handle.conn())
-            .await?;
-        sqlx::raw_sql(include_str!("../../../migrations/0012_rbac.sql"))
-            .execute(handle.conn())
-            .await?;
-        for _ in 0..2 {
-            sqlx::raw_sql(include_str!("../../../migrations/0013_files.sql"))
-                .execute(handle.conn())
-                .await?;
-        }
+impl FileFixture {
+    pub async fn new(database: Arc<super::TestContext>) -> anyhow::Result<Self> {
+        let mut connection = database.db.conn().await?;
         let user_id = sqlx::query_scalar(
             "INSERT INTO conbira_auth_users (nickname) VALUES ('file owner') RETURNING id",
         )
-        .fetch_one(handle.conn())
+        .fetch_one(connection.handle().conn())
         .await?;
         Ok(Self {
-            db,
-            schema,
+            db: Arc::clone(&database.db),
             user_id,
         })
     }
 
-    pub async fn conn(&self) -> anyhow::Result<espr::sqlxdb::Conn<sqlx::Postgres>> {
-        let mut connection = self.db.conn().await?;
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "SET search_path TO {}",
-            self.schema
-        )))
-        .execute(connection.handle().conn())
-        .await?;
-        Ok(connection)
-    }
-
-    pub async fn scoped_database(&self) -> anyhow::Result<Database> {
-        let mut config = crate::test_support::database_config(4);
-        let mut url = url::Url::parse(&config.url)?;
-        url.query_pairs_mut()
-            .append_pair("options", &format!("-csearch_path={}", self.schema));
-        config.url = url.into();
-        Ok(Database::new(&config).await?)
-    }
-
-    pub async fn cleanup(self) -> anyhow::Result<()> {
-        let mut connection = self.db.conn().await?;
-        sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
-            "DROP SCHEMA {} CASCADE",
-            self.schema
-        )))
-        .execute(connection.handle().conn())
-        .await?;
-        Ok(())
-    }
-
-    pub fn file(&self, group_id: Uuid) -> super::entity::File {
+    pub fn file(&self, group_id: Uuid) -> crate::app::files::entity::File {
         let file_id = Uuid::new_v4();
         let now = jiff::Timestamp::now();
-        super::entity::File {
+        crate::app::files::entity::File {
             file_id,
             group_id,
             resource_type: None,
             resource_key: None,
-            status: super::entity::FileStatus::Pending,
+            status: crate::app::files::entity::FileStatus::Pending,
             uploaded_by: self.user_id,
             s3_bucket: "conbira-test".into(),
             s3_object_key: format!("test-files/{file_id}"),
@@ -152,12 +99,12 @@ impl MockS3 {
         })
     }
 
-    pub async fn adapter(&self) -> crate::Result<super::s3::S3ObjectAdapter> {
-        super::s3::S3ObjectAdapter::new(&config(Some(self.endpoint.clone()))).await
+    pub async fn adapter(&self) -> crate::Result<crate::app::files::s3::S3ObjectAdapter> {
+        crate::app::files::s3::S3ObjectAdapter::new(&config(Some(self.endpoint.clone()))).await
     }
 
-    pub fn location(&self, key: &str) -> super::s3::ObjectLocation {
-        super::s3::ObjectLocation {
+    pub fn location(&self, key: &str) -> crate::app::files::s3::ObjectLocation {
+        crate::app::files::s3::ObjectLocation {
             bucket: "conbira-test".into(),
             key: key.into(),
         }

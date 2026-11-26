@@ -195,25 +195,14 @@ mod tests {
             assert_eq!(command.status, UserStatus::Registered);
         }
 
-        async fn setup() -> anyhow::Result<(
-            Database,
+        async fn setup(
+            context: &crate::test_support::TestContext,
+        ) -> anyhow::Result<(
+            Arc<Database>,
             Arc<espr::hash::argon2::Hasher>,
             crate::app::auth::service::password_hash::PasswordHashService,
         )> {
-            let db = Database::new(&crate::test_support::database_config(1)).await?;
-            let mut connection = db.conn().await?;
-            let schema = include_str!("../../../../migrations/0010_user.sql")
-                .replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
-            sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
-                .execute(connection.handle().conn())
-                .await?;
-            let schema = include_str!("../../../../migrations/0012_rbac.sql")
-                .replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
-            sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
-                .execute(connection.handle().conn())
-                .await?;
-            drop(connection);
-
+            let db = Arc::clone(&context.db);
             let hasher = Arc::new(espr::hash::argon2::Hasher::new(&Default::default())?);
             let password_service =
                 crate::app::auth::service::password_hash::PasswordHashService::new(
@@ -228,117 +217,130 @@ mod tests {
 
         #[tokio::test]
         async fn creates_local_user_with_hash_and_distinct_roles() -> anyhow::Result<()> {
-            let (db, hasher, password_service) = setup().await?;
-            let result = execute(
-                &db,
-                &password_service,
-                Command {
-                    nickname: "Alice".into(),
-                    email: " Alice@Example.com ".into(),
-                    password: "correct password".into(),
-                    role_codes: vec!["user".into(), "admin".into(), "user".into()],
-                    status: UserStatus::Active,
-                },
-            )
-            .await?;
+            crate::test_support::TestContext::run(4, move |context| async move {
+                let (db, hasher, password_service) = setup(&context).await?;
+                let result = execute(
+                    &db,
+                    &password_service,
+                    Command {
+                        nickname: "Alice".into(),
+                        email: " Alice@Example.com ".into(),
+                        password: "correct password".into(),
+                        role_codes: vec!["user".into(), "admin".into(), "user".into()],
+                        status: UserStatus::Active,
+                    },
+                )
+                .await?;
 
-            let mut connection = db.conn().await?;
-            let mut handle = connection.handle();
-            let identity = identity::find_local_by_email(&mut handle, "alice@example.com")
-                .await?
-                .unwrap();
-            // 생성 결과와 식별 정보가 연결되고 비밀번호는 검증 가능한 해시로
-            // 저장된다.
-            assert_eq!(result.nickname, "Alice");
-            assert_eq!(result.email, "alice@example.com");
-            assert_eq!(result.status, UserStatus::Active);
-            assert_eq!(
-                crate::app::auth::repository::user::find_by_id(&mut handle, result.id)
+                let mut connection = db.conn().await?;
+                let mut handle = connection.handle();
+                let identity = identity::find_local_by_email(&mut handle, "alice@example.com")
                     .await?
-                    .unwrap()
-                    .status,
-                UserStatus::Active
-            );
-            assert_eq!(identity.user_id, result.id);
-            assert_eq!(identity.provider, Provider::Local);
-            assert_eq!(identity.provider_subject, result.id.to_string());
-            assert!(hasher.verify(
-                "correct password",
-                identity.password_hash.as_deref().unwrap()
-            )?);
-            assert!(!hasher.verify("wrong password", identity.password_hash.as_deref().unwrap())?);
-            let roles =
-                crate::app::rbac::repository::user_role::list_by_user_id(&mut handle, result.id)
-                    .await?;
-            assert_eq!(roles.len(), 2);
-            assert!(roles.iter().any(|role| role.code == "user"));
-            assert!(roles.iter().any(|role| role.code == "admin"));
-            Ok(())
+                    .unwrap();
+                // 생성 결과와 식별 정보가 연결되고 비밀번호는 검증 가능한
+                // 해시로 저장된다.
+                assert_eq!(result.nickname, "Alice");
+                assert_eq!(result.email, "alice@example.com");
+                assert_eq!(result.status, UserStatus::Active);
+                assert_eq!(
+                    crate::app::auth::repository::user::find_by_id(&mut handle, result.id)
+                        .await?
+                        .unwrap()
+                        .status,
+                    UserStatus::Active
+                );
+                assert_eq!(identity.user_id, result.id);
+                assert_eq!(identity.provider, Provider::Local);
+                assert_eq!(identity.provider_subject, result.id.to_string());
+                assert!(hasher.verify(
+                    "correct password",
+                    identity.password_hash.as_deref().unwrap()
+                )?);
+                assert!(
+                    !hasher.verify("wrong password", identity.password_hash.as_deref().unwrap())?
+                );
+                let roles = crate::app::rbac::repository::user_role::list_by_user_id(
+                    &mut handle,
+                    result.id,
+                )
+                .await?;
+                assert_eq!(roles.len(), 2);
+                assert!(roles.iter().any(|role| role.code == "user"));
+                assert!(roles.iter().any(|role| role.code == "admin"));
+                Ok(())
+            })
+            .await
         }
 
         #[tokio::test]
         async fn duplicate_email_rolls_back_user_creation() -> anyhow::Result<()> {
-            let (db, _, password_service) = setup().await?;
-            execute(
-                &db,
-                &password_service,
-                Command {
-                    nickname: "Original".into(),
-                    email: "alice@example.com".into(),
-                    password: "password".into(),
-                    role_codes: vec!["user".into()],
-                    status: UserStatus::Registered,
-                },
-            )
-            .await?;
-            assert!(
+            crate::test_support::TestContext::run(4, move |context| async move {
+                let (db, _, password_service) = setup(&context).await?;
                 execute(
                     &db,
                     &password_service,
                     Command {
-                        nickname: "Duplicate".into(),
+                        nickname: "Original".into(),
                         email: "alice@example.com".into(),
-                        password: "another password".into(),
+                        password: "password".into(),
                         role_codes: vec!["user".into()],
                         status: UserStatus::Registered,
-                    }
+                    },
                 )
-                .await
-                .is_err()
-            );
-            let mut connection = db.conn().await?;
-            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_users")
-                .fetch_one(connection.handle().conn())
                 .await?;
-            // 중복 이메일 요청은 추가 사용자를 남기지 않는다.
-            assert_eq!(count, 1);
-            Ok(())
+                assert!(
+                    execute(
+                        &db,
+                        &password_service,
+                        Command {
+                            nickname: "Duplicate".into(),
+                            email: "alice@example.com".into(),
+                            password: "another password".into(),
+                            role_codes: vec!["user".into()],
+                            status: UserStatus::Registered,
+                        }
+                    )
+                    .await
+                    .is_err()
+                );
+                let mut connection = db.conn().await?;
+                let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_users")
+                    .fetch_one(connection.handle().conn())
+                    .await?;
+                // 중복 이메일 요청은 추가 사용자를 남기지 않는다.
+                assert_eq!(count, 1);
+                Ok(())
+            })
+            .await
         }
 
         #[tokio::test]
         async fn missing_role_rolls_back_user_creation() -> anyhow::Result<()> {
-            let (db, _, password_service) = setup().await?;
-            let error = execute(
-                &db,
-                &password_service,
-                Command {
-                    nickname: "Missing role".into(),
-                    email: "missing@example.com".into(),
-                    password: "password".into(),
-                    role_codes: vec!["user".into(), "missing".into()],
-                    status: UserStatus::Registered,
-                },
-            )
+            crate::test_support::TestContext::run(4, move |context| async move {
+                let (db, _, password_service) = setup(&context).await?;
+                let error = execute(
+                    &db,
+                    &password_service,
+                    Command {
+                        nickname: "Missing role".into(),
+                        email: "missing@example.com".into(),
+                        password: "password".into(),
+                        role_codes: vec!["user".into(), "missing".into()],
+                        status: UserStatus::Registered,
+                    },
+                )
+                .await
+                .unwrap_err();
+                assert_eq!(error.code, crate::Code::NotFound);
+                let mut connection = db.conn().await?;
+                let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_users")
+                    .fetch_one(connection.handle().conn())
+                    .await?;
+                // 없는 역할이 포함되면 생성한 사용자도 롤백한다.
+                assert_eq!(count, 0);
+                Ok(())
+            })
             .await
-            .unwrap_err();
-            assert_eq!(error.code, crate::Code::NotFound);
-            let mut connection = db.conn().await?;
-            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_auth_users")
-                .fetch_one(connection.handle().conn())
-                .await?;
-            // 없는 역할이 포함되면 생성한 사용자도 롤백한다.
-            assert_eq!(count, 0);
-            Ok(())
         }
     }
 }

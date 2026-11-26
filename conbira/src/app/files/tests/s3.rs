@@ -6,7 +6,7 @@ mod contract {
     use crate::app::files::s3::{
         ObjectHead, PresignGet, PutObject, S3ObjectAdapter, S3ObjectPort, StorageError,
     };
-    use crate::app::files::test_support::{MockS3, config};
+    use crate::test_support::files::{MockS3, config};
 
     fn put(mock: &MockS3, key: &str, bytes: &[u8], max: u64) -> PutObject {
         PutObject {

@@ -121,7 +121,7 @@ mod tests {
     use crate::app::container::db::Database;
 
     struct LoginFixture {
-        db: Database,
+        db: Arc<Database>,
         password_service: auth::service::password_hash::PasswordHashService,
         dummy_hash: String,
         jwt: espr::jwt::TokenService,
@@ -129,20 +129,8 @@ mod tests {
     }
 
     impl LoginFixture {
-        async fn new() -> anyhow::Result<Self> {
-            let db = Database::new(&crate::test_support::database_config(1)).await?;
-            let mut connection = db.conn().await?;
-            for schema in [
-                include_str!("../../../../migrations/0010_user.sql"),
-                include_str!("../../../../migrations/0011_refresh_token.sql"),
-                include_str!("../../../../migrations/0012_rbac.sql"),
-            ] {
-                let schema = schema.replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
-                sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
-                    .execute(connection.handle().conn())
-                    .await?;
-            }
-            drop(connection);
+        async fn new(context: &crate::test_support::TestContext) -> anyhow::Result<Self> {
+            let db = Arc::clone(&context.db);
             let jwt = crate::test_support::jwt_service("test", "test", 900)?;
             let refresh = auth::service::refresh_token::RefreshTokenService::new(
                 auth::service::refresh_token::Config {
@@ -204,7 +192,8 @@ mod tests {
 
         #[tokio::test]
         async fn refresh_rejects_expired_token_and_inactive_user() -> anyhow::Result<()> {
-            let fixture = LoginFixture::new().await?;
+            crate::test_support::TestContext::run(4, move |context| async move {
+            let fixture = LoginFixture::new(&context).await?;
             fixture.create_user(UserStatus::Active).await?;
             let tokens = execute(
                 &fixture.db,
@@ -245,11 +234,14 @@ mod tests {
             );
             assert_eq!(fixture.refresh_token_count().await?, 1);
             Ok(())
+
+}).await
         }
 
         #[tokio::test]
         async fn refresh_extends_same_token_only_near_expiration() -> anyhow::Result<()> {
-            let fixture = LoginFixture::new().await?;
+            crate::test_support::TestContext::run(4, move |context| async move {
+            let fixture = LoginFixture::new(&context).await?;
             fixture.create_user(UserStatus::Active).await?;
             let tokens = execute(
                 &fixture.db,
@@ -264,7 +256,10 @@ mod tests {
             )
             .await?;
             let mut conn = fixture.db.conn().await?;
-            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP + INTERVAL '4 days'").execute(conn.handle().conn()).await?;
+            let four_days_later = jiff::Timestamp::from_second(jiff::Timestamp::now().as_second() + 4 * 86400)?;
+            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = $1")
+                .bind(jiff_sqlx::Timestamp::from(four_days_later))
+                .execute(conn.handle().conn()).await?;
             drop(conn);
             let refresh = || {
                 crate::app::auth::feature::user_token_refresh::usecase::execute(
@@ -276,10 +271,16 @@ mod tests {
             };
             assert_eq!(refresh().await?.refresh_token, tokens.refresh_token);
             let mut conn = fixture.db.conn().await?;
-            let remaining: f64 = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM (expires_at - CURRENT_TIMESTAMP))::float8 FROM conbira_auth_refresh_tokens")
+            let remaining: f64 = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM expires_at)::float8 FROM conbira_auth_refresh_tokens")
                 .fetch_one(conn.handle().conn()).await?;
-            assert!(remaining > 3.9 * 86400.0 && remaining <= 4.0 * 86400.0);
-            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = CURRENT_TIMESTAMP + INTERVAL '3 days'").execute(conn.handle().conn()).await?;
+            let remaining = remaining - jiff::Timestamp::now().as_second() as f64;
+            // 연장 전에는 4일 부근이며 처리 시간과 초 정밀도 차이는 5분까지 허용한다.
+            assert!((4.0 * 86400.0 - 300.0..=4.0 * 86400.0 + 300.0).contains(&remaining), "remaining: {remaining}");
+            // 갱신 기준인 3일보다 충분히 짧게 설정한다.
+            let two_days_later = jiff::Timestamp::from_second(jiff::Timestamp::now().as_second() + 2 * 86400)?;
+            sqlx::query("UPDATE conbira_auth_refresh_tokens SET expires_at = $1")
+                .bind(jiff_sqlx::Timestamp::from(two_days_later))
+                .execute(conn.handle().conn()).await?;
             drop(conn);
             let first = refresh().await?.refresh_token;
             let second = refresh().await?.refresh_token;
@@ -287,9 +288,11 @@ mod tests {
             assert_eq!(second, tokens.refresh_token);
             assert_eq!(fixture.refresh_token_count().await?, 1);
             let mut conn = fixture.db.conn().await?;
-            let remaining: f64 = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM (expires_at - CURRENT_TIMESTAMP))::float8 FROM conbira_auth_refresh_tokens")
+            let remaining: f64 = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM expires_at)::float8 FROM conbira_auth_refresh_tokens")
                 .fetch_one(conn.handle().conn()).await?;
-            assert!(remaining > 6.0 * 86400.0);
+            let remaining = remaining - jiff::Timestamp::now().as_second() as f64;
+            // 갱신 후에는 7일 부근이며 미갱신 값인 2일과 구분한다.
+            assert!((7.0 * 86400.0 - 300.0..=7.0 * 86400.0 + 300.0).contains(&remaining), "remaining: {remaining}");
             drop(conn);
             crate::app::auth::feature::user_logout::usecase::execute(
                 &fixture.db,
@@ -302,12 +305,15 @@ mod tests {
                 crate::Code::Unauthorized
             );
             Ok(())
+
+}).await
         }
 
         #[tokio::test]
         async fn refresh_is_capped_at_absolute_expiration_and_rejected_afterward()
         -> anyhow::Result<()> {
-            let fixture = LoginFixture::new().await?;
+            crate::test_support::TestContext::run(4, move |context| async move {
+            let fixture = LoginFixture::new(&context).await?;
             fixture.create_user(UserStatus::Active).await?;
             let tokens = execute(
                 &fixture.db,
@@ -349,39 +355,44 @@ mod tests {
                 crate::Code::Unauthorized
             );
             Ok(())
+
+}).await
         }
 
         #[tokio::test]
         async fn refresh_session_matches_new_access_token_claims() -> anyhow::Result<()> {
-            let fixture = LoginFixture::new().await?;
-            fixture.create_user(UserStatus::Active).await?;
-            let tokens = execute(
-                &fixture.db,
-                &fixture.password_service,
-                &fixture.dummy_hash,
-                &fixture.jwt,
-                &fixture.refresh,
-                Command {
-                    email: "alice@example.com".into(),
-                    password: "secret".into(),
-                },
-            )
-            .await?;
-            let refreshed = crate::app::auth::feature::user_token_refresh::usecase::execute(
-                &fixture.db,
-                &fixture.jwt,
-                &fixture.refresh,
-                &tokens.refresh_token,
-            )
-            .await?;
-            let verified = fixture.jwt.verify(&refreshed.access_token)?;
-            // 응답 세션은 새 access token에 서명된 클레임과 같다.
-            assert_eq!(refreshed.expires_at, verified.exp);
-            assert_eq!(
-                serde_json::to_value(refreshed.claims)?,
-                serde_json::Value::Object(verified.user)
-            );
-            Ok(())
+            crate::test_support::TestContext::run(4, move |context| async move {
+                let fixture = LoginFixture::new(&context).await?;
+                fixture.create_user(UserStatus::Active).await?;
+                let tokens = execute(
+                    &fixture.db,
+                    &fixture.password_service,
+                    &fixture.dummy_hash,
+                    &fixture.jwt,
+                    &fixture.refresh,
+                    Command {
+                        email: "alice@example.com".into(),
+                        password: "secret".into(),
+                    },
+                )
+                .await?;
+                let refreshed = crate::app::auth::feature::user_token_refresh::usecase::execute(
+                    &fixture.db,
+                    &fixture.jwt,
+                    &fixture.refresh,
+                    &tokens.refresh_token,
+                )
+                .await?;
+                let verified = fixture.jwt.verify(&refreshed.access_token)?;
+                // 응답 세션은 새 access token에 서명된 클레임과 같다.
+                assert_eq!(refreshed.expires_at, verified.exp);
+                assert_eq!(
+                    serde_json::to_value(refreshed.claims)?,
+                    serde_json::Value::Object(verified.user)
+                );
+                Ok(())
+            })
+            .await
         }
 
         #[tokio::test]
@@ -390,7 +401,8 @@ mod tests {
                 (UserStatus::Registered, "registered"),
                 (UserStatus::Active, "active"),
             ] {
-                let fixture = LoginFixture::new().await?;
+                crate::test_support::TestContext::run(4, move |context| async move {
+let fixture = LoginFixture::new(&context).await?;
                 let user = fixture.create_user(status).await?;
                 let tokens = execute(
                     &fixture.db,
@@ -451,66 +463,75 @@ mod tests {
                 // 재로그인 후에도 첫 리프레시 토큰은 같은 사용자를 가리킨다.
                 assert_eq!(stored_user_id, Some(user.id));
                 assert_eq!(fixture.refresh_token_count().await?, 2);
+Ok(())
+}).await?;
             }
             Ok(())
         }
-
         #[tokio::test]
         async fn inactive_or_withdrawn_accounts_cannot_log_in() -> anyhow::Result<()> {
             for status in [UserStatus::Inactive, UserStatus::Withdrawn] {
-                let fixture = LoginFixture::new().await?;
-                fixture.create_user(status).await?;
-                let result = execute(
-                    &fixture.db,
-                    &fixture.password_service,
-                    &fixture.dummy_hash,
-                    &fixture.jwt,
-                    &fixture.refresh,
-                    Command {
-                        email: " Alice@Example.com ".into(),
-                        password: "secret".into(),
-                    },
-                )
-                .await;
-                // 비활성·탈퇴 계정은 401에 해당하는 오류를 반환하고 토큰을
-                // 저장하지 않는다.
-                assert!(matches!(result, Err(error) if error.code == crate::Code::Unauthorized));
-                assert_eq!(fixture.refresh_token_count().await?, 0);
+                crate::test_support::TestContext::run(4, move |context| async move {
+                    let fixture = LoginFixture::new(&context).await?;
+                    fixture.create_user(status).await?;
+                    let result = execute(
+                        &fixture.db,
+                        &fixture.password_service,
+                        &fixture.dummy_hash,
+                        &fixture.jwt,
+                        &fixture.refresh,
+                        Command {
+                            email: " Alice@Example.com ".into(),
+                            password: "secret".into(),
+                        },
+                    )
+                    .await;
+                    // 비활성·탈퇴 계정은 401에 해당하는 오류를 반환하고 토큰을
+                    // 저장하지 않는다.
+                    assert!(
+                        matches!(result, Err(error) if error.code == crate::Code::Unauthorized)
+                    );
+                    assert_eq!(fixture.refresh_token_count().await?, 0);
+                    Ok(())
+                })
+                .await?;
             }
             Ok(())
         }
-
         #[tokio::test]
         async fn invalid_credentials_do_not_issue_tokens() -> anyhow::Result<()> {
-            let fixture = LoginFixture::new().await?;
-            fixture.create_user(UserStatus::Active).await?;
-            for (email, password) in [
-                ("missing@example.com", "secret"),
-                ("missing@example.com", "dummy login password"),
-                ("alice@example.com", "wrong"),
-            ] {
-                let result = execute(
-                    &fixture.db,
-                    &fixture.password_service,
-                    &fixture.dummy_hash,
-                    &fixture.jwt,
-                    &fixture.refresh,
-                    Command {
-                        email: email.into(),
-                        password: password.into(),
-                    },
-                )
-                .await;
-                // 등록되지 않은 이메일과 잘못된 비밀번호에 같은 인증 오류를
-                // 반환한다.
-                assert!(
-                    matches!(result, Err(error) if error.code == crate::Code::Unauthorized),
-                    "{email}"
-                );
-            }
-            // 실패한 로그인은 리프레시 토큰을 저장하지 않는다.
-            assert_eq!(fixture.refresh_token_count().await?, 0);
-            Ok(())
+            crate::test_support::TestContext::run(4, move |context| async move {
+                let fixture = LoginFixture::new(&context).await?;
+                fixture.create_user(UserStatus::Active).await?;
+                for (email, password) in [
+                    ("missing@example.com", "secret"),
+                    ("missing@example.com", "dummy login password"),
+                    ("alice@example.com", "wrong"),
+                ] {
+                    let result = execute(
+                        &fixture.db,
+                        &fixture.password_service,
+                        &fixture.dummy_hash,
+                        &fixture.jwt,
+                        &fixture.refresh,
+                        Command {
+                            email: email.into(),
+                            password: password.into(),
+                        },
+                    )
+                    .await;
+                    // 등록되지 않은 이메일과 잘못된 비밀번호에 같은 인증 오류를
+                    // 반환한다.
+                    assert!(
+                        matches!(result, Err(error) if error.code == crate::Code::Unauthorized),
+                        "{email}"
+                    );
+                }
+                // 실패한 로그인은 리프레시 토큰을 저장하지 않는다.
+                assert_eq!(fixture.refresh_token_count().await?, 0);
+                Ok(())
+            })
+            .await
         }
     }
 
@@ -519,24 +540,27 @@ mod tests {
 
         #[tokio::test]
         async fn malformed_dummy_hash_returns_an_internal_error() -> anyhow::Result<()> {
-            let fixture = LoginFixture::new().await?;
-            let result = execute(
-                &fixture.db,
-                &fixture.password_service,
-                "invalid hash",
-                &fixture.jwt,
-                &fixture.refresh,
-                Command {
-                    email: "missing@example.com".into(),
-                    password: "secret".into(),
-                },
-            )
-            .await;
-            // 존재하지 않는 계정의 검증에 사용하는 해시가 잘못되면 내부 오류를
-            // 반환한다.
-            assert!(matches!(result, Err(error) if error.code == crate::Code::Internal));
-            assert_eq!(fixture.refresh_token_count().await?, 0);
-            Ok(())
+            crate::test_support::TestContext::run(4, move |context| async move {
+                let fixture = LoginFixture::new(&context).await?;
+                let result = execute(
+                    &fixture.db,
+                    &fixture.password_service,
+                    "invalid hash",
+                    &fixture.jwt,
+                    &fixture.refresh,
+                    Command {
+                        email: "missing@example.com".into(),
+                        password: "secret".into(),
+                    },
+                )
+                .await;
+                // 존재하지 않는 계정의 검증에 사용하는 해시가 잘못되면 내부
+                // 오류를 반환한다.
+                assert!(matches!(result, Err(error) if error.code == crate::Code::Internal));
+                assert_eq!(fixture.refresh_token_count().await?, 0);
+                Ok(())
+            })
+            .await
         }
     }
 }

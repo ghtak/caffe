@@ -1,7 +1,7 @@
 mod contract {
     use espr::validate::Validate as _;
 
-    use crate::app::files::test_support::config;
+    use crate::test_support::files::config;
 
     #[test]
     fn allows_http_endpoints_on_private_ipv4_networks() {

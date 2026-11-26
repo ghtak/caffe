@@ -143,14 +143,13 @@ pub mod usecase {
 #[cfg(test)]
 mod tests {
     mod contract {
-        use std::future::Future;
+        use std::collections::HashMap;
         use std::sync::Arc;
         use std::time::Duration;
 
-        use anyhow::Context as _;
-        use axum::body::{Body, Bytes, to_bytes};
+        use axum::body::{Body, to_bytes};
         use axum::http::{Request, StatusCode, header};
-        use axum::{Json, Router};
+        use axum::{Form, Json, Router};
         use openidconnect::core::{
             CoreEdDsaPrivateSigningKey, CoreIdToken, CoreJsonWebKeySet, CoreJwsSigningAlgorithm,
         };
@@ -160,45 +159,6 @@ mod tests {
 
         use crate::app::auth::feature::user_login_google::usecase::state_key;
         use crate::app::auth::service::google_oidc::test_service_with_key;
-        use crate::app::container::db::Database;
-
-        async fn start(router: &Router) -> anyhow::Result<Value> {
-            let response = router
-                .clone()
-                .oneshot(Request::post("/api/auth/login/google").body(Body::empty())?)
-                .await?;
-            assert_eq!(response.status(), StatusCode::OK);
-            assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
-            assert!(!response.headers().contains_key(header::SET_COOKIE));
-            Ok(serde_json::from_slice::<Value>(&to_bytes(response.into_body(), 16384).await?)?["data"].clone())
-        }
-
-        fn completion(data: &Value, code: &str) -> Request<Body> {
-            Request::post("/api/auth/login/google/complete").header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(json!({"state":data["state"], "browser_proof":data["browser_proof"], "code":code}).to_string())).unwrap()
-        }
-
-        fn signed_code(
-            data: &Value,
-            subject: &str,
-            verified: bool,
-            key: &CoreEdDsaPrivateSigningKey,
-        ) -> anyhow::Result<String> {
-            let url = openidconnect::url::Url::parse(data["authorization_url"].as_str().unwrap())?;
-            let nonce = url
-                .query_pairs()
-                .find_map(|(k, v)| (k == "nonce").then(|| v.into_owned()))
-                .unwrap();
-            let now = jiff::Timestamp::now().as_second();
-            let claims = serde_json::from_value(
-                json!({"iss":"https://accounts.google.com", "aud":"example-client", "sub":subject,
-                "iat":now, "exp":now+300, "nonce":nonce, "email":"same@example.com", "email_verified":verified, "name":"Google User"}),
-            )?;
-            Ok(
-                CoreIdToken::new(claims, key, CoreJwsSigningAlgorithm::EdDsa, None, None)?
-                    .to_string(),
-            )
-        }
 
         struct Fixture {
             signing_key: CoreEdDsaPrivateSigningKey,
@@ -208,85 +168,24 @@ mod tests {
         }
 
         impl Fixture {
-            async fn run<F, Fut>(test: F) -> anyhow::Result<()>
-            where
-                F: FnOnce(Self) -> Fut + Send + 'static,
-                Fut: Future<Output = anyhow::Result<()>> + Send + 'static,
-            {
-                let schema = format!("google_test_{}", uuid::Uuid::new_v4().simple());
-                let mut config = crate::test_support::database_config(4);
-                let admin = Database::new(&config).await?;
-                let mut url = openidconnect::url::Url::parse(&config.url)?;
-                url.query_pairs_mut()
-                    .append_pair("options", &format!("-csearch_path={schema}"));
-                config.url = url.to_string();
-
-                let mut conn = admin.conn().await?;
-                sqlx::query(sqlx::AssertSqlSafe(format!("CREATE SCHEMA {schema}")))
-                    .execute(conn.handle().conn())
-                    .await?;
-
-                // Keep setup and test panics in the child task so teardown can
-                // run first.
-                let result = tokio::spawn(async move {
-                    let fixture = Self::new(Database::new(&config).await?).await?;
-                    test(fixture).await
-                })
-                .await;
-                let cleanup =
-                    sqlx::query(sqlx::AssertSqlSafe(format!("DROP SCHEMA {schema} CASCADE")))
-                        .execute(conn.handle().conn())
-                        .await
-                        .context("failed to drop Google login test schema");
-
-                let result = match result {
-                    Ok(result) => result,
-                    Err(error) if error.is_panic() => {
-                        if let Err(error) = cleanup {
-                            eprintln!("{error:#}");
-                        }
-                        std::panic::resume_unwind(error.into_panic());
-                    }
-                    Err(error) => Err(error.into()),
-                };
-                match (result, cleanup) {
-                    (Err(error), Err(cleanup)) => Err(error.context(format!("{cleanup:#}"))),
-                    (Err(error), _) => Err(error),
-                    (Ok(()), cleanup) => cleanup.map(|_| ()),
-                }
-            }
-
-            async fn new(db: Database) -> anyhow::Result<Self> {
+            async fn new(context: &crate::test_support::TestContext) -> anyhow::Result<Self> {
+                let pem = concat!(
+                    "-----BEGIN PRIVATE KEY-----\n",
+                    "MC4CAQAwBQYDK2VwBCIEID9fvP22Y4BWeCEB8aYApFGjC0filpMDrYsHXz70LRJG\n",
+                    "-----END PRIVATE KEY-----",
+                );
                 let signing_key = CoreEdDsaPrivateSigningKey::from_ed25519_pem(
-                "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEID9fvP22Y4BWeCEB8aYApFGjC0filpMDrYsHXz70LRJG\n-----END PRIVATE KEY-----",
-                Some(JsonWebKeyId::new("test-key".into())),
-            ).expect("valid test signing key");
+                    pem,
+                    Some(JsonWebKeyId::new("test-key".into())),
+                )
+                .expect("valid test signing key");
                 let keys = CoreJsonWebKeySet::new(vec![signing_key.as_verification_key()]);
                 let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
                 let token_url = format!("http://{}/token", listener.local_addr()?);
-                let mock = Router::new().route("/token", axum::routing::post(|body: Bytes| async move {
-                let code = openidconnect::url::form_urlencoded::parse(&body).find_map(|(k,v)| (k == "code").then(|| v.into_owned())).unwrap();
-                Json(json!({"access_token":"mock-access", "token_type":"Bearer", "id_token":code}))
-            }));
-                let mut container = crate::test_support::container().await?;
-                Arc::get_mut(&mut container).unwrap().db = db;
-                Arc::get_mut(&mut container).unwrap().google_oidc_service =
-                    Some(test_service_with_key(&token_url, keys));
-                let mut conn = container.db.conn().await?;
-                for sql in [
-                    include_str!("../../../../migrations/0010_user.sql"),
-                    include_str!("../../../../migrations/0011_refresh_token.sql"),
-                    include_str!("../../../../migrations/0012_rbac.sql"),
-                ] {
-                    sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
-                        .execute(conn.handle().conn())
-                        .await?;
-                }
-                sqlx::query("INSERT INTO conbira_auth_users (nickname) VALUES ('local')")
-                    .execute(conn.handle().conn())
-                    .await?;
-                sqlx::query("INSERT INTO conbira_auth_user_identities (user_id, provider, provider_subject, email, password_hash) SELECT id, 'local', id::text, 'same@example.com', 'hash' FROM conbira_auth_users WHERE nickname = 'local'").execute(conn.handle().conn()).await?;
-                drop(conn);
+                let mock = Router::new().route("/token", axum::routing::post(exchange_token));
+                let mut container = context.container().await?;
+                container.google_oidc_service = Some(test_service_with_key(&token_url, keys));
+                let container = Arc::new(container);
                 let router = crate::app::http::router(container.clone())?;
                 let server = tokio::spawn(async move { axum::serve(listener, mock).await });
                 Ok(Fixture {
@@ -296,6 +195,82 @@ mod tests {
                     router,
                 })
             }
+
+            async fn start(&self) -> anyhow::Result<Value> {
+                let response = self
+                    .router
+                    .clone()
+                    .oneshot(Request::post("/api/auth/login/google").body(Body::empty())?)
+                    .await?;
+                assert_eq!(response.status(), StatusCode::OK);
+                assert_eq!(response.headers()[header::CACHE_CONTROL], "no-store");
+                assert!(!response.headers().contains_key(header::SET_COOKIE));
+                Ok(
+                    serde_json::from_slice::<Value>(&to_bytes(response.into_body(), 16384).await?)?
+                        ["data"]
+                        .clone(),
+                )
+            }
+
+            async fn complete(
+                &self,
+                data: &Value,
+                code: &str,
+            ) -> anyhow::Result<axum::response::Response> {
+                let request = Request::post("/api/auth/login/google/complete")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        json!({
+                            "state": data["state"],
+                            "browser_proof": data["browser_proof"],
+                            "code": code,
+                        })
+                        .to_string(),
+                    ))?;
+                Ok(self.router.clone().oneshot(request).await?)
+            }
+
+            fn signed_code(
+                &self,
+                data: &Value,
+                subject: &str,
+                verified: bool,
+            ) -> anyhow::Result<String> {
+                let url =
+                    openidconnect::url::Url::parse(data["authorization_url"].as_str().unwrap())?;
+                let nonce = url
+                    .query_pairs()
+                    .find_map(|(k, v)| (k == "nonce").then(|| v.into_owned()))
+                    .unwrap();
+                let now = jiff::Timestamp::now().as_second();
+                let claims = serde_json::from_value(json!({
+                    "iss": "https://accounts.google.com",
+                    "aud": "example-client",
+                    "sub": subject,
+                    "iat": now,
+                    "exp": now + 300,
+                    "nonce": nonce,
+                    "email": "same@example.com",
+                    "email_verified": verified,
+                    "name": "Google User",
+                }))?;
+                Ok(CoreIdToken::new(
+                    claims,
+                    &self.signing_key,
+                    CoreJwsSigningAlgorithm::EdDsa,
+                    None,
+                    None,
+                )?
+                .to_string())
+            }
+        }
+
+        async fn exchange_token(Form(params): Form<HashMap<String, String>>) -> Json<Value> {
+            Json(json!({
+                "access_token": "mock-access",
+                "token_type": "Bearer",
+                "id_token": params.get("code").expect("authorization code"),
+            }))
         }
 
         impl Drop for Fixture {
@@ -304,11 +279,10 @@ mod tests {
 
         #[tokio::test]
         async fn login_start_binds_state_and_browser_proof() -> anyhow::Result<()> {
-            Fixture::run(|fixture| async move {
-                let router = &fixture.router;
-                let signing_key = &fixture.signing_key;
-                // 기대 결과: login start binds state and browser proof
-                let first = start(router).await?;
+            crate::test_support::TestContext::run(4, |context| async move {
+                let fixture = Fixture::new(&context).await?;
+                // 로그인 URL의 state와 브라우저 증명을 바인딩한다.
+                let first = fixture.start().await?;
                 let authorization =
                     openidconnect::url::Url::parse(first["authorization_url"].as_str().unwrap())?;
                 let params: std::collections::HashMap<_, _> =
@@ -327,15 +301,11 @@ mod tests {
                         .contains(first["browser_proof"].as_str().unwrap())
                 );
                 assert_ne!(first["state"], first["browser_proof"]);
-                let code = signed_code(&first, "subject", true, signing_key)?;
+                let code = fixture.signed_code(&first, "subject", true)?;
                 let mut wrong = first.clone();
                 wrong["browser_proof"] = json!("wrong-proof");
                 assert_eq!(
-                    router
-                        .clone()
-                        .oneshot(completion(&wrong, &code))
-                        .await?
-                        .status(),
+                    fixture.complete(&wrong, &code).await?.status(),
                     StatusCode::UNAUTHORIZED
                 );
                 let mut shifted = first.clone();
@@ -347,11 +317,7 @@ mod tests {
                 ));
                 shifted["browser_proof"] = json!(&proof[1..]);
                 assert_eq!(
-                    router
-                        .clone()
-                        .oneshot(completion(&shifted, &code))
-                        .await?
-                        .status(),
+                    fixture.complete(&shifted, &code).await?.status(),
                     StatusCode::UNAUTHORIZED
                 );
                 Ok(())
@@ -361,61 +327,76 @@ mod tests {
 
         #[tokio::test]
         async fn concurrent_logins_create_one_account_and_issue_tokens() -> anyhow::Result<()> {
-            Fixture::run(|fixture| async move {
-            let router = &fixture.router;
-            let container = &fixture.container;
-            let signing_key = &fixture.signing_key;
-            let first = start(router).await?;
-            let code = signed_code(&first, "subject", true, &fixture.signing_key)?;
-            // 기대 결과: concurrent logins create one account and issue tokens
-            let second = start(router).await?;
-            let second_code = signed_code(&second, "subject", true, signing_key)?;
-            let (a, b) = tokio::join!(
-                router.clone().oneshot(completion(&first, &code)),
-                router.clone().oneshot(completion(&second, &second_code))
-            );
-            let a = a?;
-            let b = b?;
-            assert_eq!(a.status(), StatusCode::OK);
-            assert_eq!(b.status(), StatusCode::OK);
-            assert_eq!(a.headers()[header::CACHE_CONTROL], "no-store");
-            assert!(!a.headers().contains_key(header::SET_COOKIE));
-            let first_body: Value = serde_json::from_slice(&to_bytes(a.into_body(), 16384).await?)?;
-            let second_body: Value =
-                serde_json::from_slice(&to_bytes(b.into_body(), 16384).await?)?;
-            let google_id = first_body["data"]["claims"]["id"].as_i64().unwrap();
-            assert_eq!(second_body["data"]["claims"]["id"], google_id);
-            assert_eq!(first_body["data"]["claims"]["status"], "registered");
-            assert!(first_body["data"]["refresh_token"].as_str().is_some());
-            let mut conn = container.db.conn().await?;
-            let rows: Vec<(i64, String, String)> = sqlx::query_as("SELECT user_id, provider, email FROM conbira_auth_user_identities ORDER BY provider").fetch_all(conn.handle().conn()).await?;
-            assert_eq!(rows.len(), 2);
-            assert_eq!(rows[0].1, "google");
-            assert_eq!(rows[0].0, google_id);
-            assert_ne!(rows[0].0, rows[1].0);
-            assert_eq!(rows[0].2, rows[1].2);
-            drop(conn);
-            let token = first_body["data"]["access_token"].as_str().unwrap();
-            let me = router
-                .clone()
-                .oneshot(
-                    Request::get("/api/auth/me")
-                        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                        .body(Body::empty())?,
+            crate::test_support::TestContext::run(4, |context| async move {
+                let fixture = Fixture::new(&context).await?;
+                let mut conn = fixture.container.db.conn().await?;
+                sqlx::query("INSERT INTO conbira_auth_users (nickname) VALUES ('local')")
+                    .execute(conn.handle().conn())
+                    .await?;
+                sqlx::query(
+                    "INSERT INTO conbira_auth_user_identities
+                        (user_id, provider, provider_subject, email, password_hash)
+                     SELECT id, 'local', id::text, 'same@example.com', 'hash'
+                     FROM conbira_auth_users WHERE nickname = 'local'",
                 )
+                .execute(conn.handle().conn())
                 .await?;
-            assert_eq!(me.status(), StatusCode::OK);
-            let me: Value = serde_json::from_slice(&to_bytes(me.into_body(), 16384).await?)?;
-            assert_eq!(me["data"]["sub"], google_id.to_string());
-            assert!(me["data"]["user"].get("roles").is_none());
-            assert_eq!(
-                router
+                drop(conn);
+                let first = fixture.start().await?;
+                let code = fixture.signed_code(&first, "subject", true)?;
+                // 동일 Google 계정의 동시 로그인은 하나의 계정으로 토큰을
+                // 발급한다.
+                let second = fixture.start().await?;
+                let second_code = fixture.signed_code(&second, "subject", true)?;
+                let (a, b) = tokio::join!(
+                    fixture.complete(&first, &code),
+                    fixture.complete(&second, &second_code)
+                );
+                let a = a?;
+                let b = b?;
+                assert_eq!(a.status(), StatusCode::OK);
+                assert_eq!(b.status(), StatusCode::OK);
+                assert_eq!(a.headers()[header::CACHE_CONTROL], "no-store");
+                assert!(!a.headers().contains_key(header::SET_COOKIE));
+                let first_body: Value =
+                    serde_json::from_slice(&to_bytes(a.into_body(), 16384).await?)?;
+                let second_body: Value =
+                    serde_json::from_slice(&to_bytes(b.into_body(), 16384).await?)?;
+                let google_id = first_body["data"]["claims"]["id"].as_i64().unwrap();
+                assert_eq!(second_body["data"]["claims"]["id"], google_id);
+                assert_eq!(first_body["data"]["claims"]["status"], "registered");
+                assert!(first_body["data"]["refresh_token"].as_str().is_some());
+                let mut conn = fixture.container.db.conn().await?;
+                let rows: Vec<(i64, String, String)> = sqlx::query_as(
+                    "SELECT user_id, provider, email
+                 FROM conbira_auth_user_identities ORDER BY provider",
+                )
+                .fetch_all(conn.handle().conn())
+                .await?;
+                assert_eq!(rows.len(), 2);
+                assert_eq!(rows[0].1, "google");
+                assert_eq!(rows[0].0, google_id);
+                assert_ne!(rows[0].0, rows[1].0);
+                assert_eq!(rows[0].2, rows[1].2);
+                drop(conn);
+                let token = first_body["data"]["access_token"].as_str().unwrap();
+                let me = fixture
+                    .router
                     .clone()
-                    .oneshot(completion(&first, &code))
-                    .await?
-                    .status(),
-                StatusCode::UNAUTHORIZED
-            );
+                    .oneshot(
+                        Request::get("/api/auth/me")
+                            .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                            .body(Body::empty())?,
+                    )
+                    .await?;
+                assert_eq!(me.status(), StatusCode::OK);
+                let me: Value = serde_json::from_slice(&to_bytes(me.into_body(), 16384).await?)?;
+                assert_eq!(me["data"]["sub"], google_id.to_string());
+                assert!(me["data"]["user"].get("roles").is_none());
+                assert_eq!(
+                    fixture.complete(&first, &code).await?.status(),
+                    StatusCode::UNAUTHORIZED
+                );
                 Ok(())
             })
             .await
@@ -423,26 +404,20 @@ mod tests {
 
         #[tokio::test]
         async fn existing_identity_allows_unverified_email() -> anyhow::Result<()> {
-            Fixture::run(|fixture| async move {
-                let router = &fixture.router;
-                let signing_key = &fixture.signing_key;
-                let first = start(router).await?;
-                let code = signed_code(&first, "subject", true, &fixture.signing_key)?;
+            crate::test_support::TestContext::run(4, |context| async move {
+                let fixture = Fixture::new(&context).await?;
+                let first = fixture.start().await?;
+                let code = fixture.signed_code(&first, "subject", true)?;
                 assert_eq!(
-                    router
-                        .clone()
-                        .oneshot(completion(&first, &code))
-                        .await?
-                        .status(),
+                    fixture.complete(&first, &code).await?.status(),
                     StatusCode::OK
                 );
-                // 기대 결과: existing identity allows unverified email
-                let repeated = start(router).await?;
-                let unverified_code = signed_code(&repeated, "subject", false, signing_key)?;
+                // 기존 식별 정보로 로그인할 때 이메일 재검증을 요구하지 않는다.
+                let repeated = fixture.start().await?;
+                let unverified_code = fixture.signed_code(&repeated, "subject", false)?;
                 assert_eq!(
-                    router
-                        .clone()
-                        .oneshot(completion(&repeated, &unverified_code))
+                    fixture
+                        .complete(&repeated, &unverified_code)
                         .await?
                         .status(),
                     StatusCode::OK
@@ -454,15 +429,14 @@ mod tests {
 
         #[tokio::test]
         async fn login_state_is_consumed_once_concurrently() -> anyhow::Result<()> {
-            Fixture::run(|fixture| async move {
-                let router = &fixture.router;
-                let signing_key = &fixture.signing_key;
-                // 기대 결과: login state is consumed once concurrently
-                let once = start(router).await?;
-                let once_code = signed_code(&once, "subject", true, signing_key)?;
+            crate::test_support::TestContext::run(4, |context| async move {
+                let fixture = Fixture::new(&context).await?;
+                // 같은 로그인 상태를 동시에 사용해도 한 요청만 성공한다.
+                let once = fixture.start().await?;
+                let once_code = fixture.signed_code(&once, "subject", true)?;
                 let (a, b) = tokio::join!(
-                    router.clone().oneshot(completion(&once, &once_code)),
-                    router.clone().oneshot(completion(&once, &once_code))
+                    fixture.complete(&once, &once_code),
+                    fixture.complete(&once, &once_code)
                 );
                 let mut statuses = [a?.status(), b?.status()];
                 statuses.sort();
@@ -474,16 +448,14 @@ mod tests {
 
         #[tokio::test]
         async fn new_identity_requires_verified_email() -> anyhow::Result<()> {
-            Fixture::run(|fixture| async move {
-                let router = &fixture.router;
-                let signing_key = &fixture.signing_key;
-                // 기대 결과: new identity requires verified email
-                let unverified = start(router).await?;
-                let unverified_code = signed_code(&unverified, "new-subject", false, signing_key)?;
+            crate::test_support::TestContext::run(4, |context| async move {
+                let fixture = Fixture::new(&context).await?;
+                // 새 계정은 검증된 이메일이 있어야 로그인할 수 있다.
+                let unverified = fixture.start().await?;
+                let unverified_code = fixture.signed_code(&unverified, "new-subject", false)?;
                 assert_eq!(
-                    router
-                        .clone()
-                        .oneshot(completion(&unverified, &unverified_code))
+                    fixture
+                        .complete(&unverified, &unverified_code)
                         .await?
                         .status(),
                     StatusCode::UNAUTHORIZED
@@ -495,33 +467,27 @@ mod tests {
 
         #[tokio::test]
         async fn inactive_and_withdrawn_users_cannot_log_in() -> anyhow::Result<()> {
-            Fixture::run(|fixture| async move {
-                let router = &fixture.router;
-                let container = &fixture.container;
-                let signing_key = &fixture.signing_key;
-                let first = start(router).await?;
-                let code = signed_code(&first, "subject", true, &fixture.signing_key)?;
-                let response = router.clone().oneshot(completion(&first, &code)).await?;
+            crate::test_support::TestContext::run(4, |context| async move {
+                let fixture = Fixture::new(&context).await?;
+                let first = fixture.start().await?;
+                let code = fixture.signed_code(&first, "subject", true)?;
+                let response = fixture.complete(&first, &code).await?;
                 let body: Value =
                     serde_json::from_slice(&to_bytes(response.into_body(), 16384).await?)?;
                 let google_id = body["data"]["claims"]["id"].as_i64().unwrap();
-                // 기대 결과: inactive and withdrawn users cannot log in
+                // 비활성·탈퇴 계정은 로그인할 수 없다.
                 for status in ["inactive", "withdrawn"] {
-                    let mut conn = container.db.conn().await?;
+                    let mut conn = fixture.container.db.conn().await?;
                     sqlx::query("UPDATE conbira_auth_users SET status = $1 WHERE id = $2")
                         .bind(status)
                         .bind(google_id)
                         .execute(conn.handle().conn())
                         .await?;
                     drop(conn);
-                    let data = start(router).await?;
-                    let code = signed_code(&data, "subject", true, signing_key)?;
+                    let data = fixture.start().await?;
+                    let code = fixture.signed_code(&data, "subject", true)?;
                     assert_eq!(
-                        router
-                            .clone()
-                            .oneshot(completion(&data, &code))
-                            .await?
-                            .status(),
+                        fixture.complete(&data, &code).await?.status(),
                         StatusCode::UNAUTHORIZED
                     );
                 }
@@ -532,27 +498,23 @@ mod tests {
 
         #[tokio::test]
         async fn expired_login_state_is_rejected() -> anyhow::Result<()> {
-            Fixture::run(|fixture| async move {
-                let router = &fixture.router;
-                let container = &fixture.container;
-                // 기대 결과: expired login state is rejected
-                let expired = start(router).await?;
+            crate::test_support::TestContext::run(4, |context| async move {
+                let fixture = Fixture::new(&context).await?;
+                // 만료된 로그인 상태는 거절한다.
+                let expired = fixture.start().await?;
                 let key = state_key(
                     expired["state"].as_str().unwrap(),
                     expired["browser_proof"].as_str().unwrap(),
                 );
-                let value: String = container.cache.take(&key).await?.unwrap();
-                container
+                let value: String = fixture.container.cache.take(&key).await?.unwrap();
+                fixture
+                    .container
                     .cache
                     .set_with_ttl(&key, value, Duration::from_millis(1))
                     .await?;
                 tokio::time::sleep(Duration::from_millis(10)).await;
                 assert_eq!(
-                    router
-                        .clone()
-                        .oneshot(completion(&expired, "code"))
-                        .await?
-                        .status(),
+                    fixture.complete(&expired, "code").await?.status(),
                     StatusCode::UNAUTHORIZED
                 );
                 Ok(())
@@ -562,15 +524,15 @@ mod tests {
 
         #[tokio::test]
         async fn missing_required_inputs_are_rejected() -> anyhow::Result<()> {
-            Fixture::run(|fixture| async move {
-                let router = &fixture.router;
+            crate::test_support::TestContext::run(4, |context| async move {
+                let fixture = Fixture::new(&context).await?;
                 // 기대 결과: 필수 입력이 없거나 비어 있으면 요청을 거절한다
                 for body in ["{}", r#"{"code":"","state":"s","browser_proof":"p"}"#] {
                     let request = Request::post("/api/auth/login/google/complete")
                         .header(header::CONTENT_TYPE, "application/json")
                         .body(Body::from(body))?;
                     assert_eq!(
-                        router.clone().oneshot(request).await?.status(),
+                        fixture.router.clone().oneshot(request).await?.status(),
                         StatusCode::BAD_REQUEST
                     );
                 }

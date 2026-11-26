@@ -46,8 +46,5 @@ async fn no_store(mut response: axum::response::Response) -> axum::response::Res
 }
 
 #[cfg(test)]
-pub(crate) mod test_support;
-
-#[cfg(test)]
 #[path = "tests/http.rs"]
 mod tests;

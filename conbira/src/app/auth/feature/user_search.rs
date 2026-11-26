@@ -135,25 +135,16 @@ mod tests {
         #[tokio::test]
         async fn search_requires_permission_and_returns_only_public_fields_in_id_order()
         -> anyhow::Result<()> {
-            let container = crate::test_support::container().await?;
+            crate::test_support::TestContext::run(1, |context| async move {
+            let container = std::sync::Arc::new(context.container().await?);
             let router = crate::app::http::router(container.clone())?;
             let mut connection = container.db.conn().await?;
-            let schema = include_str!("../../../../migrations/0010_user.sql")
-                .split_once(';')
-                .unwrap()
-                .0
-                .replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
-            sqlx::query(sqlx::AssertSqlSafe(schema))
-                .execute(connection.handle().conn())
-                .await?;
-            sqlx::query("CREATE TEMPORARY TABLE conbira_auth_user_identities (user_id BIGINT NOT NULL, email TEXT NOT NULL)")
-                .execute(connection.handle().conn()).await?;
             sqlx::query(
                 "INSERT INTO conbira_auth_users (id, nickname) VALUES (2, 'second'), (1, 'first')",
             )
             .execute(connection.handle().conn())
             .await?;
-            sqlx::query("INSERT INTO conbira_auth_user_identities (user_id, email) VALUES (1, 'first@example.com'), (1, 'other@example.com'), (1, 'first@example.com')")
+            sqlx::query("INSERT INTO conbira_auth_user_identities (user_id, provider, provider_subject, email) VALUES (1, 'local', '1', 'first@example.com'), (1, 'google', 'google-1', 'other@example.com'), (1, 'google', 'google-2', 'first@example.com')")
                 .execute(connection.handle().conn()).await?;
             drop(connection);
 
@@ -276,6 +267,8 @@ mod tests {
             assert_eq!(body["data"]["items"].as_array().unwrap().len(), 1);
             assert_eq!(body["data"]["items"][0]["nickname"], "first");
             Ok(())
+
+}).await
         }
     }
 }

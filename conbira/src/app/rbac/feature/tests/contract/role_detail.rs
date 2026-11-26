@@ -4,19 +4,11 @@ use tower::ServiceExt as _;
 
 #[tokio::test]
 async fn role_detail_lists_permissions_and_paginated_users() -> anyhow::Result<()> {
-    let container = crate::test_support::container().await?;
+    crate::test_support::TestContext::run(1, |context| async move {
+    let container = std::sync::Arc::new(context.container().await?);
     let router = crate::app::http::router(container.clone())?;
     {
         let mut connection = container.db.conn().await?;
-        for migration in [
-            include_str!("../../../../../../migrations/0010_user.sql"),
-            include_str!("../../../../../../migrations/0012_rbac.sql"),
-        ] {
-            let schema = migration.replace("CREATE TABLE IF NOT EXISTS", "CREATE TEMPORARY TABLE");
-            sqlx::raw_sql(sqlx::AssertSqlSafe(schema))
-                .execute(connection.handle().conn())
-                .await?;
-        }
         for sql in [
             "INSERT INTO conbira_rbac_roles (id, code, name, description) VALUES (101, 'operator', 'Operator', 'Test')",
             "INSERT INTO conbira_rbac_permissions (id, code, name, description) VALUES (102, 'item.read', 'Read', 'Read items')",
@@ -127,50 +119,60 @@ async fn role_detail_lists_permissions_and_paginated_users() -> anyhow::Result<(
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
     Ok(())
+
+}).await
 }
 
 #[tokio::test]
 async fn role_user_list_requires_both_read_permissions() -> anyhow::Result<()> {
-    let container = crate::test_support::container().await?;
-    let router = crate::app::http::router(container.clone())?;
-    for permissions in [vec!["rbac.read"], vec!["auth.user.read"]] {
-        let claims = serde_json::json!({"id": 42, "status": "active", "permissions": permissions});
-        let token = container
-            .jwt_token_service
-            .issue("42", claims.as_object().unwrap().clone())?
-            .token;
-        let response = router
-            .clone()
-            .oneshot(
-                Request::get("/api/rbac/roles/1/users")
-                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                    .body(Body::empty())?,
-            )
-            .await?;
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
-    Ok(())
+    crate::test_support::TestContext::run(1, |context| async move {
+        let container = std::sync::Arc::new(context.container().await?);
+        let router = crate::app::http::router(container.clone())?;
+        for permissions in [vec!["rbac.read"], vec!["auth.user.read"]] {
+            let claims =
+                serde_json::json!({"id": 42, "status": "active", "permissions": permissions});
+            let token = container
+                .jwt_token_service
+                .issue("42", claims.as_object().unwrap().clone())?
+                .token;
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::get("/api/rbac/roles/1/users")
+                        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                        .body(Body::empty())?,
+                )
+                .await?;
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
+        Ok(())
+    })
+    .await
 }
 
 #[tokio::test]
 async fn role_user_search_requires_both_read_permissions() -> anyhow::Result<()> {
-    let container = crate::test_support::container().await?;
-    let router = crate::app::http::router(container.clone())?;
-    for permissions in [vec!["rbac.read"], vec!["auth.user.read"]] {
-        let claims = serde_json::json!({"id": 42, "status": "active", "permissions": permissions});
-        let token = container
-            .jwt_token_service
-            .issue("42", claims.as_object().unwrap().clone())?
-            .token;
-        let response = router
-            .clone()
-            .oneshot(
-                Request::get("/api/rbac/roles/1/users/search")
-                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                    .body(Body::empty())?,
-            )
-            .await?;
-        assert_eq!(response.status(), StatusCode::FORBIDDEN);
-    }
-    Ok(())
+    crate::test_support::TestContext::run(1, |context| async move {
+        let container = std::sync::Arc::new(context.container().await?);
+        let router = crate::app::http::router(container.clone())?;
+        for permissions in [vec!["rbac.read"], vec!["auth.user.read"]] {
+            let claims =
+                serde_json::json!({"id": 42, "status": "active", "permissions": permissions});
+            let token = container
+                .jwt_token_service
+                .issue("42", claims.as_object().unwrap().clone())?
+                .token;
+            let response = router
+                .clone()
+                .oneshot(
+                    Request::get("/api/rbac/roles/1/users/search")
+                        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                        .body(Body::empty())?,
+                )
+                .await?;
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        }
+        Ok(())
+    })
+    .await
 }
