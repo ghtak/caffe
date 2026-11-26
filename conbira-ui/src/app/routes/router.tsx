@@ -11,7 +11,7 @@ import { AdminHomePage } from '@/features/admin'
 import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
 import { AdminCatalogPage, RoleDetailPage, catalogOptions, type Catalog } from '@/features/rbac'
-import { UserListPage } from '@/features/users'
+import { UserDetailPage, UserListPage } from '@/features/users'
 import { can, visibleAdminSections } from '../access'
 import { AdminLayout } from '../layouts/AdminLayout'
 import { RootLayout } from '../layouts/RootLayout'
@@ -161,6 +161,30 @@ const usersRoute = createRoute({
   path: 'users',
   component: AdminUsersRoute,
 })
+function UserDetailRoute() {
+  const { userId } = userDetailRoute.useParams()
+  const { session } = useSession()
+  if (session.status !== 'authenticated') return null
+  if (!can(session.permissions, ['auth.user.read']))
+    return (
+      <p role="alert" className="p-8">
+        사용자를 조회할 권한이 없습니다.
+      </p>
+    )
+  const id = Number(userId)
+  if (!/^-?\d+$/.test(userId) || !Number.isSafeInteger(id))
+    return (
+      <p role="alert" className="p-8">
+        사용자를 찾을 수 없습니다.
+      </p>
+    )
+  return <UserDetailPage id={id} token={session.token} />
+}
+const userDetailRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'users/$userId',
+  component: UserDetailRoute,
+})
 const permissionsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: 'permissions',
@@ -174,6 +198,7 @@ const routeTree = rootRoute.addChildren([
   adminRoute.addChildren([
     adminIndexRoute,
     usersRoute,
+    userDetailRoute,
     rolesRoute,
     roleDetailRoute,
     permissionsRoute,

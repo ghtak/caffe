@@ -83,6 +83,31 @@ pub async fn search(handle: &mut Handle<'_>, criteria: &Criteria<'_>) -> Result<
         .map_err_internal("Failed to search users", crate::here!())
 }
 
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct DetailUser {
+    pub id: i64,
+    pub nickname: String,
+    pub emails: Vec<String>,
+    pub status: UserStatus,
+    #[sqlx(try_from = "jiff_sqlx::Timestamp")]
+    pub created_at: jiff::Timestamp,
+    #[sqlx(try_from = "jiff_sqlx::Timestamp")]
+    pub updated_at: jiff::Timestamp,
+}
+
+pub async fn find_detail_by_id(handle: &mut Handle<'_>, id: i64) -> Result<Option<DetailUser>> {
+    sqlx::query_as::<_, DetailUser>(
+        "SELECT u.id, u.nickname, u.status, u.created_at, u.updated_at,
+         ARRAY(SELECT DISTINCT i.email FROM conbira_auth_user_identities i
+               WHERE i.user_id = u.id ORDER BY i.email) AS emails
+         FROM conbira_auth_users u WHERE u.id = $1",
+    )
+    .bind(id)
+    .fetch_optional(handle.conn())
+    .await
+    .map_err_internal("Failed to read user detail", crate::here!())
+}
+
 pub async fn update(handle: &mut Handle<'_>, user: &User) -> Result<Option<User>> {
     sqlx::query_as::<_, User>(
         "UPDATE conbira_auth_users

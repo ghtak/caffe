@@ -64,3 +64,31 @@ export function userListOptions(token: string, filters: UserFilters) {
       ).data,
   })
 }
+
+const detailResponseSchema = z.object({
+  code: z.literal('OK'),
+  data: z.object({
+    id: z.number().int(),
+    nickname: z.string(),
+    emails: z.array(z.string()),
+    status: userStatusSchema,
+    created_at: z.iso.datetime({ offset: true }),
+    updated_at: z.iso.datetime({ offset: true }),
+  }),
+})
+
+export function userDetailOptions(token: string, id: number) {
+  return queryOptions({
+    queryKey: [...userKeys.all, 'detail', id],
+    retry: false,
+    queryFn: async ({ signal }) =>
+      detailResponseSchema.parse(
+        await apiClient
+          .get(`/api/auth/users/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal,
+          })
+          .json(),
+      ).data,
+  })
+}

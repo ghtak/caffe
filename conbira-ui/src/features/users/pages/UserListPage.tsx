@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { isHTTPError } from 'ky'
 import { useEffect, useRef, useState } from 'react'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
@@ -238,7 +239,15 @@ export function UserListPage({ token, canEdit }: { token: string; canEdit: boole
               {list.data.items.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell className="px-5 py-4">{user.id}</TableCell>
-                  <TableCell className="px-5 py-4 font-semibold">{user.nickname}</TableCell>
+                  <TableCell className="px-5 py-4 font-semibold">
+                    <Link
+                      to="/admin/users/$userId"
+                      params={{ userId: String(user.id) }}
+                      className="text-primary underline-offset-4 hover:underline"
+                    >
+                      {user.nickname}
+                    </Link>
+                  </TableCell>
                   <TableCell className="px-5 py-4 whitespace-normal">
                     {user.emails.length ? user.emails.join(', ') : '—'}
                   </TableCell>
