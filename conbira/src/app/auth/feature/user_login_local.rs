@@ -71,11 +71,12 @@ pub mod usecase {
         refresh_token_service: &RefreshTokenService,
         command: Command,
     ) -> crate::Result<LoginTokens> {
-        let unauthorized = || {
+        let unauthorized = |at| {
             crate::Error::new(
                 crate::Code::Unauthorized,
                 "Invalid credentials or user status",
             )
+            .at(at)
         };
         let email = command.email.trim().to_ascii_lowercase();
 
@@ -96,9 +97,9 @@ pub mod usecase {
                 .as_ref()
                 .is_none_or(|identity| identity.password_hash.is_none())
         {
-            return Err(unauthorized().at(crate::here!()));
+            return Err(unauthorized(crate::here!()));
         }
-        let identity = identity.ok_or_else(|| unauthorized().at(crate::here!()))?;
+        let identity = identity.ok_or_else(|| unauthorized(crate::here!()))?;
         login_tokens::issue(
             db,
             jwt_token_service,

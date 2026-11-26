@@ -20,13 +20,16 @@ pub mod endpoint {
         caller: UserClaims,
         multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
     ) -> ApiResult<ResponseData> {
-        let invalid = || {
-            Error::new(Code::InvalidRequest, "Invalid file multipart request").at(crate::here!())
-        };
-        let mut multipart = multipart.map_err(|_| invalid())?;
+        let invalid =
+            |at| Error::new(Code::InvalidRequest, "Invalid file multipart request").at(at);
+        let mut multipart = multipart.map_err(|_| invalid(crate::here!()))?;
         let mut group_id = None;
         let mut files = Vec::new();
-        while let Some(mut field) = multipart.next_field().await.map_err(|_| invalid())? {
+        while let Some(mut field) = multipart
+            .next_field()
+            .await
+            .map_err(|_| invalid(crate::here!()))?
+        {
             match field.name() {
                 Some("file") => {
                     if files.len() >= container.config.files.max_files_per_upload {
@@ -37,18 +40,20 @@ pub mod endpoint {
                     let original_filename = field
                         .file_name()
                         .filter(|name| !name.trim().is_empty())
-                        .ok_or_else(invalid)?
+                        .ok_or_else(|| invalid(crate::here!()))?
                         .to_owned();
                     let content_type = field
                         .content_type()
                         .filter(|value| value.parse::<mime::Mime>().is_ok())
-                        .ok_or_else(invalid)?
+                        .ok_or_else(|| invalid(crate::here!()))?
                         .to_owned();
                     let file = tempfile::tempfile()
                         .map_err_internal("Failed to create upload spool", crate::here!())?;
                     let mut spool = tokio::fs::File::from_std(file);
                     let mut size = 0u64;
-                    while let Some(chunk) = field.chunk().await.map_err(|_| invalid())? {
+                    while let Some(chunk) =
+                        field.chunk().await.map_err(|_| invalid(crate::here!()))?
+                    {
                         size += chunk.len() as u64;
                         if size > container.config.files.max_file_size_bytes {
                             return Err(ApiResponse::from(
@@ -74,19 +79,22 @@ pub mod endpoint {
                 }
                 Some("group_id") if group_id.is_none() => {
                     let mut value = Vec::new();
-                    while let Some(chunk) = field.chunk().await.map_err(|_| invalid())? {
+                    while let Some(chunk) =
+                        field.chunk().await.map_err(|_| invalid(crate::here!()))?
+                    {
                         if value.len() + chunk.len() > 36 {
-                            return Err(invalid().into());
+                            return Err(invalid(crate::here!()).into());
                         }
                         value.extend_from_slice(&chunk);
                     }
-                    group_id = Some(Uuid::try_parse_ascii(&value).map_err(|_| invalid())?);
+                    group_id =
+                        Some(Uuid::try_parse_ascii(&value).map_err(|_| invalid(crate::here!()))?);
                 }
-                _ => return Err(invalid().into()),
+                _ => return Err(invalid(crate::here!()).into()),
             }
         }
         if files.is_empty() {
-            return Err(invalid().into());
+            return Err(invalid(crate::here!()).into());
         }
         let file = super::usecase::execute(
             &container.db,

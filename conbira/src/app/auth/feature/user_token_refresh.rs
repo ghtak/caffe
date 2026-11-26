@@ -58,27 +58,26 @@ pub mod usecase {
         refresh_token_service: &RefreshTokenService,
         refresh_token: &str,
     ) -> crate::Result<login_tokens::LoginTokens> {
-        let unauthorized = || {
-            crate::Error::new(crate::Code::Unauthorized, "Invalid refresh token").at(crate::here!())
-        };
+        let unauthorized =
+            |at| crate::Error::new(crate::Code::Unauthorized, "Invalid refresh token").at(at);
         let mut tx = db.begin_tx(crate::here!()).await?;
         let mut handle = tx.handle();
         let record = refresh_token_service
             .find_valid(&mut handle, refresh_token)
             .await?
-            .ok_or_else(unauthorized)?;
+            .ok_or_else(|| unauthorized(crate::here!()))?;
         let user = user::find_by_id(&mut handle, record.user_id)
             .await?
-            .ok_or_else(unauthorized)?;
+            .ok_or_else(|| unauthorized(crate::here!()))?;
         if !matches!(user.status, UserStatus::Registered | UserStatus::Active) {
-            return Err(unauthorized());
+            return Err(unauthorized(crate::here!()));
         }
         let now = jiff::Timestamp::now();
         if record.absolute_expires_at <= now {
-            return Err(unauthorized());
+            return Err(unauthorized(crate::here!()));
         }
         let remaining = record.expires_at.duration_since(now);
-        let renew = renewal_required(remaining).ok_or_else(unauthorized)?;
+        let renew = renewal_required(remaining).ok_or_else(|| unauthorized(crate::here!()))?;
         if renew {
             refresh_token_service
                 .extend_expiration(&mut handle, &record, now)
