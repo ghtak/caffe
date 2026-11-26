@@ -12,6 +12,8 @@ pub mod db {
 
 pub struct Container {
     pub config: Config,
+    pub file_storage: std::sync::Arc<dyn crate::app::files::s3::S3ObjectPort>,
+    pub file_resource_access: std::sync::Arc<dyn crate::app::files::access::ResourceAccessPort>,
     pub db: db::Database,
     pub cache: espr::cache::Cache,
     pub http_server: espr::http::Server,
@@ -24,6 +26,8 @@ pub struct Container {
 
 impl Container {
     pub async fn new(config: &Config) -> crate::Result<Self> {
+        let file_storage =
+            std::sync::Arc::new(crate::app::files::s3::S3ObjectAdapter::new(&config.files).await?);
         let db = db::Database::new(&config.database)
             .await
             .map_err_internal("Failed to initialize database", crate::here!())?;
@@ -63,6 +67,10 @@ impl Container {
 
         Ok(Self {
             config: config.clone(),
+            file_storage,
+            file_resource_access: std::sync::Arc::new(
+                crate::app::files::access::DomainResourceAccess,
+            ),
             db,
             cache,
             http_server,

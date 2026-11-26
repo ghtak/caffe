@@ -20,6 +20,7 @@ import {
   type Credentials,
 } from '@/features/auth'
 import { rbacKeys } from '@/features/rbac'
+import { fileKeys } from '@/features/files'
 import { userKeys } from '@/features/users'
 import { setRefreshHandler } from '@/shared/api/client'
 
@@ -84,6 +85,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     queryClient.removeQueries({ queryKey: authKeys.all })
     queryClient.removeQueries({ queryKey: rbacKeys.all })
     queryClient.removeQueries({ queryKey: userKeys.all })
+    queryClient.removeQueries({ queryKey: fileKeys.all })
   }, [queryClient])
 
   const signOut = useCallback(async () => {

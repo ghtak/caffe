@@ -52,6 +52,7 @@ pub(crate) async fn container() -> anyhow::Result<Arc<Container>> {
     config.database = database_config(1);
     config.cache.url = cache_url();
     config.jwt.ed25519 = dir.jwt_keys()?;
+    config.files = crate::app::files::test_support::config(Some("http://127.0.0.1:19000".into()));
     Ok(Arc::new(Container::new(&config).await?))
 }
 

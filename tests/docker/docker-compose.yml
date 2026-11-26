@@ -27,6 +27,32 @@ services:
       timeout: 5s
       retries: 12
 
+  rustfs:
+    image: rustfs/rustfs:latest
+    restart: unless-stopped
+    ports:
+      - "19000:9000" # S3 API 통신용 포트
+      - "19001:9001" # 웹 관리자 콘솔 접속용 포트
+    environment:
+      RUSTFS_ACCESS_KEY: rustfsadmin
+      RUSTFS_SECRET_KEY: rustfspasswd
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_VOLUMES: "/data"
+    volumes:
+      - rustfs_data:/data # 도커 볼륨 연결 (데이터 영구 보존)
+
+volumes:
+  postgres_data:
+  rustfs_data:
+
+configs:
+  postgres_init:
+    content: |
+      CREATE DATABASE conbira;
+      CREATE DATABASE conbira_dev;
+      CREATE DATABASE conbira_test;
+      CREATE DATABASE espr_test;
   # oracle:
   #   image: gvenzl/oracle-free:23-slim-faststart
   #   ports:
@@ -41,13 +67,3 @@ services:
   #     timeout: 5s
   #     retries: 12
 
-volumes:
-  postgres_data:
-
-configs:
-  postgres_init:
-    content: |
-      CREATE DATABASE conbira;
-      CREATE DATABASE conbira_dev;
-      CREATE DATABASE conbira_test;
-      CREATE DATABASE espr_test;

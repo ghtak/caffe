@@ -14,7 +14,7 @@ path = "src/cli/main.rs"
 [dependencies]
 anyhow = "1"
 base64 = "0.22"
-axum = "0.8.9"
+axum = { version = "0.8.9", features = ["multipart"] }
 clap = { version = "4", features = ["derive"] }
 jiff = { version = "0.2", features = ["serde"] }
 jiff-sqlx = { version = "0.2", features = ["postgres"] }
@@ -33,6 +33,11 @@ tower-cookies = "0.11"
 tower-http = { version = "0.7.1", features = ["trace"] }
 tracing = "0.1.44"
 async-trait = "0.1.92"
+aws-sdk-s3 = { version = "1.162.0", default-features = false, features = ["rt-tokio", "rustls", "default-https-client"] }
+mime = "0.3.18"
+url = "2.5.9"
+percent-encoding = "2.3.2"
+tempfile = "3.27.0"
 
 [dev-dependencies]
 tower = { version = "0.5.3", features = ["util"] }

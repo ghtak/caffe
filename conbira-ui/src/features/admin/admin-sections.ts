@@ -17,4 +17,10 @@ export const adminSections = [
     label: '권한 관리',
     description: '권한 코드와 각 권한이 허용하는 작업을 확인합니다.',
   },
+  {
+    to: '/admin/files',
+    permissions: ['file.list.read'],
+    label: '파일 관리',
+    description: '파일 목록을 확인하고 업로드, 다운로드, 연결과 삭제를 관리합니다.',
+  },
 ] as const

@@ -45,3 +45,23 @@ access_token_ttl_seconds = 900
 [jwt.ed25519]
 key_path = "var/jwt/private.pem"
 public_key_path = "var/jwt/public.pem"
+
+# Deployment values and policy require explicit configuration.
+# Blank credentials and zero policies fail validation during Container startup.
+[files]
+pending_ttl_seconds = 86400
+cleanup_interval_seconds = 3600
+download_url_ttl_seconds = 86400
+max_file_size_bytes = 5368709120
+max_files_per_upload = 8
+
+[files.s3]
+# Set CONBIRA_FILES__S3__ACCESS_KEY_ID and CONBIRA_FILES__S3__SECRET_ACCESS_KEY
+# in .env or the environment.
+access_key_id = ""
+secret_access_key = ""
+# CONBIRA_FILES__S3__BUCKET, REGION, KEY_PREFIX (and optional ENDPOINT).
+bucket = "conbirafiles"
+region = "us-east-1"
+key_prefix = "uploads"                 # 필요 시 "uploads" 형태로 지정
+endpoint = "http://192.168.1.20:19000"
