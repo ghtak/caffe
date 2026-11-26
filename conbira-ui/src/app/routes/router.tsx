@@ -55,9 +55,7 @@ function AdminUsersRoute() {
         사용자 목록을 조회할 권한이 없습니다.
       </p>
     )
-  return (
-    <UserListPage token={session.token} canEdit={can(session.permissions, ['auth.user.manage'])} />
-  )
+  return <UserListPage token={session.token} />
 }
 
 function loadCatalog({ queryClient, session }: RouterContext, catalog: Catalog) {
@@ -178,7 +176,14 @@ function UserDetailRoute() {
         사용자를 찾을 수 없습니다.
       </p>
     )
-  return <UserDetailPage id={id} token={session.token} />
+  return (
+    <UserDetailPage
+      key={id}
+      id={id}
+      token={session.token}
+      canEdit={can(session.permissions, ['auth.user.manage'])}
+    />
+  )
 }
 const userDetailRoute = createRoute({
   getParentRoute: () => adminRoute,
