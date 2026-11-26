@@ -27,7 +27,7 @@ Always output the document using this exact top-level Markdown structure (if the
 - [미확정 외부 입력값은 `{사용자가 입력}` 형태로 명시]
 
 ### 데이터 영속성 및 상태 제약 (Persistence & State)
-- RDB 불변 제약: [공통 테이블, 핵심 식별 컬럼, PK/FK/Unique 제약 요약 - 전체 DDL 및 잠금 세칙 생략]
+- RDB 불변 제약: [공통 테이블, 핵심 식별 컬럼, PK/FK/Unique 제약 요약 - 기본 격리 수준(Read Committed)·PK/FK/Unique·조건부 UPDATE만 사용하며, 요구사항에 없는 잠금(`FOR UPDATE`, advisory lock)·`version` 컬럼·전체 DDL 생략]
 - In-Memory / Cache (Redis 등, 해당 시): [키 네임스페이스 패턴, 저장 목적, TTL 정책 요약]
 - FE 라우트 및 서버 상태: [공통 라우트 가드 기준, 인증 상태 및 무효화할 서버 상태(`queryKey`) 규칙]
 
@@ -83,14 +83,16 @@ sequenceDiagram
 1. Generate Stable Baseline Immediately: Produce the macro specification directly from the provided requirements without preliminary Q&A.
 2. Respect Existing Stack & Conventions: Apply known project conventions (e.g., Vertical Slice Architecture, feature barrel exports, existing table/env prefixes) directly when available.
 3. Design for Extension, Not White-Box Detail: Define where future providers or slices plug in (Extension Points) and fix external BE-FE HTTP DTOs and DB/Redis invariants. Omit internal function signatures, helper structs, transaction lock ordering, and client storage internals (`sessionStorage` details)—leave those to `rust-impl` and `fe-impl`.
-4. Mark External/User-Supplied Values Explicitly: Never fabricate specific URLs, callback paths, secret keys, or policy texts that were not provided. Use explicit placeholders like `{사용자가 입력}` or `{사용자가 확정}`.
-5. Keep Mermaid at System Boundary Level: Show interactions across FE pages, BE HTTP endpoints, external APIs, and persistence stores. Omit internal service/repository helper calls.
-6. Keep Task Index Lightweight (3-Line Summary): Prefix tasks with `[BE]` or `[FE]` and list only `대상`, `선행 조건`, and `완료 조건` so tasks remain decoupled from internal implementation churn and can be dispatched directly to `rust-impl` or `fe-impl`.
-7. Surface Missing Spec Inputs (If Needed): List 1 to 3 concise `{UserInputRequired}` items at the very bottom after `---` only when missing external inputs or domain policies block implementation.
+4. Avoid Speculative Concurrency Defenses: Unless the requirement explicitly specifies a high-contention scenario (e.g., inventory deduction, seat reservation, balance withdrawal), rely solely on DB default isolation (`Read Committed`), PK/FK/Unique constraints, and conditional `UPDATE` (`WHERE status = ...`). Do not invent `SELECT FOR UPDATE`, optimistic lock `version` columns, advisory/distributed locks, idempotency keys, or retry/compensation queues. If concurrency requirements are genuinely ambiguous, surface them as `{UserInputRequired}` instead of assuming locks.
+5. Mark External/User-Supplied Values Explicitly: Never fabricate specific URLs, callback paths, secret keys, or policy texts that were not provided. Use explicit placeholders like `{사용자가 입력}` or `{사용자가 확정}`.
+6. Keep Mermaid at System Boundary Level: Show interactions across FE pages, BE HTTP endpoints, external APIs, and persistence stores. Omit internal service/repository helper calls.
+7. Keep Task Index Lightweight (3-Line Summary): Prefix tasks with `[BE]` or `[FE]` and list only `대상`, `선행 조건`, and `완료 조건` so tasks remain decoupled from internal implementation churn and can be dispatched directly to `rust-impl` or `fe-impl`.
+8. Surface Missing Spec Inputs (If Needed): List 1 to 3 concise `{UserInputRequired}` items at the very bottom after `---` only when missing external inputs or domain policies block implementation.
 
 ## Gotchas
 
 - Bloating the task list into mini-specs: Keep each task strictly to the 3-line summary (`대상`, `선행 조건`, `완료 조건`). Detailed contracts live in Sections 1 and 2; code skeletons live in `rust-impl` / `fe-impl`.
 - Leaking white-box design into macro-spec: If an internal detail can change during refactoring without breaking BE-FE HTTP contracts, extension slots, or DB schemas, remove it from `macro-spec`.
 - Writing full implementation code: Never include function bodies, React JSX markup, or SQL DDL scripts.
+- Inventing unrequested DB locks or race-condition defenses: Never add row locks, `version` columns, distributed locks, or retry loops for hypothetical contention not stated in the requirements.
 - No em-dashes or en-dashes: Use standard hyphens (`-`) or middle dots (`·`) for lists and separators.

@@ -22,7 +22,7 @@ description: 코드 구현 통합 워크플로우(Rust·프런트엔드·풀스�
 Phase 1과 Phase 2 중 어디로 진입하든 코드 작성 전에 반드시 먼저 수행한다.
 
 1. 스택별 참조 문서 로드: 작업 대상에 해당하는 지침을 먼저 읽고 기준을 적용한다(풀스택 작업이면 둘 다 로드).
-   - Rust 백엔드·시스템: [Rust 구현 지침](references/rust.md)
+   - Rust 백엔드·시스템: [Rust 구현 지침](references/rust.md), [Conbira 모듈 구조 관례](references/conbira.md)
    - 프런트엔드 UI: [프런트엔드 구현 지침](references/frontend.md)
 2. 기존 코드·테스트 파악: 코드 베이스 기반 슬라이스, 라우트·공용 모듈, 기존 테스트를 읽어 구조, 오류·상태 처리 관례, 구현 계약, 코드 밀도를 파악한다.
 3. 작업 상태 초기화 및 계약 기록: [일회용 작업 상태 관리](../todo-state/SKILL.md)에 따라 `.agent/.state/todo.md`를 복구하거나 최초 생성한다.
