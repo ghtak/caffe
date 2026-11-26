@@ -152,7 +152,7 @@ export function UserListPage({ token }: { token: string }) {
           </Table>
         </div>
       )}
-      <nav aria-label="사용자 목록 페이지" className="flex items-center gap-3">
+      <nav aria-label="사용자 목록 페이지" className="flex items-center justify-center gap-3">
         <Button
           variant="outline"
           type="button"
