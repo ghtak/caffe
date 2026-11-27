@@ -22,6 +22,7 @@ function posts() {
             title: `${board} ${search || '전체'} ${page}`,
             board_slug: board,
             author_id: 42,
+            author_nickname: '작성자닉네임',
             view_count: 0,
             comment_count: 0,
             created_at: '2026-01-01T00:00:00Z',
@@ -42,6 +43,8 @@ describe('contract', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('link', { name: '커뮤니티' }))
     expect(await screen.findByText('notice 전체 1')).toBeVisible()
+    expect(screen.getByRole('cell', { name: '작성자닉네임' })).toBeVisible()
+    expect(screen.getByRole('cell', { name: 'notice 전체 1[0]' })).toBeVisible()
     await user.click(screen.getByRole('link', { name: '자유게시판' }))
     await screen.findByText('free 전체 1')
     await user.type(screen.getByLabelText('제목·본문'), '검색어')

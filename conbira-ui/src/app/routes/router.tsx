@@ -10,7 +10,7 @@ import { z } from 'zod'
 import { AdminHomePage } from '@/features/admin'
 import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
-import { PostListPage } from '@/features/board'
+import { PostCreatePage, PostDetailPage, PostListPage } from '@/features/board'
 import { CommunityLayout } from '../layouts/CommunityLayout'
 import { FileListPage } from '@/features/files'
 import { AdminCatalogPage, RoleDetailPage, catalogOptions, type Catalog } from '@/features/rbac'
@@ -230,15 +230,68 @@ const communityIndexRoute = createRoute({
 const noticeRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'notice',
-  component: () => <PostListPage key="notice" boardSlug="notice" title="공지" />,
+  component: () => <BoardListRoute boardSlug="notice" title="공지" />,
 })
 const freeRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'free',
-  component: () => <PostListPage key="free" boardSlug="free" title="자유게시판" />,
+  component: () => <BoardListRoute boardSlug="free" title="자유게시판" />,
 })
+function BoardListRoute({ boardSlug, title }: { boardSlug: 'notice' | 'free'; title: string }) {
+  const { session } = useSession()
+  const canWrite =
+    session.status === 'authenticated' && can(session.permissions, [`board.${boardSlug}.write`])
+  return <PostListPage key={boardSlug} boardSlug={boardSlug} title={title} canWrite={canWrite} />
+}
+function BoardCreateRoute({ boardSlug, title }: { boardSlug: 'notice' | 'free'; title: string }) {
+  const { session } = useSession()
+  if (session.status === 'guest') return <Navigate to="/login" replace />
+  if (session.status !== 'authenticated') return <p role="status">로그인 상태 확인 중…</p>
+  if (!can(session.permissions, [`board.${boardSlug}.write`]))
+    return (
+      <p role="alert" className="p-8">
+        글을 작성할 권한이 없습니다.
+      </p>
+    )
+  return (
+    <PostCreatePage key={boardSlug} boardSlug={boardSlug} title={title} token={session.token} />
+  )
+}
+const noticeCreateRoute = createRoute({
+  getParentRoute: () => communityRoute,
+  path: 'notice/new',
+  component: () => <BoardCreateRoute boardSlug="notice" title="공지" />,
+})
+const freeCreateRoute = createRoute({
+  getParentRoute: () => communityRoute,
+  path: 'free/new',
+  component: () => <BoardCreateRoute boardSlug="free" title="자유게시판" />,
+})
+const postDetailRoute = createRoute({
+  getParentRoute: () => communityRoute,
+  path: 'posts/$postId',
+  component: PostDetailRoute,
+})
+function PostDetailRoute() {
+  const { postId } = postDetailRoute.useParams()
+  const id = Number(postId)
+  if (!/^[1-9]\d*$/.test(postId) || !Number.isSafeInteger(id))
+    return (
+      <p role="alert" className="p-8">
+        게시글을 찾을 수 없습니다.
+      </p>
+    )
+  return <PostDetailPage id={id} />
+}
 const routeTree = rootRoute.addChildren([
-  communityRoute.addChildren([communityIndexRoute, noticeRoute, freeRoute]),
+  communityRoute.addChildren([
+    communityIndexRoute,
+    noticeRoute,
+    freeRoute,
+    noticeCreateRoute,
+    freeCreateRoute,
+    postDetailRoute,
+  ]),
   indexRoute,
   loginRoute,
   googleCallbackRoute,

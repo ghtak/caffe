@@ -3,7 +3,7 @@ pub mod endpoint {
 
     use axum::extract::State;
 
-    use crate::app::board::entity::Post;
+    use crate::app::board::entity::PostSummary;
     use crate::app::board::repository::post;
     use crate::app::http::extract::ApiQuery;
     use crate::app::http::response::ApiResult;
@@ -22,7 +22,7 @@ pub mod endpoint {
 
     #[derive(serde::Serialize)]
     pub struct ResponseData {
-        pub items: Vec<Post>,
+        pub items: Vec<PostSummary>,
         pub page: u32,
         pub page_size: u32,
         pub has_next: bool,

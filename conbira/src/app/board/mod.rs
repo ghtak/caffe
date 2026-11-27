@@ -3,10 +3,16 @@ mod feature;
 pub mod repository;
 
 pub fn router() -> axum::Router<std::sync::Arc<crate::app::Container>> {
-    axum::Router::new().route(
-        "/posts",
-        axum::routing::get(feature::post_search::endpoint::handler),
-    )
+    axum::Router::new()
+        .route(
+            "/posts/{id}",
+            axum::routing::get(feature::post_read::endpoint::handler),
+        )
+        .route(
+            "/posts",
+            axum::routing::get(feature::post_search::endpoint::handler)
+                .post(feature::post_create::endpoint::handler),
+        )
 }
 
 #[cfg(test)]
@@ -43,6 +49,7 @@ mod tests {
                     assert_eq!(status, StatusCode::OK, "{body}");
                     assert_eq!(body["data"]["items"].as_array().unwrap().len(), 1);
                     assert_eq!(body["data"]["items"][0]["id"], expected_id);
+                    assert_eq!(body["data"]["items"][0]["author_nickname"], "first");
                     assert_eq!(body["data"]["has_next"], has_next);
                 }
                 let response = router.oneshot(Request::get("/api/board/posts?board_slug=free&page_size=100").body(Body::empty())?).await?;

@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -25,9 +26,11 @@ const searchSchema = z.object({
 export function PostListPage({
   boardSlug,
   title,
+  canWrite = false,
 }: {
   boardSlug: 'notice' | 'free'
   title: string
+  canWrite?: boolean
 }) {
   const [filters, setFilters] = useState({ search: '', author_id: '', page: 1 })
   const form = useForm<z.infer<typeof searchSchema>>({
@@ -62,9 +65,20 @@ export function PostListPage({
       <section aria-label="게시글 목록" className="grid min-w-0 gap-4">
         <div className="flex items-center justify-between gap-4">
           <h2 className="font-semibold">게시글 목록</h2>
-          <Button variant="outline" disabled={list.isFetching} onClick={() => void list.refetch()}>
-            새로고침
-          </Button>
+          <div className="flex gap-2">
+            {canWrite && (
+              <Button asChild>
+                <Link to={`/community/${boardSlug}/new`}>글쓰기</Link>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              disabled={list.isFetching}
+              onClick={() => void list.refetch()}
+            >
+              새로고침
+            </Button>
+          </div>
         </div>
         {list.isPending ? (
           <p role="status">목록을 불러오는 중…</p>
@@ -82,14 +96,15 @@ export function PostListPage({
               : '등록된 게시글이 없습니다.'}
           </p>
         ) : (
-          <Table>
+          <Table className="min-w-2xl">
             <TableHeader>
               <TableRow>
                 <TableHead scope="col">번호</TableHead>
-                <TableHead scope="col">제목</TableHead>
-                <TableHead scope="col">작성자 ID</TableHead>
+                <TableHead scope="col" className="w-full min-w-72">
+                  제목
+                </TableHead>
+                <TableHead scope="col">작성자</TableHead>
                 <TableHead scope="col">조회수</TableHead>
-                <TableHead scope="col">댓글</TableHead>
                 <TableHead scope="col">작성일</TableHead>
               </TableRow>
             </TableHeader>
@@ -97,10 +112,18 @@ export function PostListPage({
               {list.data.items.map((post) => (
                 <TableRow key={post.id} data-testid={`board-post-${post.id}`}>
                   <TableCell>{post.id}</TableCell>
-                  <TableCell className="whitespace-normal break-all">{post.title}</TableCell>
-                  <TableCell>{post.author_id}</TableCell>
+                  <TableCell className="whitespace-normal break-all">
+                    <Link
+                      to="/community/posts/$postId"
+                      params={{ postId: String(post.id) }}
+                      className="hover:underline focus-visible:underline"
+                    >
+                      {post.title}
+                    </Link>
+                    <span className="ml-1 text-muted-foreground">[{post.comment_count}]</span>
+                  </TableCell>
+                  <TableCell>{post.author_nickname}</TableCell>
                   <TableCell>{post.view_count}</TableCell>
-                  <TableCell>{post.comment_count}</TableCell>
                   <TableCell>{new Date(post.created_at).toLocaleString('ko-KR')}</TableCell>
                 </TableRow>
               ))}

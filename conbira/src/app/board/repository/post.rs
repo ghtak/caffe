@@ -1,4 +1,4 @@
-use crate::app::board::entity::Post;
+use crate::app::board::entity::{Post, PostSummary};
 use crate::app::container::db::Handle;
 use crate::error::ResultExt as _;
 
@@ -10,9 +10,12 @@ pub struct Criteria<'a> {
     pub offset: i64,
 }
 
-pub async fn search(handle: &mut Handle<'_>, criteria: &Criteria<'_>) -> crate::Result<Vec<Post>> {
+pub async fn search(
+    handle: &mut Handle<'_>,
+    criteria: &Criteria<'_>,
+) -> crate::Result<Vec<PostSummary>> {
     let mut query = sqlx::QueryBuilder::<sqlx::Postgres>::new(
-        "SELECT p.* FROM conbira_posts p WHERE p.deleted_at IS NULL",
+        "SELECT p.*, u.nickname AS author_nickname FROM conbira_posts p JOIN conbira_auth_users u ON u.id = p.author_id WHERE p.deleted_at IS NULL",
     );
     if let Some(search) = criteria.search {
         let pattern = format!("%{search}%");
@@ -32,8 +35,35 @@ pub async fn search(handle: &mut Handle<'_>, criteria: &Criteria<'_>) -> crate::
         .push(" OFFSET ")
         .push_bind(criteria.offset);
     query
-        .build_query_as::<Post>()
+        .build_query_as::<PostSummary>()
         .fetch_all(handle.conn())
         .await
         .map_err_internal("Failed to search posts", crate::here!())
+}
+
+pub struct NewPost {
+    pub board_slug: String,
+    pub author_id: i64,
+    pub title: String,
+}
+
+pub async fn insert(handle: &mut Handle<'_>, post: &NewPost) -> crate::Result<Post> {
+    sqlx::query_as::<_, Post>(
+        "INSERT INTO conbira_posts (board_slug, author_id, title) VALUES ($1, $2, $3) RETURNING *",
+    )
+    .bind(&post.board_slug)
+    .bind(post.author_id)
+    .bind(&post.title)
+    .fetch_one(handle.conn())
+    .await
+    .map_err_internal("Failed to insert post", crate::here!())
+}
+
+pub async fn find_by_id(
+    handle: &mut Handle<'_>,
+    id: i64,
+) -> crate::Result<Option<super::super::entity::PostDetail>> {
+    sqlx::query_as("SELECT p.*, u.nickname AS author_nickname, c.content FROM conbira_posts p JOIN conbira_auth_users u ON u.id = p.author_id JOIN conbira_post_contents c ON c.post_id = p.id WHERE p.id = $1 AND p.deleted_at IS NULL")
+        .bind(id).fetch_optional(handle.conn()).await
+        .map_err_internal("Failed to find post", crate::here!())
 }

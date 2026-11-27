@@ -110,3 +110,27 @@ CREATE INDEX IF NOT EXISTS conbira_posts_author_idx
 
 CREATE INDEX IF NOT EXISTS conbira_post_comments_thread_idx
     ON conbira_post_comments (post_id, COALESCE(parent_id, id) ASC, parent_id NULLS FIRST, created_at ASC, id ASC);
+
+
+-- ============================================================================
+-- 5. 게시판 권한 및 기본 역할 연결
+-- ============================================================================
+INSERT INTO conbira_rbac_permissions (code, name, description)
+VALUES
+    ('board.free.write', '자유게시판 글 작성', '자유게시판에 게시글을 작성'),
+    ('board.notice.write', '공지 글 작성', '공지 게시판에 게시글을 작성'),
+    ('board.free.manage', '자유게시판 관리', '자유게시판의 게시글을 관리'),
+    ('board.notice.manage', '공지 관리', '공지 게시판의 게시글을 관리')
+ON CONFLICT (code) DO NOTHING;
+
+INSERT INTO conbira_rbac_role_permissions (role_id, permission_id)
+SELECT r.id, p.id
+FROM conbira_rbac_roles r
+JOIN conbira_rbac_permissions p
+    ON p.code IN (
+        'board.free.write', 'board.notice.write',
+        'board.free.manage', 'board.notice.manage'
+    )
+WHERE r.code = 'admin'
+    OR (r.code = 'user' AND p.code = 'board.free.write')
+ON CONFLICT (role_id, permission_id) DO NOTHING;

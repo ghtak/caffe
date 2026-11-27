@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { mutationOptions, queryOptions } from '@tanstack/react-query'
 import { z } from 'zod'
 import { apiClient } from '@/shared/api/client'
 
@@ -14,7 +14,7 @@ const postSchema = z.object({
 const listSchema = z.object({
   code: z.literal('OK'),
   data: z.object({
-    items: z.array(postSchema),
+    items: z.array(postSchema.extend({ author_nickname: z.string() })),
     page: z.number().int().positive(),
     page_size: z.number().int().positive(),
     has_next: z.boolean(),
@@ -41,5 +41,34 @@ export function postListOptions(boardSlug: 'notice' | 'free', filters: PostFilte
         await apiClient.get('/api/board/posts', { searchParams, signal, retry: 0 }).json(),
       ).data
     },
+  })
+}
+
+export function postCreateOptions(token: string) {
+  return mutationOptions({
+    mutationFn: async (body: { board_slug: 'notice' | 'free'; title: string; content: string }) =>
+      z.object({ code: z.literal('OK'), data: postSchema }).parse(
+        await apiClient
+          .post('/api/board/posts', {
+            headers: { Authorization: `Bearer ${token}` },
+            json: body,
+            retry: 0,
+          })
+          .json(),
+      ).data,
+  })
+}
+
+export function postDetailOptions(id: number) {
+  return queryOptions({
+    queryKey: [...postKeys.all, 'detail', id],
+    retry: false,
+    queryFn: async ({ signal }) =>
+      z
+        .object({
+          code: z.literal('OK'),
+          data: postSchema.extend({ author_nickname: z.string(), content: z.string() }),
+        })
+        .parse(await apiClient.get(`/api/board/posts/${id}`, { signal, retry: 0 }).json()).data,
   })
 }

@@ -20,3 +20,19 @@ pub struct Post {
     #[sqlx(try_from = "jiff_sqlx::Timestamp")]
     pub updated_at: jiff::Timestamp,
 }
+
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct PostSummary {
+    #[serde(flatten)]
+    #[sqlx(flatten)]
+    pub post: Post,
+    pub author_nickname: String,
+}
+
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct PostDetail {
+    #[serde(flatten)]
+    #[sqlx(flatten)]
+    pub summary: PostSummary,
+    pub content: String,
+}
