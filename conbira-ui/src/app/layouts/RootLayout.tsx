@@ -35,6 +35,9 @@ export function RootLayout() {
             aria-label="상단 메뉴"
             className="ml-auto flex flex-wrap items-center justify-end gap-2"
           >
+            <Button asChild variant="secondary">
+              <Link to="/community">커뮤니티</Link>
+            </Button>
             {session.status === 'guest' && (
               <Button asChild>
                 <Link to="/login" activeOptions={{ exact: true }}>

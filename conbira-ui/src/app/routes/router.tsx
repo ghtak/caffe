@@ -10,6 +10,8 @@ import { z } from 'zod'
 import { AdminHomePage } from '@/features/admin'
 import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
+import { PostListPage } from '@/features/board'
+import { CommunityLayout } from '../layouts/CommunityLayout'
 import { FileListPage } from '@/features/files'
 import { AdminCatalogPage, RoleDetailPage, catalogOptions, type Catalog } from '@/features/rbac'
 import { UserDetailPage, UserListPage } from '@/features/users'
@@ -215,7 +217,28 @@ const filesRoute = createRoute({
   path: 'files',
   component: AdminFilesRoute,
 })
+const communityRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/community',
+  component: CommunityLayout,
+})
+const communityIndexRoute = createRoute({
+  getParentRoute: () => communityRoute,
+  path: '/',
+  component: () => <Navigate to="/community/notice" replace />,
+})
+const noticeRoute = createRoute({
+  getParentRoute: () => communityRoute,
+  path: 'notice',
+  component: () => <PostListPage key="notice" boardSlug="notice" title="공지" />,
+})
+const freeRoute = createRoute({
+  getParentRoute: () => communityRoute,
+  path: 'free',
+  component: () => <PostListPage key="free" boardSlug="free" title="자유게시판" />,
+})
 const routeTree = rootRoute.addChildren([
+  communityRoute.addChildren([communityIndexRoute, noticeRoute, freeRoute]),
   indexRoute,
   loginRoute,
   googleCallbackRoute,

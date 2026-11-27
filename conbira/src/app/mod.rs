@@ -1,5 +1,6 @@
 #[allow(dead_code)]
 pub mod auth;
+pub mod board;
 mod container;
 pub mod files;
 pub mod http;
