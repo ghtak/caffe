@@ -6,7 +6,8 @@ pub fn router() -> axum::Router<std::sync::Arc<crate::app::Container>> {
     axum::Router::new()
         .route(
             "/comments/{id}",
-            axum::routing::put(feature::comment_update::endpoint::handler),
+            axum::routing::put(feature::comment_update::endpoint::handler)
+                .delete(feature::comment_delete::endpoint::handler),
         )
         .route(
             "/posts/{id}/comments",

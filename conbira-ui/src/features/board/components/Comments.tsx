@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import {
   commentCreateOptions,
+  commentDeleteOptions,
   commentKey,
   commentListOptions,
   commentUpdateOptions,
@@ -124,7 +125,19 @@ export function Comments({
   userId?: number
 }) {
   const list = useQuery(commentListOptions(postId))
+  const queryClient = useQueryClient()
   const [editing, setEditing] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState<number | null>(null)
+  const remove = useMutation({
+    ...commentDeleteOptions(token ?? ''),
+    onSuccess: () => {
+      setDeleting(null)
+      setEditing(null)
+      setReply(null)
+      void queryClient.invalidateQueries({ queryKey: commentKey(postId) })
+      void queryClient.invalidateQueries({ queryKey: postKeys.all })
+    },
+  })
   const [reply, setReply] = useState<{ target: number; parent: number; initial: string } | null>(
     null,
   )
@@ -163,44 +176,72 @@ export function Comments({
                   <time className="text-muted-foreground" dateTime={comment.created_at}>
                     {new Date(comment.created_at).toLocaleString('ko-KR')}
                   </time>
-                  {new Date(comment.updated_at).getTime() >
-                    new Date(comment.created_at).getTime() && (
-                    <span className="ml-1 text-muted-foreground">(수정됨)</span>
-                  )}
+                  {!comment.is_deleted &&
+                    new Date(comment.updated_at).getTime() >
+                      new Date(comment.created_at).getTime() && (
+                      <span className="ml-1 text-muted-foreground">(수정됨)</span>
+                    )}
                 </div>
                 <div className="flex shrink-0">
-                  {token && userId === comment.author_id && (
+                  {!comment.is_deleted && token && userId === comment.author_id && (
+                    <>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setEditing(comment.id)
+                          setDeleting(null)
+                          setReply(null)
+                        }}
+                      >
+                        수정
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setDeleting(comment.id)
+                          setEditing(null)
+                          setReply(null)
+                          remove.reset()
+                        }}
+                      >
+                        삭제
+                      </Button>
+                    </>
+                  )}
+                  {!comment.is_deleted && (
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
+                      disabled={
+                        !token ||
+                        (comment.parent_id !== null &&
+                          list.data.some(
+                            (parent) => parent.id === comment.parent_id && parent.is_deleted,
+                          ))
+                      }
                       onClick={() => {
-                        setEditing(comment.id)
-                        setReply(null)
+                        setEditing(null)
+                        setDeleting(null)
+                        setReply({
+                          target: comment.id,
+                          parent: comment.parent_id ?? comment.id,
+                          initial: comment.parent_id === null ? '' : `@${comment.author_nickname} `,
+                        })
                       }}
                     >
-                      수정
+                      답글달기
                     </Button>
                   )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={!token}
-                    onClick={() => {
-                      setEditing(null)
-                      setReply({
-                        target: comment.id,
-                        parent: comment.parent_id ?? comment.id,
-                        initial: comment.parent_id === null ? '' : `@${comment.author_nickname} `,
-                      })
-                    }}
-                  >
-                    답글달기
-                  </Button>
                 </div>
               </div>
-              {editing === comment.id ? (
+              {comment.is_deleted ? (
+                <p className="text-sm text-muted-foreground">(삭제됨)</p>
+              ) : editing === comment.id ? (
                 <div className="mt-2">
                   <CommentForm
                     postId={postId}
@@ -212,6 +253,38 @@ export function Comments({
                 </div>
               ) : (
                 <p className="text-sm break-words whitespace-pre-wrap">{comment.content}</p>
+              )}
+              {deleting === comment.id && !comment.is_deleted && (
+                <div className="mt-2 grid gap-2">
+                  <p className="text-sm">댓글을 삭제하시겠습니까?</p>
+                  {remove.isError && (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        댓글을 삭제하지 못했습니다. 다시 시도해 주세요.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={remove.isPending}
+                      onClick={() => remove.mutate(comment.id)}
+                    >
+                      삭제 확인
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={remove.isPending}
+                      onClick={() => setDeleting(null)}
+                    >
+                      취소
+                    </Button>
+                  </div>
+                </div>
               )}
               {reply?.target === comment.id && (
                 <div className="mt-4">

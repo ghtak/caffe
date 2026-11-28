@@ -56,4 +56,5 @@ pub struct CommentSummary {
     #[sqlx(flatten)]
     pub comment: Comment,
     pub author_nickname: String,
+    pub is_deleted: bool,
 }

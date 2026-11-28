@@ -1,4 +1,5 @@
 pub mod comment_create;
+pub mod comment_delete;
 pub mod comment_list;
 pub mod comment_update;
 pub mod post_create;

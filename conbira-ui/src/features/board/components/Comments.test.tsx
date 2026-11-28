@@ -25,9 +25,46 @@ const root = {
   content: '기존 댓글',
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
+  is_deleted: false,
 }
 
 describe('contract', () => {
+  it('본인 댓글을 확인 후 삭제하고 답글과 삭제 표시를 유지한다', async () => {
+    let comments = [
+      { ...root, author_id: 1 },
+      { ...root, id: 11, parent_id: 10, content: '답글 내용' },
+    ]
+    server.use(
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { id: 1, permissions: [] } },
+        }),
+      ),
+      http.get('*/api/board/posts/1', () => HttpResponse.json({ code: 'OK', data: post })),
+      http.get('*/api/board/posts/1/comments', () =>
+        HttpResponse.json({ code: 'OK', data: comments }),
+      ),
+      http.delete('*/api/board/comments/10', ({ request }) => {
+        expect(request.headers.get('Authorization')).toBe('Bearer writer')
+        comments = comments.map((comment) =>
+          comment.id === 10 ? { ...comment, content: '', is_deleted: true } : comment,
+        )
+        return HttpResponse.json({ code: 'OK' })
+      }),
+    )
+    renderWithProviders('/community/posts/1', 'writer')
+    const user = userEvent.setup()
+    const own = (await screen.findByText('기존 댓글')).closest('li')!
+    const reply = screen.getByText('답글 내용').closest('li')!
+    expect(within(reply).queryByRole('button', { name: '삭제' })).not.toBeInTheDocument()
+    await user.click(within(own).getByRole('button', { name: '삭제' }))
+    await user.click(within(own).getByRole('button', { name: '삭제 확인' }))
+    expect(await within(own).findByText('(삭제됨)')).toBeVisible()
+    expect(within(own).queryByText('기존 댓글')).not.toBeInTheDocument()
+    expect(within(own).queryByRole('button', { name: '수정' })).not.toBeInTheDocument()
+    expect(within(reply).getByText('답글 내용')).toBeVisible()
+    expect(within(reply).getByRole('button', { name: '답글달기' })).toBeDisabled()
+  })
   it('본인 댓글만 수정하고 수정 표시와 작성일을 보여준다', async () => {
     let comments = [root, { ...root, id: 11, author_id: 1, content: '내 댓글' }]
     server.use(

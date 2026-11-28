@@ -26,8 +26,7 @@ mod tests {
         use tower::ServiceExt as _;
 
         #[tokio::test]
-        async fn lists_public_comments_in_thread_order_and_excludes_deleted_and_secret()
-        -> anyhow::Result<()> {
+        async fn lists_public_comments_in_thread_order_and_masks_deleted() -> anyhow::Result<()> {
             crate::test_support::TestContext::run(2, |context| async move {
                 let mut conn = context.db.conn().await?;
                 sqlx::raw_sql(include_str!("../../../../migrations/0020_posts.sql")).execute(conn.handle().conn()).await?;
@@ -39,7 +38,8 @@ mod tests {
                 assert_eq!(response.status(), StatusCode::OK);
                 let body: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
                 let comments = body["data"].as_array().unwrap();
-                assert_eq!(comments.iter().map(|c| c["content"].as_str().unwrap()).collect::<Vec<_>>(), vec!["root", "reply", "second root"]);
+                assert_eq!(comments.iter().map(|c| c["content"].as_str().unwrap()).collect::<Vec<_>>(), vec!["root", "reply", "second root", ""]);
+                assert_eq!(comments[3]["is_deleted"], true);
                 assert_eq!(comments[0]["author_nickname"], "writer");
                 for id in [3, 999] {
                     let response = router.clone().oneshot(Request::get(format!("/api/board/posts/{id}/comments")).body(Body::empty())?).await?;
