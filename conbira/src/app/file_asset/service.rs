@@ -202,6 +202,12 @@ impl FileAssetService {
         expected: FileAssetStatus,
         target: FileAssetStatus,
     ) -> crate::Result<bool> {
+        if expected == FileAssetStatus::Pending
+            && target == FileAssetStatus::Attached
+            && !self.verify_pending_upload(handle, id, None).await?
+        {
+            return Ok(false);
+        }
         super::repository::change_status(handle, id, expected.as_str(), target.as_str()).await
     }
 
@@ -211,7 +217,53 @@ impl FileAssetService {
         id: Uuid,
         user_id: i64,
     ) -> crate::Result<bool> {
+        if !self
+            .verify_pending_upload(handle, id, Some(user_id))
+            .await?
+        {
+            return Ok(false);
+        }
         super::repository::attach_owned(handle, id, user_id).await
+    }
+
+    async fn verify_pending_upload(
+        &self,
+        handle: &mut Handle<'_>,
+        id: Uuid,
+        owner: Option<i64>,
+    ) -> crate::Result<bool> {
+        let Some(asset) = super::repository::find_pending(handle, id, owner).await? else {
+            return Ok(false);
+        };
+        let object = self
+            .s3
+            .head_object()
+            .bucket(asset.s3_bucket)
+            .key(asset.s3_object_key)
+            .send()
+            .await;
+        let object = match object {
+            Ok(object) => object,
+            Err(error)
+                if error
+                    .raw_response()
+                    .is_some_and(|response| response.status().as_u16() == 404) =>
+            {
+                return Err(
+                    Error::new(Code::InvalidRequest, "File upload is missing").at(crate::here!())
+                );
+            }
+            Err(error) => {
+                return Err(error).map_err_internal("Failed to verify file upload", crate::here!());
+            }
+        };
+        if object.content_length() != Some(asset.size_bytes) {
+            return Err(
+                Error::new(Code::InvalidRequest, "File upload size does not match")
+                    .at(crate::here!()),
+            );
+        }
+        Ok(true)
     }
 
     /// Marks an asset for cleanup, including assets in the attached state.
@@ -305,6 +357,37 @@ mod tests {
             pending_ttl_secs: 86400,
             deleted_retention_secs: 604800,
             allowed_content_types: vec!["text/plain".into()],
+        }
+    }
+
+    mod regression {
+        use super::*;
+
+        #[tokio::test]
+        async fn missing_upload_cannot_be_attached() -> anyhow::Result<()> {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+            let address = listener.local_addr()?;
+            let server = tokio::spawn(async move {
+                let router =
+                    axum::Router::new().fallback(|| async { axum::http::StatusCode::NOT_FOUND });
+                axum::serve(listener, router).await.unwrap();
+            });
+            let result = crate::test_support::TestContext::run(2, move |context| async move {
+                let mut conn = context.db.conn().await?;
+                sqlx::raw_sql(include_str!("../../../migrations/0014_file_asset.sql")).execute(conn.handle().conn()).await?;
+                let user: i64 = sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('writer') RETURNING id").fetch_one(conn.handle().conn()).await?;
+                let id = Uuid::new_v4();
+                sqlx::query("INSERT INTO conbira_file_assets (id, status, uploaded_by, s3_bucket, s3_object_key, original_filename, size_bytes, content_type) VALUES ($1, 'pending', $2, 'bucket', 'missing', 'file', 4, 'text/plain')").bind(id).bind(user).execute(conn.handle().conn()).await?;
+                let mut config = config();
+                config.s3.endpoint = Some(format!("http://{address}"));
+                let service = FileAssetService::new(config)?;
+                assert_eq!(service.attach_owned(&mut conn.handle(), id, user).await.unwrap_err().code, Code::InvalidRequest);
+                let status: String = sqlx::query_scalar("SELECT status FROM conbira_file_assets WHERE id = $1").bind(id).fetch_one(conn.handle().conn()).await?;
+                assert_eq!(status, "pending");
+                Ok(())
+            }).await;
+            server.abort();
+            result
         }
     }
 
@@ -431,7 +514,7 @@ mod lifecycle_tests {
                 let user: i64 = sqlx::query_scalar("INSERT INTO conbira_auth_users (nickname) VALUES ('writer') RETURNING id").fetch_one(conn.handle().conn()).await?;
                 let id = Uuid::new_v4();
                 sqlx::query("INSERT INTO conbira_file_assets (id, status, uploaded_by, s3_bucket, s3_object_key, original_filename, size_bytes, content_type) VALUES ($1, 'pending', $2, 'bucket', 'key', 'name', 0, 'text/plain')").bind(id).bind(user).execute(conn.handle().conn()).await?;
-                let service = service()?;
+                let (service, _server) = context.file_asset_service(0).await?;
                 assert!(!service.change_status(&mut conn.handle(), id, FileAssetStatus::Attached, FileAssetStatus::Deleted).await?);
                 assert!(service.change_status(&mut conn.handle(), id, FileAssetStatus::Pending, FileAssetStatus::Attached).await?);
                 assert!(service.change_status(&mut conn.handle(), id, FileAssetStatus::Attached, FileAssetStatus::Deleted).await?);

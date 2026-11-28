@@ -282,7 +282,10 @@ mod attachment_tests {
             let asset = uuid::Uuid::new_v4();
             sqlx::query("INSERT INTO conbira_file_assets (id, status, uploaded_by, s3_bucket, s3_object_key, original_filename, size_bytes, content_type) VALUES ($1, 'pending', $2, 'bucket', 'key', 'report.txt', 4, 'text/plain')").bind(asset).bind(user).execute(conn.handle().conn()).await?;
             drop(conn);
-            let container = std::sync::Arc::new(context.container().await?);
+            let (service, _server) = context.file_asset_service(4).await?;
+                let mut container = context.container().await?;
+                container.file_asset_service = service;
+                let container = std::sync::Arc::new(container);
             let token = container.jwt_token_service.issue(&user.to_string(), UserClaims::new(user, UserStatus::Active, vec!["board.data.write".into()]).try_into()?)?.token;
             let router = crate::app::http::router(container)?;
             let body = serde_json::json!({"board_slug":"data", "title":"title", "content":"body", "attachments":{"attach_file_ids":[asset],"detach_file_ids":[]}});

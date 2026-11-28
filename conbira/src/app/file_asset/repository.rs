@@ -55,6 +55,23 @@ pub async fn attach_owned(handle: &mut Handle<'_>, id: Uuid, user_id: i64) -> cr
     Ok(result.rows_affected() == 1)
 }
 
+#[derive(sqlx::FromRow)]
+pub struct PendingAsset {
+    pub s3_bucket: String,
+    pub s3_object_key: String,
+    pub size_bytes: i64,
+}
+
+pub async fn find_pending(
+    handle: &mut Handle<'_>,
+    id: Uuid,
+    owner: Option<i64>,
+) -> crate::Result<Option<PendingAsset>> {
+    sqlx::query_as("SELECT s3_bucket, s3_object_key, size_bytes FROM conbira_file_assets WHERE id = $1 AND status = 'pending' AND ($2::bigint IS NULL OR uploaded_by = $2)")
+        .bind(id).bind(owner).fetch_optional(handle.conn()).await
+        .map_err_internal("Failed to find pending file asset", crate::here!())
+}
+
 pub async fn mark_deleted(handle: &mut Handle<'_>, id: Uuid) -> crate::Result<bool> {
     let result = sqlx::query("UPDATE conbira_file_assets SET status = 'deleted', updated_at = CASE WHEN status <> 'deleted' THEN CURRENT_TIMESTAMP ELSE updated_at END, deleted_at = COALESCE(deleted_at, CURRENT_TIMESTAMP) WHERE id = $1 AND status IN ('pending', 'attached', 'deleted')")
         .bind(id)

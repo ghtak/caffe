@@ -64,6 +64,28 @@ pub(crate) struct TestContext {
 }
 
 impl TestContext {
+    pub async fn file_asset_service(
+        &self,
+        size: usize,
+    ) -> anyhow::Result<(
+        crate::app::file_asset::service::FileAssetService,
+        tokio::task::JoinHandle<()>,
+    )> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let address = listener.local_addr()?;
+        let server = tokio::spawn(async move {
+            let router = axum::Router::new().fallback(move || async move {
+                [(axum::http::header::CONTENT_LENGTH, size.to_string())]
+            });
+            axum::serve(listener, router).await.unwrap();
+        });
+        let mut config = self.config.file_asset.clone();
+        config.s3.endpoint = Some(format!("http://{address}"));
+        Ok((
+            crate::app::file_asset::service::FileAssetService::new(config)?,
+            server,
+        ))
+    }
     pub async fn container(&self) -> anyhow::Result<Container> {
         Container::new(&self.config).await.map_err(Into::into)
     }
