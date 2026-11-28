@@ -59,6 +59,17 @@ pub async fn insert(handle: &mut Handle<'_>, post: &NewPost) -> crate::Result<Po
     .map_err_internal("Failed to insert post", crate::here!())
 }
 
+pub async fn update_title(
+    handle: &mut Handle<'_>,
+    id: i64,
+    author_id: i64,
+    title: &str,
+) -> crate::Result<Option<Post>> {
+    sqlx::query_as::<_, Post>("UPDATE conbira_posts SET title = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND author_id = $2 AND deleted_at IS NULL RETURNING *")
+        .bind(id).bind(author_id).bind(title).fetch_optional(handle.conn()).await
+        .map_err_internal("Failed to update post", crate::here!())
+}
+
 pub async fn find_by_id(
     handle: &mut Handle<'_>,
     id: i64,

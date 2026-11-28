@@ -6,7 +6,8 @@ pub fn router() -> axum::Router<std::sync::Arc<crate::app::Container>> {
     axum::Router::new()
         .route(
             "/posts/{id}",
-            axum::routing::get(feature::post_read::endpoint::handler),
+            axum::routing::get(feature::post_read::endpoint::handler)
+                .put(feature::post_update::endpoint::handler),
         )
         .route(
             "/posts",
