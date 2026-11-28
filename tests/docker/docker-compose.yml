@@ -39,6 +39,7 @@ services:
       RUSTFS_ADDRESS: ":9000"
       RUSTFS_CONSOLE_ADDRESS: ":9001"
       RUSTFS_VOLUMES: "/data"
+      RUSTFS_CORS_ALLOWED_ORIGINS: "http://localhost:5173"
     volumes:
       - rustfs_data:/data # 도커 볼륨 연결 (데이터 영구 보존)
 

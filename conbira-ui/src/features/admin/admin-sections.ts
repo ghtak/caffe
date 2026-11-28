@@ -18,6 +18,12 @@ export const adminSections = [
     description: '권한 코드와 각 권한이 허용하는 작업을 확인합니다.',
   },
   {
+    to: '/admin/file-assets',
+    permissions: ['file_asset.list.read'],
+    label: '파일 에셋 관리',
+    description: '파일 에셋 목록과 업로드, 다운로드, 삭제를 관리합니다.',
+  },
+  {
     to: '/admin/files',
     permissions: ['file.list.read'],
     label: '파일 관리',

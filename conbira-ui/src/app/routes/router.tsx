@@ -13,6 +13,7 @@ import { HomePage } from '@/features/home'
 import { PostCreatePage, PostDetailPage, PostListPage } from '@/features/board'
 import { CommunityLayout } from '../layouts/CommunityLayout'
 import { FileListPage } from '@/features/files'
+import { FileAssetPage } from '@/features/file_asset'
 import { AdminCatalogPage, RoleDetailPage, catalogOptions, type Catalog } from '@/features/rbac'
 import { UserDetailPage, UserListPage } from '@/features/users'
 import { can, visibleAdminSections } from '../access'
@@ -217,6 +218,27 @@ const filesRoute = createRoute({
   path: 'files',
   component: AdminFilesRoute,
 })
+function AdminFileAssetsRoute() {
+  const { session } = useSession()
+  if (session.status !== 'authenticated') return null
+  if (!can(session.permissions, ['file_asset.list.read']))
+    return (
+      <p role="alert" className="p-8">
+        파일 에셋 목록을 조회할 권한이 없습니다.
+      </p>
+    )
+  return (
+    <FileAssetPage
+      token={session.token}
+      canManage={can(session.permissions, ['file_asset.manage'])}
+    />
+  )
+}
+const fileAssetsRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: 'file-assets',
+  component: AdminFileAssetsRoute,
+})
 const communityRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/community',
@@ -334,6 +356,7 @@ const routeTree = rootRoute.addChildren([
     roleDetailRoute,
     permissionsRoute,
     filesRoute,
+    fileAssetsRoute,
   ]),
 ])
 
