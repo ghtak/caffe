@@ -36,3 +36,24 @@ pub struct PostDetail {
     pub summary: PostSummary,
     pub content: String,
 }
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct Comment {
+    pub id: i64,
+    pub post_id: i64,
+    pub parent_id: Option<i64>,
+    pub author_id: i64,
+    pub content: String,
+    pub is_secret: bool,
+    #[sqlx(try_from = "jiff_sqlx::Timestamp")]
+    pub created_at: jiff::Timestamp,
+    #[sqlx(try_from = "jiff_sqlx::Timestamp")]
+    pub updated_at: jiff::Timestamp,
+}
+
+#[derive(Debug, serde::Serialize, sqlx::FromRow)]
+pub struct CommentSummary {
+    #[serde(flatten)]
+    #[sqlx(flatten)]
+    pub comment: Comment,
+    pub author_nickname: String,
+}

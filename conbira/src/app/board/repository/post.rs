@@ -47,6 +47,13 @@ pub struct NewPost {
     pub title: String,
 }
 
+pub async fn increment_comment_count(handle: &mut Handle<'_>, id: i64) -> crate::Result<bool> {
+    let result = sqlx::query("UPDATE conbira_posts SET comment_count = comment_count + 1 WHERE id = $1 AND deleted_at IS NULL")
+        .bind(id).execute(handle.conn()).await
+        .map_err_internal("Failed to update comment count", crate::here!())?;
+    Ok(result.rows_affected() == 1)
+}
+
 pub async fn insert(handle: &mut Handle<'_>, post: &NewPost) -> crate::Result<Post> {
     sqlx::query_as::<_, Post>(
         "INSERT INTO conbira_posts (board_slug, author_id, title) VALUES ($1, $2, $3) RETURNING *",

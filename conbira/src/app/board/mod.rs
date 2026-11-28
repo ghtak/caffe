@@ -5,6 +5,11 @@ pub mod repository;
 pub fn router() -> axum::Router<std::sync::Arc<crate::app::Container>> {
     axum::Router::new()
         .route(
+            "/posts/{id}/comments",
+            axum::routing::get(feature::comment_list::endpoint::handler)
+                .post(feature::comment_create::endpoint::handler),
+        )
+        .route(
             "/posts/{id}",
             axum::routing::get(feature::post_read::endpoint::handler)
                 .put(feature::post_update::endpoint::handler),
