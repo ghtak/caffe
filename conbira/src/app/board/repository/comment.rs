@@ -2,6 +2,17 @@ use crate::app::board::entity::{Comment, CommentSummary};
 use crate::app::container::db::Handle;
 use crate::error::ResultExt as _;
 
+pub async fn update_content(
+    handle: &mut Handle<'_>,
+    id: i64,
+    author_id: i64,
+    content: &str,
+) -> crate::Result<Option<Comment>> {
+    sqlx::query_as("UPDATE conbira_post_comments c SET content = $3, updated_at = CURRENT_TIMESTAMP WHERE c.id = $1 AND c.author_id = $2 AND c.deleted_at IS NULL AND EXISTS (SELECT 1 FROM conbira_posts p WHERE p.id = c.post_id AND p.deleted_at IS NULL) RETURNING c.*")
+        .bind(id).bind(author_id).bind(content).fetch_optional(handle.conn()).await
+        .map_err_internal("Failed to update comment", crate::here!())
+}
+
 pub async fn list(handle: &mut Handle<'_>, post_id: i64) -> crate::Result<Vec<CommentSummary>> {
     sqlx::query_as("SELECT c.*, u.nickname AS author_nickname FROM conbira_post_comments c JOIN conbira_posts p ON p.id = c.post_id AND p.deleted_at IS NULL JOIN conbira_auth_users u ON u.id = c.author_id LEFT JOIN conbira_post_comments parent ON parent.id = c.parent_id WHERE c.post_id = $1 AND c.deleted_at IS NULL AND c.is_secret = FALSE AND (c.parent_id IS NULL OR parent.is_secret = FALSE) ORDER BY COALESCE(c.parent_id, c.id), c.parent_id NULLS FIRST, c.created_at, c.id")
         .bind(post_id).fetch_all(handle.conn()).await

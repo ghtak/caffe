@@ -94,7 +94,9 @@ export function PostDetailPage({
           {post.content}
         </section>
       )}
-      {post.board_slug === 'free' && <Comments key={id} postId={id} token={token} />}
+      {post.board_slug === 'free' && (
+        <Comments key={id} postId={id} token={token} userId={userId} />
+      )}
       <footer>
         <Button asChild variant="outline">
           <Link to={listPath}>목록으로</Link>

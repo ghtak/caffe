@@ -10,6 +10,7 @@ const commentSchema = z.object({
   author_nickname: z.string(),
   content: z.string(),
   created_at: z.iso.datetime({ offset: true }),
+  updated_at: z.iso.datetime({ offset: true }),
 })
 export const commentKey = (postId: number) => ['comments', postId] as const
 export function commentListOptions(postId: number) {
@@ -22,6 +23,19 @@ export function commentListOptions(postId: number) {
         .parse(
           await apiClient.get(`/api/board/posts/${postId}/comments`, { signal, retry: 0 }).json(),
         ).data,
+  })
+}
+export function commentUpdateOptions(commentId: number, token: string) {
+  return mutationOptions({
+    mutationFn: async (body: { content: string }) => {
+      await apiClient
+        .put(`/api/board/comments/${commentId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          json: body,
+          retry: 0,
+        })
+        .json()
+    },
   })
 }
 export function commentCreateOptions(postId: number, token: string) {

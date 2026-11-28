@@ -4,19 +4,26 @@ import { isHTTPError } from 'ky'
 import { useState, type FormEvent } from 'react'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
-import { commentCreateOptions, commentKey, commentListOptions } from '../api/comments'
+import {
+  commentCreateOptions,
+  commentKey,
+  commentListOptions,
+  commentUpdateOptions,
+} from '../api/comments'
 import { postKeys } from '../api/posts'
 
 function CommentForm({
   postId,
   token,
   parentId,
+  commentId,
   initialContent = '',
   onDone,
 }: {
   postId: number
   token?: string
   parentId?: number
+  commentId?: number
   initialContent?: string
   onDone?: () => void
 }) {
@@ -32,6 +39,15 @@ function CommentForm({
       onDone?.()
     },
   })
+  const update = useMutation({
+    ...commentUpdateOptions(commentId ?? 0, token ?? ''),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: commentKey(postId) })
+      onDone?.()
+    },
+  })
+  const pending = create.isPending || update.isPending
+  const error = create.error ?? update.error
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token || !content.trim()) {
@@ -39,16 +55,17 @@ function CommentForm({
       return
     }
     setInvalid(false)
-    create.mutate({ content, ...(parentId === undefined ? {} : { parent_id: parentId }) })
+    if (commentId !== undefined) update.mutate({ content })
+    else create.mutate({ content, ...(parentId === undefined ? {} : { parent_id: parentId }) })
   }
   return (
     <form onSubmit={submit} className="grid gap-2">
       <label className="grid gap-2 text-sm font-medium">
-        {parentId === undefined ? '댓글' : '답글'}
+        {commentId !== undefined ? '댓글 수정' : parentId === undefined ? '댓글' : '답글'}
         <textarea
           value={content}
           onChange={(event) => setContent(event.target.value)}
-          disabled={!token || create.isPending}
+          disabled={!token || pending}
           aria-invalid={invalid}
           rows={3}
           className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
@@ -68,31 +85,46 @@ function CommentForm({
           내용을 입력해 주세요.
         </p>
       )}
-      {create.isError && (
+      {error && (
         <Alert variant="destructive">
           <AlertDescription>
-            {isHTTPError(create.error) && create.error.response.status === 401
+            {isHTTPError(error) && error.response.status === 401
               ? '로그인이 필요합니다. 다시 로그인해 주세요.'
-              : '댓글을 등록하지 못했습니다. 다시 시도해 주세요.'}
+              : `댓글을 ${commentId === undefined ? '등록' : '수정'}하지 못했습니다. 다시 시도해 주세요.`}
           </AlertDescription>
         </Alert>
       )}
       <div className="flex justify-end gap-2">
         {onDone && (
-          <Button type="button" variant="outline" disabled={create.isPending} onClick={onDone}>
+          <Button type="button" variant="outline" disabled={pending} onClick={onDone}>
             취소
           </Button>
         )}
-        <Button type="submit" disabled={!token || create.isPending}>
-          {create.isPending ? '등록 중…' : '등록'}
+        <Button type="submit" disabled={!token || pending}>
+          {commentId !== undefined
+            ? pending
+              ? '저장 중…'
+              : '저장'
+            : pending
+              ? '등록 중…'
+              : '등록'}
         </Button>
       </div>
     </form>
   )
 }
 
-export function Comments({ postId, token }: { postId: number; token?: string }) {
+export function Comments({
+  postId,
+  token,
+  userId,
+}: {
+  postId: number
+  token?: string
+  userId?: number
+}) {
   const list = useQuery(commentListOptions(postId))
+  const [editing, setEditing] = useState<number | null>(null)
   const [reply, setReply] = useState<{ target: number; parent: number; initial: string } | null>(
     null,
   )
@@ -121,8 +153,8 @@ export function Comments({ postId, token }: { postId: number; token?: string }) 
               key={comment.id}
               className={
                 comment.parent_id === null
-                  ? 'rounded-lg border bg-card p-4'
-                  : 'ml-6 rounded-lg border bg-card p-4'
+                  ? 'rounded-lg border bg-card px-4 py-2'
+                  : 'ml-6 rounded-lg border bg-card px-4 py-2'
               }
             >
               <div className="flex items-start justify-between gap-2">
@@ -131,24 +163,56 @@ export function Comments({ postId, token }: { postId: number; token?: string }) 
                   <time className="text-muted-foreground" dateTime={comment.created_at}>
                     {new Date(comment.created_at).toLocaleString('ko-KR')}
                   </time>
+                  {new Date(comment.updated_at).getTime() >
+                    new Date(comment.created_at).getTime() && (
+                    <span className="ml-1 text-muted-foreground">(수정됨)</span>
+                  )}
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={!token}
-                  onClick={() =>
-                    setReply({
-                      target: comment.id,
-                      parent: comment.parent_id ?? comment.id,
-                      initial: comment.parent_id === null ? '' : `@${comment.author_nickname} `,
-                    })
-                  }
-                >
-                  답글달기
-                </Button>
+                <div className="flex shrink-0">
+                  {token && userId === comment.author_id && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEditing(comment.id)
+                        setReply(null)
+                      }}
+                    >
+                      수정
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!token}
+                    onClick={() => {
+                      setEditing(null)
+                      setReply({
+                        target: comment.id,
+                        parent: comment.parent_id ?? comment.id,
+                        initial: comment.parent_id === null ? '' : `@${comment.author_nickname} `,
+                      })
+                    }}
+                  >
+                    답글달기
+                  </Button>
+                </div>
               </div>
-              <p className="mt-2 text-sm break-words whitespace-pre-wrap">{comment.content}</p>
+              {editing === comment.id ? (
+                <div className="mt-2">
+                  <CommentForm
+                    postId={postId}
+                    token={token}
+                    commentId={comment.id}
+                    initialContent={comment.content}
+                    onDone={() => setEditing(null)}
+                  />
+                </div>
+              ) : (
+                <p className="text-sm break-words whitespace-pre-wrap">{comment.content}</p>
+              )}
               {reply?.target === comment.id && (
                 <div className="mt-4">
                   <CommentForm
