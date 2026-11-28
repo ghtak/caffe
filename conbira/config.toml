@@ -65,3 +65,17 @@ bucket = "conbirafiles"
 region = "us-east-1"
 key_prefix = "uploads"                 # 필요 시 "uploads" 형태로 지정
 endpoint = "http://192.168.1.20:19000"
+
+[file_asset]
+max_size_bytes = 5368709120
+upload_url_ttl_secs = 600
+download_url_ttl_secs = 180
+
+[file_asset.s3]
+# Set CONBIRA_FILE_ASSET__S3__ACCESS_KEY_ID and CONBIRA_FILE_ASSET__S3__SECRET_ACCESS_KEY.
+access_key_id = ""
+secret_access_key = ""
+bucket = "conbirafiles"
+region = "us-east-1"
+key_prefix = "uploads"
+endpoint = "http://192.168.1.20:19000"

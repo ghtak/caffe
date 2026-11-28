@@ -2,6 +2,7 @@
 pub mod auth;
 pub mod board;
 mod container;
+pub mod file_asset;
 pub mod files;
 pub mod http;
 #[allow(dead_code)]

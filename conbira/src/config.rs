@@ -12,6 +12,7 @@ pub struct Config {
     pub argon2: espr::hash::argon2::Config,
     pub auth: crate::app::auth::Config,
     pub files: crate::app::files::Config,
+    pub file_asset: crate::app::file_asset::config::Config,
 }
 
 impl Config {

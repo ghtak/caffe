@@ -86,6 +86,9 @@ impl TestContext {
             std::env::var("CAFFE_CACHE_URL").unwrap_or_else(|_| "redis://192.168.1.20:6379".into());
         app_config.jwt.ed25519 = dir.jwt_keys()?;
         app_config.files = files::config(Some("http://127.0.0.1:19000".into()));
+        app_config.file_asset.s3.access_key_id = "test-access".into();
+        app_config.file_asset.s3.secret_access_key = "test-secret".into();
+        app_config.file_asset.s3.endpoint = Some("http://127.0.0.1:19000".into());
         let schema = format!("test_{}", uuid::Uuid::new_v4().simple());
         let mut url = url::Url::parse(&config.url)?;
         url.query_pairs_mut()

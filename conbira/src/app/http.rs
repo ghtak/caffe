@@ -18,7 +18,8 @@ pub fn router(container: Arc<Container>) -> crate::Result<axum::Router> {
         .nest("/api/board", super::board::router())
         .nest("/api/rbac", super::rbac::router())
         .nest("/api/auth", super::auth::router())
-        .nest("/api", super::files::router());
+        .nest("/api", super::files::router())
+        .nest("/api", super::file_asset::router());
 
     let router = match &container.config.http.static_files {
         Some(static_files) => {

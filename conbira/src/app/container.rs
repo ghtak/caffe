@@ -12,6 +12,7 @@ pub mod db {
 
 pub struct Container {
     pub config: Config,
+    pub file_asset_service: crate::app::file_asset::service::FileAssetService,
     pub file_storage: std::sync::Arc<dyn crate::app::files::s3::S3ObjectPort>,
     pub file_resource_access: std::sync::Arc<dyn crate::app::files::access::ResourceAccessPort>,
     pub db: std::sync::Arc<db::Database>,
@@ -75,6 +76,9 @@ impl Container {
 
         Ok(Self {
             config: config.clone(),
+            file_asset_service: crate::app::file_asset::service::FileAssetService::new(
+                config.file_asset.clone(),
+            )?,
             file_storage,
             file_resource_access: std::sync::Arc::new(crate::app::board::PostFileAccess {
                 db: policy_db,
