@@ -6,7 +6,6 @@ pub struct Post {
     pub author_id: i64,
     pub title: String,
     pub excerpt: Option<String>,
-    pub attachment_group_id: Option<uuid::Uuid>,
     pub thumbnail_file_id: Option<uuid::Uuid>,
     pub is_notice: bool,
     pub is_secret: bool,

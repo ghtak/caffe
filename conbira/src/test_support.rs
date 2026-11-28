@@ -4,8 +4,6 @@
 //! 스키마를 정리한다. 저장소 테스트는 `context.db`, HTTP 테스트는
 //! `context.container()`를 사용한다. Fixture는 시나리오 데이터만 준비한다.
 
-pub(crate) mod files;
-
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -54,7 +52,6 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0010_user.sql"),
     include_str!("../migrations/0011_refresh_token.sql"),
     include_str!("../migrations/0012_rbac.sql"),
-    include_str!("../migrations/0013_files.sql"),
     include_str!("../migrations/0014_file_asset.sql"),
 ];
 
@@ -86,7 +83,6 @@ impl TestContext {
         app_config.cache.url =
             std::env::var("CAFFE_CACHE_URL").unwrap_or_else(|_| "redis://192.168.1.20:6379".into());
         app_config.jwt.ed25519 = dir.jwt_keys()?;
-        app_config.files = files::config(Some("http://127.0.0.1:19000".into()));
         app_config.file_asset.s3.access_key_id = "test-access".into();
         app_config.file_asset.s3.secret_access_key = "test-secret".into();
         app_config.file_asset.s3.endpoint = Some("http://127.0.0.1:19000".into());

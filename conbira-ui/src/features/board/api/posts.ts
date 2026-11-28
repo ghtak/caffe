@@ -92,7 +92,6 @@ const postSchema = z.object({
   title: z.string(),
   author_id: z.number().int(),
   board_slug: z.string(),
-  attachment_group_id: z.uuid().nullable().default(null),
   view_count: z.number().int(),
   comment_count: z.number().int(),
   created_at: z.iso.datetime({ offset: true }),

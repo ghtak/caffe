@@ -1,49 +1,49 @@
--- File metadata. Business invariants are validated by the application.
-CREATE TABLE IF NOT EXISTS conbira_files (
-    file_id UUID PRIMARY KEY,
-    group_id UUID NOT NULL,
-    resource_type TEXT,
-    resource_key TEXT,
-    status TEXT NOT NULL,
-    uploaded_by BIGINT NOT NULL REFERENCES conbira_auth_users (id) ON DELETE RESTRICT,
-    s3_bucket TEXT NOT NULL,
-    s3_object_key TEXT NOT NULL,
-    original_filename TEXT NOT NULL,
-    size_bytes BIGINT NOT NULL,
-    content_type TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ
-);
+-- -- File metadata. Business invariants are validated by the application.
+-- CREATE TABLE IF NOT EXISTS conbira_files (
+--     file_id UUID PRIMARY KEY,
+--     group_id UUID NOT NULL,
+--     resource_type TEXT,
+--     resource_key TEXT,
+--     status TEXT NOT NULL,
+--     uploaded_by BIGINT NOT NULL REFERENCES conbira_auth_users (id) ON DELETE RESTRICT,
+--     s3_bucket TEXT NOT NULL,
+--     s3_object_key TEXT NOT NULL,
+--     original_filename TEXT NOT NULL,
+--     size_bytes BIGINT NOT NULL,
+--     content_type TEXT NOT NULL,
+--     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+--     deleted_at TIMESTAMPTZ
+-- );
 
-CREATE INDEX IF NOT EXISTS conbira_files_group_created_idx ON conbira_files (group_id, created_at);
-CREATE INDEX IF NOT EXISTS conbira_files_status_created_idx ON conbira_files (status, created_at);
+-- CREATE INDEX IF NOT EXISTS conbira_files_group_created_idx ON conbira_files (group_id, created_at);
+-- CREATE INDEX IF NOT EXISTS conbira_files_status_created_idx ON conbira_files (status, created_at);
 
-COMMENT ON TABLE conbira_files IS '업로드 파일의 메타데이터와 연결·삭제 이력';
-COMMENT ON COLUMN conbira_files.file_id IS '서버에서 발급한 파일 ID';
-COMMENT ON COLUMN conbira_files.group_id IS '함께 관리하는 파일 그룹 ID';
-COMMENT ON COLUMN conbira_files.resource_type IS '귀속 리소스 유형. 미귀속 파일은 NULL';
-COMMENT ON COLUMN conbira_files.resource_key IS '귀속 리소스 식별 키. 미귀속 파일은 NULL';
-COMMENT ON COLUMN conbira_files.status IS '상태값 (pending, attached, deleted)';
-COMMENT ON COLUMN conbira_files.uploaded_by IS '파일을 업로드한 내부 사용자 ID';
-COMMENT ON COLUMN conbira_files.s3_bucket IS '파일 객체를 저장한 S3 버킷';
-COMMENT ON COLUMN conbira_files.s3_object_key IS 'S3 버킷 내 파일 객체 키';
-COMMENT ON COLUMN conbira_files.original_filename IS '업로드 시 전달된 원본 파일명';
-COMMENT ON COLUMN conbira_files.size_bytes IS '파일 크기 (바이트)';
-COMMENT ON COLUMN conbira_files.content_type IS '파일의 MIME 유형';
-COMMENT ON COLUMN conbira_files.created_at IS '파일 메타데이터 등록 시각. pending 만료 판단 기준';
-COMMENT ON COLUMN conbira_files.updated_at IS '파일 메타데이터의 마지막 변경 시각';
-COMMENT ON COLUMN conbira_files.deleted_at IS '논리 삭제 시각. S3 객체의 물리 삭제 시각과 구분';
+-- COMMENT ON TABLE conbira_files IS '업로드 파일의 메타데이터와 연결·삭제 이력';
+-- COMMENT ON COLUMN conbira_files.file_id IS '서버에서 발급한 파일 ID';
+-- COMMENT ON COLUMN conbira_files.group_id IS '함께 관리하는 파일 그룹 ID';
+-- COMMENT ON COLUMN conbira_files.resource_type IS '귀속 리소스 유형. 미귀속 파일은 NULL';
+-- COMMENT ON COLUMN conbira_files.resource_key IS '귀속 리소스 식별 키. 미귀속 파일은 NULL';
+-- COMMENT ON COLUMN conbira_files.status IS '상태값 (pending, attached, deleted)';
+-- COMMENT ON COLUMN conbira_files.uploaded_by IS '파일을 업로드한 내부 사용자 ID';
+-- COMMENT ON COLUMN conbira_files.s3_bucket IS '파일 객체를 저장한 S3 버킷';
+-- COMMENT ON COLUMN conbira_files.s3_object_key IS 'S3 버킷 내 파일 객체 키';
+-- COMMENT ON COLUMN conbira_files.original_filename IS '업로드 시 전달된 원본 파일명';
+-- COMMENT ON COLUMN conbira_files.size_bytes IS '파일 크기 (바이트)';
+-- COMMENT ON COLUMN conbira_files.content_type IS '파일의 MIME 유형';
+-- COMMENT ON COLUMN conbira_files.created_at IS '파일 메타데이터 등록 시각. pending 만료 판단 기준';
+-- COMMENT ON COLUMN conbira_files.updated_at IS '파일 메타데이터의 마지막 변경 시각';
+-- COMMENT ON COLUMN conbira_files.deleted_at IS '논리 삭제 시각. S3 객체의 물리 삭제 시각과 구분';
 
-INSERT INTO conbira_rbac_permissions (code, name, description)
-VALUES
-    ('file.list.read', '파일 목록 조회', '파일 목록을 조회'),
-    ('file.manage', '파일 관리', '파일을 관리')
-ON CONFLICT (code) DO NOTHING;
+-- INSERT INTO conbira_rbac_permissions (code, name, description)
+-- VALUES
+--     ('file.list.read', '파일 목록 조회', '파일 목록을 조회'),
+--     ('file.manage', '파일 관리', '파일을 관리')
+-- ON CONFLICT (code) DO NOTHING;
 
-INSERT INTO conbira_rbac_role_permissions (role_id, permission_id)
-SELECT r.id, p.id
-FROM conbira_rbac_roles r
-JOIN conbira_rbac_permissions p ON p.code IN ('file.list.read', 'file.manage')
-WHERE r.code = 'admin'
-ON CONFLICT (role_id, permission_id) DO NOTHING;
+-- INSERT INTO conbira_rbac_role_permissions (role_id, permission_id)
+-- SELECT r.id, p.id
+-- FROM conbira_rbac_roles r
+-- JOIN conbira_rbac_permissions p ON p.code IN ('file.list.read', 'file.manage')
+-- WHERE r.code = 'admin'
+-- ON CONFLICT (role_id, permission_id) DO NOTHING;

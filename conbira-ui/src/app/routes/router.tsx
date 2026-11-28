@@ -12,7 +12,6 @@ import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
 import { PostCreatePage, PostDetailPage, PostListPage } from '@/features/board'
 import { CommunityLayout } from '../layouts/CommunityLayout'
-import { FileListPage } from '@/features/files'
 import { FileAssetPage } from '@/features/file_asset'
 import { AdminCatalogPage, RoleDetailPage, catalogOptions, type Catalog } from '@/features/rbac'
 import { UserDetailPage, UserListPage } from '@/features/users'
@@ -200,24 +199,6 @@ const permissionsRoute = createRoute({
   loader: ({ context }) => loadCatalog(context, 'permissions'),
   component: () => <AdminCatalogRoute catalog="permissions" />,
 })
-function AdminFilesRoute() {
-  const { session } = useSession()
-  if (session.status !== 'authenticated') return null
-  if (!can(session.permissions, ['file.list.read']))
-    return (
-      <p role="alert" className="p-8">
-        파일 목록을 조회할 권한이 없습니다.
-      </p>
-    )
-  return (
-    <FileListPage token={session.token} canManage={can(session.permissions, ['file.manage'])} />
-  )
-}
-const filesRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: 'files',
-  component: AdminFilesRoute,
-})
 function AdminFileAssetsRoute() {
   const { session } = useSession()
   if (session.status !== 'authenticated') return null
@@ -355,7 +336,6 @@ const routeTree = rootRoute.addChildren([
     rolesRoute,
     roleDetailRoute,
     permissionsRoute,
-    filesRoute,
     fileAssetsRoute,
   ]),
 ])

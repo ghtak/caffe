@@ -35,7 +35,6 @@ export function PostEditForm({
     title: string
     content: string
     board_slug: string
-    attachment_group_id: string | null
     attachments: Attachment[]
   }
   token: string

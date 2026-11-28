@@ -23,10 +23,4 @@ export const adminSections = [
     label: '파일 에셋 관리',
     description: '파일 에셋 목록과 업로드, 다운로드, 삭제를 관리합니다.',
   },
-  {
-    to: '/admin/files',
-    permissions: ['file.list.read'],
-    label: '파일 관리',
-    description: '파일 목록을 확인하고 업로드, 다운로드, 연결과 삭제를 관리합니다.',
-  },
 ] as const

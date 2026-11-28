@@ -117,37 +117,6 @@ mod tests {
     }
 }
 
-/// 게시글에 연결된 파일의 접근 정책.
-pub struct PostFileAccess {
-    pub db: std::sync::Arc<crate::app::db::Database>,
-}
-
-#[async_trait::async_trait]
-impl crate::app::files::access::ResourceAccessPort for PostFileAccess {
-    async fn decide(
-        &self,
-        caller: &crate::app::auth::claims::UserClaims,
-        kind: &str,
-        key: &str,
-        action: crate::app::files::access::Action,
-    ) -> crate::Result<bool> {
-        use crate::app::DatabaseExt as _;
-        use crate::app::files::access::Action;
-        if kind != "board.post" {
-            return Ok(false);
-        }
-        let Ok(id) = key.parse::<i64>() else {
-            return Ok(false);
-        };
-        let mut conn = self.db.acquire_conn(crate::here!()).await?;
-        let post = repository::post::find_by_id(&mut conn.handle(), id).await?;
-        Ok(post.is_some_and(|p| {
-            p.summary.post.board_slug == "data"
-                && (action == Action::Read || p.summary.post.author_id == caller.id)
-        }))
-    }
-}
-
 #[derive(serde::Deserialize)]
 pub struct AttachmentChanges {
     pub attach_file_ids: Vec<uuid::Uuid>,
