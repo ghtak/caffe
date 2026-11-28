@@ -47,7 +47,7 @@ key_path = "var/jwt/private.pem"
 public_key_path = "var/jwt/public.pem"
 
 [file_asset]
-max_size_bytes = 5368709120
+max_size_bytes = 52428800
 upload_url_ttl_secs = 600
 download_url_ttl_secs = 180
 
