@@ -129,15 +129,47 @@ async fn user_permissions_combine_roles_without_duplicates_and_reflect_removed_l
         )
         .fetch_one(handle.conn())
         .await?;
-        let admin = role::find_by_code(&mut handle, "admin").await?.unwrap();
-        let user = role::find_by_code(&mut handle, "user").await?.unwrap();
-        let read = permission::find_by_code(&mut handle, "rbac.read")
-            .await?
-            .unwrap();
-        // 이 시나리오는 auth·rbac의 기본 6개 권한으로 역할 합집합을 검증한다.
-        sqlx::query("DELETE FROM conbira_rbac_role_permissions WHERE role_id = $1 AND permission_id IN (SELECT id FROM conbira_rbac_permissions WHERE code LIKE 'file.%')")
-            .bind(admin.id).execute(handle.conn()).await?;
-        // 두 역할의 권한 중복은 기본 권한과 무관하게 직접 구성한다.
+        let admin = role::insert(
+            &mut handle,
+            &role::NewRole {
+                code: "test.admin".into(),
+                name: "Test admin".into(),
+                description: "".into(),
+            },
+        )
+        .await?;
+        let user = role::insert(
+            &mut handle,
+            &role::NewRole {
+                code: "test.user".into(),
+                name: "Test user".into(),
+                description: "".into(),
+            },
+        )
+        .await?;
+        let mut assigned = Vec::new();
+        for code in [
+            "test.read",
+            "test.write",
+            "test.edit",
+            "test.delete",
+            "test.list",
+            "test.manage",
+        ] {
+            let item = permission::insert(
+                &mut handle,
+                &permission::NewPermission {
+                    code: code.into(),
+                    name: code.into(),
+                    description: "".into(),
+                },
+            )
+            .await?;
+            role_permission::insert(&mut handle, admin.id, item.id).await?;
+            assigned.push(item);
+        }
+        let read = assigned.remove(0);
+        let read_id = read.id;
         role_permission::insert(&mut handle, user.id, read.id).await?;
         user_role::insert(&mut handle, user_id, admin.id).await?;
         user_role::insert(&mut handle, user_id, user.id).await?;
@@ -147,6 +179,11 @@ async fn user_permissions_combine_roles_without_duplicates_and_reflect_removed_l
         let permissions = permission::find_by_user_id(&mut handle, user_id).await?;
         assert_eq!(permissions.len(), 6);
         assert_eq!(permissions.iter().filter(|p| p.id == read.id).count(), 1);
+        assert!(
+            assigned
+                .iter()
+                .all(|expected| permissions.iter().any(|p| p.id == expected.id))
+        );
         assert_eq!(
             user_role::list_by_user_id(&mut handle, user_id)
                 .await?
@@ -184,12 +221,8 @@ async fn user_permissions_combine_roles_without_duplicates_and_reflect_removed_l
                 .iter()
                 .map(|p| p.code.as_str())
                 .collect::<Vec<_>>(),
-            vec!["rbac.read"]
+            vec!["test.read"]
         );
-        let read_id = permission::find_by_code(&mut handle, "rbac.read")
-            .await?
-            .unwrap()
-            .id;
         assert!(permission::delete(&mut handle, read_id).await.is_err());
         assert!(role_permission::delete(&mut handle, user.id, read_id).await?);
         assert!(!role_permission::delete(&mut handle, user.id, read_id).await?);
