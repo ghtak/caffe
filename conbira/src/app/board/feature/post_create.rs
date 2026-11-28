@@ -41,6 +41,10 @@ pub mod endpoint {
         caller: UserClaims,
         ApiJson(request): ApiJson<RequestBody>,
     ) -> ApiResult<Post> {
+        caller.require_permission(
+            &format!("board.{}.write", request.board_slug.trim()),
+            crate::here!(),
+        )?;
         Ok(super::usecase::execute(
             &container.db,
             super::usecase::Command {
@@ -108,24 +112,58 @@ mod tests {
                     .fetch_one(conn.handle().conn()).await?;
                 drop(conn);
                 let container = std::sync::Arc::new(context.container().await?);
-                let token = container.jwt_token_service.issue(&author_id.to_string(), UserClaims::new(author_id, UserStatus::Active, vec![]).try_into()?)?.token;
-                let router = crate::app::http::router(container)?;
-                let response = router.oneshot(Request::post("/api/board/posts")
-                    .header("Authorization", format!("Bearer {token}"))
-                    .header("Content-Type", "application/json")
-                    .body(Body::from(serde_json::json!({"board_slug":"free", "title":"제목", "content":"본문\n내용"}).to_string()))?).await?;
-                let status = response.status();
-                let body: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
-                // 별도 권한 없는 로그인 사용자도 글을 작성하고 작성자는 인증 ID로 저장된다.
-                assert_eq!(status, StatusCode::OK, "{body}");
-                assert_eq!(body["data"]["author_id"], author_id);
-                assert_eq!(body["data"]["title"], "제목");
-                let id = body["data"]["id"].as_i64().unwrap();
+                let router = crate::app::http::router(container.clone())?;
+                for board_slug in ["free", "notice", "data"] {
+                    let token = container.jwt_token_service.issue(&author_id.to_string(), UserClaims::new(author_id, UserStatus::Active, vec![format!("board.{board_slug}.write")]).try_into()?)?.token;
+                    let response = router.clone().oneshot(Request::post("/api/board/posts")
+                        .header("Authorization", format!("Bearer {token}"))
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(serde_json::json!({"board_slug":board_slug, "title":"제목", "content":"본문\n내용"}).to_string()))?).await?;
+                    let status = response.status();
+                    let body: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
+                    // 해당 게시판 작성 권한이 있으면 글을 작성하고 작성자는 인증 ID로 저장된다.
+                    assert_eq!(status, StatusCode::OK, "{body}");
+                    assert_eq!(body["data"]["author_id"], author_id);
+                    assert_eq!(body["data"]["title"], "제목");
+                    let id = body["data"]["id"].as_i64().unwrap();
+                    let mut conn = context.db.conn().await?;
+                    let stored: (String, String, String) = sqlx::query_as("SELECT p.board_slug, c.content, c.content_format FROM conbira_posts p JOIN conbira_post_contents c ON c.post_id = p.id WHERE p.id = $1")
+                        .bind(id).fetch_one(conn.handle().conn()).await?;
+                    // 글과 본문을 함께 저장하고 기본 본문 형식을 사용한다.
+                    assert_eq!(stored, (board_slug.into(), "본문\n내용".into(), "MARKDOWN".into()));
+                }
+                Ok(())
+            }).await
+        }
+
+        #[tokio::test]
+        async fn rejects_creation_without_matching_board_write_permission() -> anyhow::Result<()> {
+            crate::test_support::TestContext::run(2, |context| async move {
                 let mut conn = context.db.conn().await?;
-                let stored: (String, String, String) = sqlx::query_as("SELECT p.board_slug, c.content, c.content_format FROM conbira_posts p JOIN conbira_post_contents c ON c.post_id = p.id WHERE p.id = $1")
-                    .bind(id).fetch_one(conn.handle().conn()).await?;
-                // 글과 본문을 함께 저장하고 기본 본문 형식을 사용한다.
-                assert_eq!(stored, ("free".into(), "본문\n내용".into(), "MARKDOWN".into()));
+                sqlx::raw_sql(include_str!("../../../../migrations/0020_posts.sql"))
+                    .execute(conn.handle().conn()).await?;
+                sqlx::query("INSERT INTO conbira_auth_users (nickname, status) VALUES ('author', 'active')")
+                    .execute(conn.handle().conn()).await?;
+                drop(conn);
+                let container = std::sync::Arc::new(context.container().await?);
+                let router = crate::app::http::router(container.clone())?;
+                for board_slug in ["free", "notice", "data"] {
+                    let other_board = if board_slug == "free" { "notice" } else { "free" };
+                    for permissions in [vec![], vec![format!("board.{other_board}.write")], vec![format!("board.{board_slug}.manage")]] {
+                        let token = container.jwt_token_service.issue("1", UserClaims::new(1, UserStatus::Active, permissions).try_into()?)?.token;
+                        let response = router.clone().oneshot(Request::post("/api/board/posts")
+                            .header("Authorization", format!("Bearer {token}"))
+                            .header("Content-Type", "application/json")
+                            .body(Body::from(serde_json::json!({"board_slug":board_slug, "title":"title", "content":"body"}).to_string()))?).await?;
+                        // 권한이 없거나 다른 게시판 작성 권한·해당 게시판 관리 권한만 있으면 거부한다.
+                        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{board_slug}");
+                    }
+                }
+                let mut conn = context.db.conn().await?;
+                let counts: (i64, i64) = sqlx::query_as("SELECT (SELECT count(*) FROM conbira_posts), (SELECT count(*) FROM conbira_post_contents)")
+                    .fetch_one(conn.handle().conn()).await?;
+                // 거부한 요청은 게시글과 본문을 저장하지 않는다.
+                assert_eq!(counts, (0, 0));
                 Ok(())
             }).await
         }
