@@ -4,7 +4,7 @@ pub mod endpoint {
     use axum::extract::State;
 
     use crate::app::board::entity::PostDetail;
-    use crate::app::board::repository::post;
+    use crate::app::board::repository::{post, post_attachment};
     use crate::app::http::extract::ApiPath;
     use crate::app::http::response::ApiResult;
     use crate::app::{Container, DatabaseExt as _};
@@ -25,14 +25,7 @@ pub mod endpoint {
         let post = post::find_by_id(&mut conn.handle(), id)
             .await?
             .ok_or_else(|| Error::new(Code::NotFound, "Post not found").at(crate::here!()))?;
-        let ids =
-            super::super::super::repository::post_attachment::list_ids(&mut conn.handle(), id)
-                .await?;
-        let attachments = crate::app::file_asset::find_by_ids(&mut conn.handle(), &ids)
-            .await?
-            .into_iter()
-            .filter(|asset| asset.status == "attached")
-            .collect();
+        let attachments = post_attachment::list(&mut conn.handle(), id).await?;
         Ok(ResponseData { post, attachments }.into())
     }
 }

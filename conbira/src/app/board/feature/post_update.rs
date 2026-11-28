@@ -13,7 +13,7 @@ pub mod endpoint {
     pub struct RequestBody {
         pub title: String,
         pub content: String,
-        pub attachments: Option<crate::app::board::AttachmentChanges>,
+        pub attachments: Option<crate::app::board::service::AttachmentChanges>,
     }
 
     impl espr::validate::Validate for RequestBody {
@@ -140,7 +140,7 @@ pub mod usecase {
         id: i64,
         caller: crate::app::auth::claims::UserClaims,
         service: &crate::app::file_asset::service::FileAssetService,
-        attachments: Option<crate::app::board::AttachmentChanges>,
+        attachments: Option<crate::app::board::service::AttachmentChanges>,
         title: &str,
         content: &str,
     ) -> crate::Result<Post> {
@@ -156,7 +156,7 @@ pub mod usecase {
             .ok_or_else(|| Error::new(Code::NotFound, "Post not found").at(crate::here!()))?;
         post_content::update(&mut tx.handle(), id, content).await?;
         if let Some(changes) = attachments {
-            super::super::super::change_attachments(
+            super::super::super::service::change_attachments(
                 &mut tx.handle(),
                 service,
                 caller.id,

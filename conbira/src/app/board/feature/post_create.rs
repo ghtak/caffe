@@ -14,7 +14,7 @@ pub mod endpoint {
         pub board_slug: String,
         pub title: String,
         pub content: String,
-        pub attachments: Option<crate::app::board::AttachmentChanges>,
+        pub attachments: Option<crate::app::board::service::AttachmentChanges>,
     }
 
     impl espr::validate::Validate for RequestBody {
@@ -73,7 +73,7 @@ pub mod usecase {
         pub board_slug: String,
         pub title: String,
         pub content: String,
-        pub attachments: Option<crate::app::board::AttachmentChanges>,
+        pub attachments: Option<crate::app::board::service::AttachmentChanges>,
     }
 
     pub async fn execute(
@@ -94,7 +94,7 @@ pub mod usecase {
         .await?;
         post_content::insert(&mut tx.handle(), post.id, &command.content).await?;
         if let Some(changes) = command.attachments {
-            super::super::super::change_attachments(
+            super::super::super::service::change_attachments(
                 &mut tx.handle(),
                 service,
                 caller.id,
