@@ -237,13 +237,30 @@ const freeRoute = createRoute({
   path: 'free',
   component: () => <BoardListRoute boardSlug="free" title="자유게시판" />,
 })
-function BoardListRoute({ boardSlug, title }: { boardSlug: 'notice' | 'free'; title: string }) {
+const dataRoute = createRoute({
+  getParentRoute: () => communityRoute,
+  path: 'data',
+  component: () => <BoardListRoute boardSlug="data" title="자료실" />,
+})
+function BoardListRoute({
+  boardSlug,
+  title,
+}: {
+  boardSlug: 'notice' | 'free' | 'data'
+  title: string
+}) {
   const { session } = useSession()
   const canWrite =
     session.status === 'authenticated' && can(session.permissions, [`board.${boardSlug}.write`])
   return <PostListPage key={boardSlug} boardSlug={boardSlug} title={title} canWrite={canWrite} />
 }
-function BoardCreateRoute({ boardSlug, title }: { boardSlug: 'notice' | 'free'; title: string }) {
+function BoardCreateRoute({
+  boardSlug,
+  title,
+}: {
+  boardSlug: 'notice' | 'free' | 'data'
+  title: string
+}) {
   const { session } = useSession()
   if (session.status === 'guest') return <Navigate to="/login" replace />
   if (session.status !== 'authenticated') return <p role="status">로그인 상태 확인 중…</p>
@@ -267,6 +284,11 @@ const freeCreateRoute = createRoute({
   path: 'free/new',
   component: () => <BoardCreateRoute boardSlug="free" title="자유게시판" />,
 })
+const dataCreateRoute = createRoute({
+  getParentRoute: () => communityRoute,
+  path: 'data/new',
+  component: () => <BoardCreateRoute boardSlug="data" title="자료실" />,
+})
 const postDetailRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'posts/$postId',
@@ -274,6 +296,7 @@ const postDetailRoute = createRoute({
 })
 function PostDetailRoute() {
   const { postId } = postDetailRoute.useParams()
+  const { session } = useSession()
   const id = Number(postId)
   if (!/^[1-9]\d*$/.test(postId) || !Number.isSafeInteger(id))
     return (
@@ -281,15 +304,23 @@ function PostDetailRoute() {
         게시글을 찾을 수 없습니다.
       </p>
     )
-  return <PostDetailPage id={id} />
+  return (
+    <PostDetailPage
+      id={id}
+      token={session.status === 'authenticated' ? session.token : undefined}
+      userId={session.status === 'authenticated' ? session.userId : undefined}
+    />
+  )
 }
 const routeTree = rootRoute.addChildren([
   communityRoute.addChildren([
     communityIndexRoute,
     noticeRoute,
     freeRoute,
+    dataRoute,
     noticeCreateRoute,
     freeCreateRoute,
+    dataCreateRoute,
     postDetailRoute,
   ]),
   indexRoute,

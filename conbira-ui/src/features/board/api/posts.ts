@@ -25,7 +25,7 @@ export const postKeys = {
   all: ['posts'] as const,
   list: (boardSlug: string, filters: PostFilters) => ['posts', 'list', boardSlug, filters] as const,
 }
-export function postListOptions(boardSlug: 'notice' | 'free', filters: PostFilters) {
+export function postListOptions(boardSlug: 'notice' | 'free' | 'data', filters: PostFilters) {
   return queryOptions({
     queryKey: postKeys.list(boardSlug, filters),
     retry: false,
@@ -46,7 +46,11 @@ export function postListOptions(boardSlug: 'notice' | 'free', filters: PostFilte
 
 export function postCreateOptions(token: string) {
   return mutationOptions({
-    mutationFn: async (body: { board_slug: 'notice' | 'free'; title: string; content: string }) =>
+    mutationFn: async (body: {
+      board_slug: 'notice' | 'free' | 'data'
+      title: string
+      content: string
+    }) =>
       z.object({ code: z.literal('OK'), data: postSchema }).parse(
         await apiClient
           .post('/api/board/posts', {
@@ -70,5 +74,20 @@ export function postDetailOptions(id: number) {
           data: postSchema.extend({ author_nickname: z.string(), content: z.string() }),
         })
         .parse(await apiClient.get(`/api/board/posts/${id}`, { signal, retry: 0 }).json()).data,
+  })
+}
+
+export function postUpdateOptions(id: number, token: string) {
+  return mutationOptions({
+    mutationFn: async (body: { title: string; content: string }) =>
+      z.object({ code: z.literal('OK'), data: postSchema }).parse(
+        await apiClient
+          .put(`/api/board/posts/${id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            json: body,
+            retry: 0,
+          })
+          .json(),
+      ).data,
   })
 }

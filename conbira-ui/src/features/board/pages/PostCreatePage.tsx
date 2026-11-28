@@ -23,7 +23,7 @@ export function PostCreatePage({
   title,
   token,
 }: {
-  boardSlug: 'notice' | 'free'
+  boardSlug: 'notice' | 'free' | 'data'
   title: string
   token: string
 }) {

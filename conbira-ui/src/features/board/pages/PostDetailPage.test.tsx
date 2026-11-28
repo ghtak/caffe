@@ -16,6 +16,51 @@ const post = {
   created_at: '2026-01-01T00:00:00Z',
 }
 describe('contract', () => {
+  it('작성자가 제목과 본문을 수정하면 상세 화면에 반영한다', async () => {
+    let payload: unknown
+    server.use(
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { id: 1, permissions: [] } },
+        }),
+      ),
+      http.get('*/api/board/posts/1', () =>
+        HttpResponse.json({ code: 'OK', data: { ...post, content: '기존 본문' } }),
+      ),
+      http.put('*/api/board/posts/1', async ({ request }) => {
+        expect(request.headers.get('Authorization')).toBe('Bearer writer')
+        payload = await request.json()
+        return HttpResponse.json({ code: 'OK', data: { ...post, title: '수정 제목' } })
+      }),
+    )
+    renderWithProviders('/community/posts/1', 'writer')
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: '수정' }))
+    await user.clear(screen.getByLabelText('제목'))
+    await user.type(screen.getByLabelText('제목'), '수정 제목')
+    await user.clear(screen.getByLabelText('본문'))
+    await user.type(screen.getByLabelText('본문'), '수정 본문')
+    await user.click(screen.getByRole('button', { name: '저장' }))
+    expect(await screen.findByRole('heading', { name: '수정 제목' })).toBeVisible()
+    expect(screen.getByRole('region', { name: '본문' })).toHaveTextContent('수정 본문')
+    expect(payload).toEqual({ title: '수정 제목', content: '수정 본문' })
+  })
+  it('다른 사용자의 게시글에는 수정 버튼을 표시하지 않는다', async () => {
+    server.use(
+      http.get('*/api/auth/me', () =>
+        HttpResponse.json({
+          data: { exp: Math.floor(Date.now() / 1000) + 900, user: { id: 2, permissions: [] } },
+        }),
+      ),
+      http.get('*/api/board/posts/1', () =>
+        HttpResponse.json({ code: 'OK', data: { ...post, content: '본문' } }),
+      ),
+    )
+    renderWithProviders('/community/posts/1', 'reader')
+    await screen.findByRole('button', { name: '로그아웃' })
+    await screen.findByRole('heading', { name: '상세 제목' })
+    expect(screen.queryByRole('button', { name: '수정' })).not.toBeInTheDocument()
+  })
   it('목록 제목에서 상세를 열고 본문을 일반 텍스트로 표시한 후 목록으로 돌아간다', async () => {
     const content = '# 제목 아님\n<script>alert(1)</script>'
     server.use(

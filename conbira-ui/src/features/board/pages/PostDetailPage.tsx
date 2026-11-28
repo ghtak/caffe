@@ -1,12 +1,23 @@
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isHTTPError } from 'ky'
+import { useState } from 'react'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import { postDetailOptions } from '../api/posts'
+import { PostEditForm } from './PostEditForm'
 
-export function PostDetailPage({ id }: { id: number }) {
+export function PostDetailPage({
+  id,
+  token,
+  userId,
+}: {
+  id: number
+  token?: string
+  userId?: number
+}) {
   const detail = useQuery(postDetailOptions(id))
+  const [editing, setEditing] = useState(false)
   if (detail.isPending)
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
@@ -41,13 +52,17 @@ export function PostDetailPage({ id }: { id: number }) {
       ? '공지'
       : post.board_slug === 'free'
         ? '자유게시판'
-        : post.board_slug
+        : post.board_slug === 'data'
+          ? '자료실'
+          : post.board_slug
   const listPath =
     post.board_slug === 'notice'
       ? '/community/notice'
       : post.board_slug === 'free'
         ? '/community/free'
-        : '/community'
+        : post.board_slug === 'data'
+          ? '/community/data'
+          : '/community'
   return (
     <article className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <header className="grid gap-3 border-b pb-5">
@@ -68,16 +83,25 @@ export function PostDetailPage({ id }: { id: number }) {
           </div>
         </dl>
       </header>
-      <section
-        aria-label="본문"
-        className="rounded-lg border bg-card p-6 text-sm leading-6 break-words whitespace-pre-wrap"
-      >
-        {post.content}
-      </section>
+      {editing && token && userId === post.author_id ? (
+        <PostEditForm post={post} token={token} onClose={() => setEditing(false)} />
+      ) : (
+        <section
+          aria-label="본문"
+          className="rounded-lg border bg-card p-6 text-sm leading-6 break-words whitespace-pre-wrap"
+        >
+          {post.content}
+        </section>
+      )}
       <footer>
         <Button asChild variant="outline">
           <Link to={listPath}>목록으로</Link>
         </Button>
+        {!editing && token && userId === post.author_id && (
+          <Button className="ml-2" onClick={() => setEditing(true)}>
+            수정
+          </Button>
+        )}
       </footer>
     </article>
   )

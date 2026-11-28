@@ -27,7 +27,7 @@ import { setRefreshHandler } from '@/shared/api/client'
 export type Session =
   | { status: 'guest' | 'loading' }
   | { status: 'error'; reason: 'logout' | 'session' }
-  | { status: 'authenticated'; token: string; permissions: string[] }
+  | { status: 'authenticated'; token: string; permissions: string[]; userId?: number }
 
 const storageKey = 'conbira.access-token'
 
@@ -217,6 +217,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     session = {
       status: 'authenticated',
       token,
+      userId: claims.data.user.id,
       permissions: claims.data.user.permissions,
     }
   } else {

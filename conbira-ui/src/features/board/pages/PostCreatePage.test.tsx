@@ -19,7 +19,7 @@ function list() {
   )
 }
 describe('contract', () => {
-  it.each(['free', 'notice'] as const)(
+  it.each(['free', 'notice', 'data'] as const)(
     '게시판 %s 쓰기 권한으로 작성 후 목록으로 이동한다',
     async (board) => {
       let payload: unknown

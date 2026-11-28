@@ -31,7 +31,7 @@ export function PostListPage({
   title,
   canWrite = false,
 }: {
-  boardSlug: 'notice' | 'free'
+  boardSlug: 'notice' | 'free' | 'data'
   title: string
   canWrite?: boolean
 }) {

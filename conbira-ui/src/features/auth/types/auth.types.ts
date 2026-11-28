@@ -16,6 +16,7 @@ export const loginResponse = z.object({
 export const sessionClaims = z.object({
   exp: z.number().int().positive(),
   user: z.object({
+    id: z.number().int().positive().optional(),
     permissions: z.array(z.string()).default([]),
   }),
 })
