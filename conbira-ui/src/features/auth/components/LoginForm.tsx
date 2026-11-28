@@ -1,3 +1,4 @@
+import { GOOGLE_LOGIN_STORAGE_KEY } from '../constants'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { isHTTPError } from 'ky'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -7,7 +8,7 @@ import { Button } from '@/shared/components/ui/Button'
 import { Card, CardContent, CardFooter, CardHeader } from '@/shared/components/ui/Card'
 import { Input } from '@/shared/components/ui/Input'
 import { startGoogleLogin } from '../api/session'
-import { credentialsSchema, googleLoginStorageKey, type Credentials } from '../types/auth.types'
+import { credentialsSchema, type Credentials } from '../types/auth.types'
 
 export function LoginForm({
   onLogin,
@@ -47,7 +48,7 @@ export function LoginForm({
     try {
       const { authorization_url, state, browser_proof } = await startGoogleLogin(signal)
       signal.throwIfAborted()
-      sessionStorage.setItem(googleLoginStorageKey, JSON.stringify({ state, browser_proof }))
+      sessionStorage.setItem(GOOGLE_LOGIN_STORAGE_KEY, JSON.stringify({ state, browser_proof }))
       window.location.assign(authorization_url)
     } catch {
       if (signal.aborted) return

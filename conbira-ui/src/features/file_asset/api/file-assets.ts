@@ -22,6 +22,7 @@ const auth = (token: string) => ({ Authorization: `Bearer ${token}` })
 
 export function fileAssetListOptions(token: string, page: number) {
   return queryOptions({
+    meta: { requiresSession: true },
     queryKey: [...fileAssetKeys.all, 'list', page],
     retry: false,
     queryFn: async ({ signal }) =>

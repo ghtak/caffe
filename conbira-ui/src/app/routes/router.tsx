@@ -10,7 +10,13 @@ import { z } from 'zod'
 import { AdminHomePage } from '@/features/admin'
 import { GoogleCallbackPage, LoginPage } from '@/features/auth'
 import { HomePage } from '@/features/home'
-import { PostCreatePage, PostDetailPage, PostListPage } from '@/features/board'
+import {
+  boards,
+  type BoardSlug,
+  PostCreatePage,
+  PostDetailPage,
+  PostListPage,
+} from '@/features/board'
 import { CommunityLayout } from '../layouts/CommunityLayout'
 import { FileAssetPage } from '@/features/file_asset'
 import { AdminCatalogPage, RoleDetailPage, catalogOptions, type Catalog } from '@/features/rbac'
@@ -233,41 +239,30 @@ const communityIndexRoute = createRoute({
 const noticeRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'notice',
-  component: () => <BoardListRoute boardSlug="notice" title="공지" />,
+  component: () => <BoardListRoute boardSlug="notice" title={boards.notice.title} />,
 })
 const freeRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'free',
-  component: () => <BoardListRoute boardSlug="free" title="자유게시판" />,
+  component: () => <BoardListRoute boardSlug="free" title={boards.free.title} />,
 })
 const dataRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'data',
-  component: () => <BoardListRoute boardSlug="data" title="자료실" />,
+  component: () => <BoardListRoute boardSlug="data" title={boards.data.title} />,
 })
-function BoardListRoute({
-  boardSlug,
-  title,
-}: {
-  boardSlug: 'notice' | 'free' | 'data'
-  title: string
-}) {
+function BoardListRoute({ boardSlug, title }: { boardSlug: BoardSlug; title: string }) {
   const { session } = useSession()
   const canWrite =
-    session.status === 'authenticated' && can(session.permissions, [`board.${boardSlug}.write`])
+    session.status === 'authenticated' &&
+    can(session.permissions, [boards[boardSlug].writePermission])
   return <PostListPage key={boardSlug} boardSlug={boardSlug} title={title} canWrite={canWrite} />
 }
-function BoardCreateRoute({
-  boardSlug,
-  title,
-}: {
-  boardSlug: 'notice' | 'free' | 'data'
-  title: string
-}) {
+function BoardCreateRoute({ boardSlug, title }: { boardSlug: BoardSlug; title: string }) {
   const { session } = useSession()
   if (session.status === 'guest') return <Navigate to="/login" replace />
   if (session.status !== 'authenticated') return <p role="status">로그인 상태 확인 중…</p>
-  if (!can(session.permissions, [`board.${boardSlug}.write`]))
+  if (!can(session.permissions, [boards[boardSlug].writePermission]))
     return (
       <p role="alert" className="p-8">
         글을 작성할 권한이 없습니다.
@@ -280,17 +275,17 @@ function BoardCreateRoute({
 const noticeCreateRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'notice/new',
-  component: () => <BoardCreateRoute boardSlug="notice" title="공지" />,
+  component: () => <BoardCreateRoute boardSlug="notice" title={boards.notice.title} />,
 })
 const freeCreateRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'free/new',
-  component: () => <BoardCreateRoute boardSlug="free" title="자유게시판" />,
+  component: () => <BoardCreateRoute boardSlug="free" title={boards.free.title} />,
 })
 const dataCreateRoute = createRoute({
   getParentRoute: () => communityRoute,
   path: 'data/new',
-  component: () => <BoardCreateRoute boardSlug="data" title="자료실" />,
+  component: () => <BoardCreateRoute boardSlug="data" title={boards.data.title} />,
 })
 const postDetailRoute = createRoute({
   getParentRoute: () => communityRoute,

@@ -1,7 +1,5 @@
 import { z } from 'zod'
 
-export const googleLoginStorageKey = 'conbira.google-login'
-
 export const credentialsSchema = z.object({
   email: z.string().trim().pipe(z.email('이메일 주소를 입력해 주세요.')),
   password: z.string().min(1, '비밀번호를 입력해 주세요.'),
@@ -26,5 +24,13 @@ export const refreshResponse = z.object({
   data: loginResponse.shape.data.extend({
     expires_at: sessionClaims.shape.exp,
     claims: sessionClaims.shape.user,
+  }),
+})
+
+export const googleLoginStartResponse = z.object({
+  data: z.object({
+    authorization_url: z.url(),
+    state: z.string().min(1),
+    browser_proof: z.string().min(1),
   }),
 })

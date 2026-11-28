@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { PageHeader } from '@/shared/components/ui/PageHeader'
-import { adminSections } from '../admin-sections'
+import { adminSections } from '../constants'
 
 export function AdminHomePage({
   sections,

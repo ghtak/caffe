@@ -1,5 +1,6 @@
+import { Dialog } from '@/shared/components/ui/Dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import { EmptyState } from '@/shared/components/ui/EmptyState'
@@ -328,24 +329,11 @@ function CleanupDialog({
   onClose: () => void
   onConfirm: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
-    const element = dialog.current
-    if (!element) return
-    if (typeof element.showModal === 'function') element.showModal()
-    else element.setAttribute('open', '')
-    return () => {
-      if (element.open && typeof element.close === 'function') element.close()
-    }
-  }, [])
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="file-asset-cleanup-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        if (!busy) onClose()
-      }}
+    <Dialog
+      labelledBy="file-asset-cleanup-title"
+      onClose={onClose}
+      busy={busy}
       className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border bg-card p-6 text-card-foreground shadow-xl backdrop:bg-black/50"
     >
       <div className="grid gap-4">
@@ -367,7 +355,7 @@ function CleanupDialog({
           </Button>
         </div>
       </div>
-    </dialog>
+    </Dialog>
   )
 }
 
@@ -386,24 +374,11 @@ function DeleteDialog({
   onClose: () => void
   onDelete: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
-    const element = dialog.current
-    if (!element) return
-    if (typeof element.showModal === 'function') element.showModal()
-    else element.setAttribute('open', '')
-    return () => {
-      if (element.open && typeof element.close === 'function') element.close()
-    }
-  }, [])
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="file-asset-delete-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        if (!busy) onClose()
-      }}
+    <Dialog
+      labelledBy="file-asset-delete-title"
+      onClose={onClose}
+      busy={busy}
       className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border bg-card p-6 text-card-foreground shadow-xl backdrop:bg-black/50"
     >
       <div className="grid gap-4">
@@ -431,6 +406,6 @@ function DeleteDialog({
           </Button>
         </div>
       </div>
-    </dialog>
+    </Dialog>
   )
 }

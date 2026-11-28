@@ -1,2 +1,2 @@
-export { adminSections } from './admin-sections'
+export { adminSections } from './constants'
 export { AdminHomePage } from './pages/AdminHomePage'

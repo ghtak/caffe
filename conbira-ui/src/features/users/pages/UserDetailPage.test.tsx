@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { server } from '../../../../test/msw/server'
 import { renderWithProviders } from '../../../../test/renderWithProviders'
 
@@ -139,9 +139,9 @@ describe('contract', () => {
     const user = userEvent.setup()
     await user.click(await screen.findByRole('link', { name: '김하나' }))
     const select = await screen.findByLabelText('김하나 상태')
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
     select.focus()
     await user.selectOptions(select, 'inactive')
+    await user.click(screen.getByRole('button', { name: '변경 확인' }))
     // 변경 요청을 전송하고 갱신된 상태를 표시한다.
     await waitFor(() => expect(screen.getByLabelText('김하나 상태')).toHaveValue('inactive'))
     expect(submitted).toEqual({ status: 'inactive' })
@@ -150,7 +150,6 @@ describe('contract', () => {
     await user.click(screen.getByRole('link', { name: '사용자 목록으로' }))
     expect(await screen.findByRole('cell', { name: '비활성' })).toBeVisible()
     expect(screen.queryByLabelText('김하나 상태')).not.toBeInTheDocument()
-    confirm.mockRestore()
   })
   it('저장 후 재조회가 실패해도 저장 성공을 안내한다', async () => {
     let changed = false
@@ -167,12 +166,11 @@ describe('contract', () => {
       }),
     )
     renderWithProviders('/admin/users/1', 'admin-token')
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
     await userEvent.setup().selectOptions(await screen.findByLabelText('김하나 상태'), 'inactive')
+    await userEvent.setup().click(screen.getByRole('button', { name: '변경 확인' }))
     // 저장 결과와 상세 재조회 실패를 각각 안내한다.
     expect(await screen.findByRole('alert')).toHaveTextContent('사용자를 조회할 권한이 없습니다.')
     expect(screen.getByText('상태를 저장했습니다.')).toBeVisible()
-    confirm.mockRestore()
   })
   it('조회 권한만 있으면 상태를 볼 수 있지만 변경할 수 없다', async () => {
     server.use(
@@ -199,14 +197,11 @@ describe('contract', () => {
     )
     renderWithProviders('/admin/users/1', 'admin-token')
     const user = userEvent.setup()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(true)
-    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {})
     await user.selectOptions(await screen.findByLabelText('김하나 상태'), 'inactive')
+    await user.click(screen.getByRole('button', { name: '변경 확인' }))
     // 실패를 알리고 실제 저장된 상태를 유지한다.
-    await waitFor(() => expect(alert).toHaveBeenCalledWith('상태를 변경할 권한이 없습니다.'))
+    expect(await screen.findByRole('alert')).toHaveTextContent('상태를 변경할 권한이 없습니다.')
     expect(screen.getByLabelText('김하나 상태')).toHaveValue('active')
-    confirm.mockRestore()
-    alert.mockRestore()
   })
   it('변경 확인을 취소하면 기존 상태를 유지하고 요청하지 않는다', async () => {
     let requested = false
@@ -221,11 +216,10 @@ describe('contract', () => {
       }),
     )
     renderWithProviders('/admin/users/1', 'admin-token')
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false)
     await userEvent.setup().selectOptions(await screen.findByLabelText('김하나 상태'), 'inactive')
+    await userEvent.setup().click(screen.getByRole('button', { name: '취소' }))
     // 취소하면 기존 상태를 표시하고 서버에 변경을 요청하지 않는다.
     expect(screen.getByLabelText('김하나 상태')).toHaveValue('active')
     expect(requested).toBe(false)
-    confirm.mockRestore()
   })
 })

@@ -1,4 +1,5 @@
 import ky from 'ky'
+import { env } from '../config/env'
 
 type RefreshHandler = (accessToken: string) => Promise<string | null>
 let refreshHandler: RefreshHandler | null = null
@@ -8,7 +9,7 @@ export function setRefreshHandler(handler: RefreshHandler | null) {
 }
 
 export const apiClient = ky.create({
-  baseUrl: globalThis.location.origin,
+  baseUrl: env.apiBaseUrl,
   hooks: {
     afterResponse: [
       async ({ request, response }) => {

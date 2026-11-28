@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react'
 import {
+  ACCESS_TOKEN_STORAGE_KEY,
   authKeys,
   completeGoogleLogin,
   login,
@@ -19,9 +20,6 @@ import {
   sessionOptions,
   type Credentials,
 } from '@/features/auth'
-import { rbacKeys } from '@/features/rbac'
-import { fileAssetKeys } from '@/features/file_asset'
-import { userKeys } from '@/features/users'
 import { setRefreshHandler } from '@/shared/api/client'
 
 export type Session =
@@ -29,11 +27,9 @@ export type Session =
   | { status: 'error'; reason: 'logout' | 'session' }
   | { status: 'authenticated'; token: string; permissions: string[]; userId?: number }
 
-const storageKey = 'conbira.access-token'
-
 function readToken() {
   try {
-    return sessionStorage.getItem(storageKey)
+    return sessionStorage.getItem(ACCESS_TOKEN_STORAGE_KEY)
   } catch {
     return null
   }
@@ -41,8 +37,8 @@ function readToken() {
 
 function persistToken(token: string | null) {
   try {
-    if (token === null) sessionStorage.removeItem(storageKey)
-    else sessionStorage.setItem(storageKey, token)
+    if (token === null) sessionStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY)
+    else sessionStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, token)
   } catch {
     // Keep session changes in memory when browser storage is unavailable.
   }
@@ -83,9 +79,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     previousToken.current = null
     setToken(null)
     queryClient.removeQueries({ queryKey: authKeys.all })
-    queryClient.removeQueries({ queryKey: rbacKeys.all })
-    queryClient.removeQueries({ queryKey: userKeys.all })
-    queryClient.removeQueries({ queryKey: fileAssetKeys.all })
+    queryClient.removeQueries({ predicate: (query) => query.meta?.requiresSession === true })
   }, [queryClient])
 
   const signOut = useCallback(async () => {

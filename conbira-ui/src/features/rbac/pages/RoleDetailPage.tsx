@@ -1,13 +1,15 @@
+import { Dialog } from '@/shared/components/ui/Dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isHTTPError } from 'ky'
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import {
   candidateOptions,
   permissionsOptions,
-  roleChangeOptions,
+  rolePermissionChangeOptions,
+  userRoleChangeOptions,
   roleDetailOptions,
   roleKeys,
   rolePermissionsOptions,
@@ -26,7 +28,7 @@ function PermissionPanel({ id, token, canEdit }: { id: number; token: string; ca
   const all = useQuery(permissionsOptions(token))
   const assigned = useQuery(rolePermissionsOptions(id, token))
   const change = useMutation({
-    ...roleChangeOptions(token),
+    ...rolePermissionChangeOptions(id, token),
     onSuccess: () => client.invalidateQueries({ queryKey: roleKeys.detail(id) }),
   })
   if (all.isPending || assigned.isPending) return <p role="status">권한을 불러오는 중…</p>
@@ -73,8 +75,8 @@ function PermissionPanel({ id, token, canEdit }: { id: number; token: string; ca
                   disabled={change.isPending}
                   onClick={() =>
                     change.mutate({
-                      path: `/api/rbac/roles/${id}/permissions/${permission.id}`,
-                      add: !selected,
+                      permissionId: permission.id,
+                      assigned: !selected,
                     })
                   }
                 >
@@ -134,36 +136,23 @@ function AddUserDialog({
   onClose: () => void
   onAdded: () => void
 }) {
-  const dialog = useRef<HTMLDialogElement>(null)
   const client = useQueryClient()
   const [page, setPage] = useState(1)
   const [name, setName] = useState('')
   const [search, setSearch] = useState('')
   const candidates = useQuery(candidateOptions(roleId, token, search, page))
   const change = useMutation({
-    ...roleChangeOptions(token),
+    ...userRoleChangeOptions(roleId, token),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: roleKeys.detail(roleId) })
       onAdded()
     },
   })
-  useEffect(() => {
-    const element = dialog.current
-    if (!element) return
-    if (typeof element.showModal === 'function') element.showModal()
-    else element.setAttribute('open', '')
-    return () => {
-      if (element.open && typeof element.close === 'function') element.close()
-    }
-  }, [])
   return (
-    <dialog
-      ref={dialog}
-      aria-labelledby="add-user-title"
-      onCancel={(event) => {
-        event.preventDefault()
-        onClose()
-      }}
+    <Dialog
+      labelledBy="add-user-title"
+      onClose={onClose}
+      busy={change.isPending}
       className="fixed inset-0 m-auto max-h-[min(90vh,42rem)] w-[calc(100%-2rem)] max-w-xl overflow-hidden rounded-xl border bg-card p-0 text-card-foreground shadow-xl backdrop:bg-black/50"
     >
       <div className="flex max-h-[min(90vh,42rem)] flex-col">
@@ -201,9 +190,7 @@ function AddUserDialog({
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-            <Button type="submit" className="h-9">
-              검색
-            </Button>
+            <Button type="submit">검색</Button>
           </form>
           {change.isError && (
             <p role="alert" className="text-sm text-destructive">
@@ -224,8 +211,8 @@ function AddUserDialog({
                     pending={change.isPending}
                     onAdd={(userId) =>
                       change.mutate({
-                        path: `/api/rbac/users/${userId}/roles/${roleId}`,
-                        add: true,
+                        userId,
+                        assigned: true,
                       })
                     }
                   />
@@ -260,7 +247,7 @@ function AddUserDialog({
           )}
         </div>
       </div>
-    </dialog>
+    </Dialog>
   )
 }
 
@@ -272,7 +259,7 @@ function UserPanel({ id, token, canEdit }: { id: number; token: string; canEdit:
   const addButton = useRef<HTMLButtonElement>(null)
   const users = useQuery(roleUsersOptions(id, token, page))
   const change = useMutation({
-    ...roleChangeOptions(token),
+    ...userRoleChangeOptions(id, token),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: roleKeys.detail(id) })
       setNotice('사용자의 역할을 해제했습니다.')
@@ -336,9 +323,7 @@ function UserPanel({ id, token, canEdit }: { id: number; token: string; canEdit:
                     className="border-destructive/40 text-destructive hover:text-destructive"
                     aria-label={`${user.nickname} 해제`}
                     disabled={change.isPending}
-                    onClick={() =>
-                      change.mutate({ path: `/api/rbac/users/${user.id}/roles/${id}`, add: false })
-                    }
+                    onClick={() => change.mutate({ userId: user.id, assigned: false })}
                   >
                     역할 해제
                   </Button>

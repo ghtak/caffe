@@ -11,17 +11,16 @@ export const statusLabels: Record<UserStatus, string> = {
   withdrawn: '탈퇴',
 }
 
+const userSchema = z.object({
+  id: z.number().int(),
+  nickname: z.string(),
+  emails: z.array(z.string()),
+  status: userStatusSchema,
+  created_at: z.iso.datetime({ offset: true }),
+})
 const responseSchema = z.object({
   data: z.object({
-    items: z.array(
-      z.object({
-        id: z.number().int(),
-        nickname: z.string(),
-        emails: z.array(z.string()),
-        status: userStatusSchema,
-        created_at: z.iso.datetime({ offset: true }),
-      }),
-    ),
+    items: z.array(userSchema),
     page: z.number().int().positive(),
     page_size: z.number().int().positive(),
     has_next: z.boolean(),
@@ -45,6 +44,7 @@ export function userStatusMutationOptions(token: string) {
 
 export function userListOptions(token: string, filters: UserFilters) {
   return queryOptions({
+    meta: { requiresSession: true },
     queryKey: [...userKeys.all, 'list', filters],
     retry: false,
     queryFn: async ({ signal }) =>
@@ -67,18 +67,14 @@ export function userListOptions(token: string, filters: UserFilters) {
 
 const detailResponseSchema = z.object({
   code: z.literal('OK'),
-  data: z.object({
-    id: z.number().int(),
-    nickname: z.string(),
-    emails: z.array(z.string()),
-    status: userStatusSchema,
-    created_at: z.iso.datetime({ offset: true }),
+  data: userSchema.extend({
     updated_at: z.iso.datetime({ offset: true }),
   }),
 })
 
 export function userDetailOptions(token: string, id: number) {
   return queryOptions({
+    meta: { requiresSession: true },
     queryKey: [...userKeys.all, 'detail', id],
     retry: false,
     queryFn: async ({ signal }) =>

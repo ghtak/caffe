@@ -1,7 +1,8 @@
+import { WEB_REQUEST_HEADERS } from '../constants'
 import { queryOptions } from '@tanstack/react-query'
 import { apiClient } from '@/shared/api/client'
-import { z } from 'zod'
 import {
+  googleLoginStartResponse,
   loginResponse,
   refreshResponse,
   sessionResponse,
@@ -15,20 +16,12 @@ export const authKeys = {
 
 export async function startGoogleLogin(signal: AbortSignal) {
   const body = await apiClient.post('/api/auth/login/google', { signal }).json()
-  return z
-    .object({
-      data: z.object({
-        authorization_url: z.url(),
-        state: z.string().min(1),
-        browser_proof: z.string().min(1),
-      }),
-    })
-    .parse(body).data
+  return googleLoginStartResponse.parse(body).data
 }
 
 export async function login(credentials: Credentials, signal: AbortSignal) {
   const body = await apiClient
-    .post('/api/auth/web/login/local', { json: credentials, signal, headers: webHeaders })
+    .post('/api/auth/web/login/local', { json: credentials, signal, headers: WEB_REQUEST_HEADERS })
     .json()
   return resolveLogin(body, signal)
 }
@@ -38,7 +31,11 @@ export async function completeGoogleLogin(
   signal: AbortSignal,
 ) {
   const body = await apiClient
-    .post('/api/auth/web/login/google/complete', { json: input, signal, headers: webHeaders })
+    .post('/api/auth/web/login/google/complete', {
+      json: input,
+      signal,
+      headers: WEB_REQUEST_HEADERS,
+    })
     .json()
   return resolveLogin(body, signal)
 }
@@ -50,17 +47,15 @@ async function resolveLogin(body: unknown, signal: AbortSignal) {
   return { accessToken, claims }
 }
 
-const webHeaders = { 'x-conbira-request': '1' }
-
 export async function refreshSession(signal: AbortSignal) {
   const body = await apiClient
-    .post('/api/auth/web/refresh', { signal, retry: 0, headers: webHeaders })
+    .post('/api/auth/web/refresh', { signal, retry: 0, headers: WEB_REQUEST_HEADERS })
     .json()
   return refreshResponse.parse(body).data
 }
 
 export async function logoutSession() {
-  await apiClient.post('/api/auth/web/logout', { retry: 0, headers: webHeaders })
+  await apiClient.post('/api/auth/web/logout', { retry: 0, headers: WEB_REQUEST_HEADERS })
 }
 
 async function fetchSession(token: string, signal: AbortSignal) {
@@ -75,6 +70,7 @@ async function fetchSession(token: string, signal: AbortSignal) {
 
 export function sessionOptions(token: string | null) {
   return queryOptions({
+    meta: { requiresSession: true },
     queryKey: authKeys.session(token),
     enabled: token !== null,
     staleTime: 0,

@@ -1,3 +1,4 @@
+import { COMMENT_CONTENT_ROWS } from '../constants'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isHTTPError } from 'ky'
@@ -68,7 +69,7 @@ function CommentForm({
           onChange={(event) => setContent(event.target.value)}
           disabled={!token || pending}
           aria-invalid={invalid}
-          rows={3}
+          rows={COMMENT_CONTENT_ROWS}
           className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
         />
       </label>

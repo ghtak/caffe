@@ -9,3 +9,5 @@ export {
 export { LoginPage } from './pages/LoginPage'
 export { GoogleCallbackPage } from './pages/GoogleCallbackPage'
 export type { Credentials } from './types/auth.types'
+
+export { ACCESS_TOKEN_STORAGE_KEY } from './constants'

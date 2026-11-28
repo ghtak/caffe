@@ -1,29 +1,15 @@
+import { POST_CONTENT_ROWS } from '../constants'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { isHTTPError } from 'ky'
 import { useForm } from 'react-hook-form'
 import { useState } from 'react'
-import { z } from 'zod'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
-import {
-  postDetailOptions,
-  postKeys,
-  postUpdateOptions,
-  prepareAttachments,
-  type Attachment,
-} from '../api/posts'
+import { postDetailOptions, postKeys, postUpdateOptions, type Attachment } from '../api/posts'
 import { Attachments } from '../components/Attachments'
-
-const schema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(1, '제목을 입력해 주세요.')
-    .refine((value) => [...value].length <= 255, '제목은 255자 이하로 입력해 주세요.'),
-  content: z.string().refine((value) => value.trim().length > 0, '본문을 입력해 주세요.'),
-})
+import { postFormSchema, type PostFormValues } from '../types/post-form'
 
 export function PostEditForm({
   post,
@@ -43,31 +29,28 @@ export function PostEditForm({
   const [files, setFiles] = useState<File[]>([])
   const [removed, setRemoved] = useState<string[]>([])
   const queryClient = useQueryClient()
-  const form = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(schema),
+  const form = useForm<PostFormValues>({
+    resolver: zodResolver(postFormSchema),
     defaultValues: { title: post.title, content: post.content },
   })
   const update = useMutation({
-    mutationFn: async (values: { title: string; content: string }, context) => {
-      const attachments = await prepareAttachments(token, files, post.board_slug, removed)
-      return postUpdateOptions(post.id, token).mutationFn!({ ...values, attachments }, context)
-    },
-    onSuccess: (_data, values) => {
+    ...postUpdateOptions(post.id, post.board_slug, token),
+    onSuccess: (_data, { title, content }) => {
       queryClient.setQueryData(
         postDetailOptions(post.id).queryKey,
-        (previous) => previous && { ...previous, ...values },
+        (previous) => previous && { ...previous, title, content },
       )
       if (post.board_slug === 'data') {
         void queryClient.invalidateQueries({ queryKey: postDetailOptions(post.id).queryKey })
       }
-      void queryClient.invalidateQueries({ queryKey: [...postKeys.all, 'list'] })
+      void queryClient.invalidateQueries({ queryKey: postKeys.lists })
       onClose()
     },
   })
   return (
     <form
       className="grid gap-4 rounded-lg border bg-card p-6"
-      onSubmit={form.handleSubmit((values) => update.mutate(values))}
+      onSubmit={form.handleSubmit((values) => update.mutate({ ...values, files, removed }))}
     >
       <label className="grid gap-2 text-sm font-medium">
         제목
@@ -86,7 +69,7 @@ export function PostEditForm({
         본문
         <textarea
           {...form.register('content')}
-          rows={14}
+          rows={POST_CONTENT_ROWS}
           disabled={update.isPending}
           aria-invalid={!!form.formState.errors.content}
           className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 aria-invalid:border-destructive"

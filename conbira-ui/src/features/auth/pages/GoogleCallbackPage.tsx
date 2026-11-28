@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { z } from 'zod'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
-import { googleLoginStorageKey } from '../types/auth.types'
+import { GOOGLE_LOGIN_STORAGE_KEY } from '../constants'
 
 export function GoogleCallbackPage({
   search,
@@ -28,10 +28,10 @@ export function GoogleCallbackPage({
         initial.clearUrl()
         const stored = z
           .object({ state: z.string().min(1), browser_proof: z.string().min(1) })
-          .parse(JSON.parse(sessionStorage.getItem(googleLoginStorageKey) ?? 'null'))
+          .parse(JSON.parse(sessionStorage.getItem(GOOGLE_LOGIN_STORAGE_KEY) ?? 'null'))
         if (!initial.search.state || initial.search.state !== stored.state)
           throw new Error('Invalid state')
-        sessionStorage.removeItem(googleLoginStorageKey)
+        sessionStorage.removeItem(GOOGLE_LOGIN_STORAGE_KEY)
         if (initial.search.error || !initial.search.code) throw new Error('Google login failed')
         await initial.signIn(
           { code: initial.search.code, state: stored.state, browser_proof: stored.browser_proof },

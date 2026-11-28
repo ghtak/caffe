@@ -1,25 +1,18 @@
+import { POST_CONTENT_ROWS } from '../constants'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { isHTTPError } from 'ky'
 import { useForm } from 'react-hook-form'
 import { useState } from 'react'
-import { z } from 'zod'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { PageHeader } from '@/shared/components/ui/PageHeader'
-import { postCreateOptions, postKeys, prepareAttachments } from '../api/posts'
+import { postCreateOptions, postKeys } from '../api/posts'
 import { Attachments } from '../components/Attachments'
+import { postFormSchema, type PostFormValues } from '../types/post-form'
 
-const schema = z.object({
-  title: z
-    .string()
-    .trim()
-    .min(1, '제목을 입력해 주세요.')
-    .refine((value) => [...value].length <= 255, '제목은 255자 이하로 입력해 주세요.'),
-  content: z.string().refine((value) => value.trim().length > 0, '본문을 입력해 주세요.'),
-})
 export function PostCreatePage({
   boardSlug,
   title,
@@ -32,18 +25,12 @@ export function PostCreatePage({
   const [files, setFiles] = useState<File[]>([])
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const form = useForm<z.infer<typeof schema>>({
-    resolver: zodResolver(schema),
+  const form = useForm<PostFormValues>({
+    resolver: zodResolver(postFormSchema),
     defaultValues: { title: '', content: '' },
   })
   const create = useMutation({
-    mutationFn: async (
-      values: { title: string; content: string; board_slug: typeof boardSlug },
-      context,
-    ) => {
-      const attachments = await prepareAttachments(token, files, boardSlug, [])
-      return postCreateOptions(token).mutationFn!({ ...values, attachments }, context)
-    },
+    ...postCreateOptions(token),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: postKeys.all })
       await navigate({ to: `/community/${boardSlug}` })
@@ -55,7 +42,7 @@ export function PostCreatePage({
       <form
         className="grid gap-4 rounded-lg border bg-card p-6"
         onSubmit={form.handleSubmit((values) =>
-          create.mutate({ ...values, board_slug: boardSlug }),
+          create.mutate({ ...values, board_slug: boardSlug, files }),
         )}
       >
         <div className="grid gap-2">
@@ -78,7 +65,7 @@ export function PostCreatePage({
             본문
             <textarea
               {...form.register('content')}
-              rows={14}
+              rows={POST_CONTENT_ROWS}
               disabled={create.isPending}
               aria-invalid={!!form.formState.errors.content}
               className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 aria-invalid:border-destructive"

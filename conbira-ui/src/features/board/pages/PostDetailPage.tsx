@@ -1,3 +1,4 @@
+import { findBoard } from '../boards'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isHTTPError } from 'ky'
@@ -49,26 +50,14 @@ export function PostDetailPage({
       </section>
     )
   const post = detail.data
-  const board =
-    post.board_slug === 'notice'
-      ? '공지'
-      : post.board_slug === 'free'
-        ? '자유게시판'
-        : post.board_slug === 'data'
-          ? '자료실'
-          : post.board_slug
-  const listPath =
-    post.board_slug === 'notice'
-      ? '/community/notice'
-      : post.board_slug === 'free'
-        ? '/community/free'
-        : post.board_slug === 'data'
-          ? '/community/data'
-          : '/community'
+  const board = findBoard(post.board_slug)
+  const listPath = board?.path ?? '/community'
   return (
     <article className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
       <header className="grid gap-3 border-b pb-5">
-        <p className="text-sm font-medium text-primary">커뮤니티 / {board}</p>
+        <p className="text-sm font-medium text-primary">
+          커뮤니티 / {board?.title ?? post.board_slug}
+        </p>
         <h1 className="text-2xl font-bold tracking-tight break-words sm:text-3xl">{post.title}</h1>
         <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
           <div className="flex gap-2">

@@ -9,6 +9,7 @@ export const rbacKeys = {
 
 export function catalogOptions(catalog: Catalog, token: string) {
   return queryOptions({
+    meta: { requiresSession: true },
     queryKey: rbacKeys.catalog(catalog),
     retry: false,
     queryFn: async ({ signal }) => {

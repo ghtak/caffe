@@ -1,3 +1,4 @@
+import { Dialog } from '@/shared/components/ui/Dialog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from '@tanstack/react-router'
 import { isHTTPError } from 'ky'
@@ -26,26 +27,64 @@ function UserStatusEditor({
   token: string
   onSaved: () => void
 }) {
+  const [nextStatus, setNextStatus] = useState<UserStatus | null>(null)
   const queryClient = useQueryClient()
   const mutation = useMutation({
     ...userStatusMutationOptions(token),
     onSuccess: async () => {
+      setNextStatus(null)
       onSaved()
       await queryClient.invalidateQueries({ queryKey: userKeys.all })
     },
-    onError: (error) => {
-      const message =
-        isHTTPError(error) && error.response.status === 403
-          ? '상태를 변경할 권한이 없습니다.'
-          : isHTTPError(error) && error.response.status === 401
-            ? '로그인 세션이 만료되었습니다.'
-            : '상태를 저장하지 못했습니다. 다시 시도해 주세요.'
-      window.alert(message)
-    },
   })
+
+  const errorMessage =
+    isHTTPError(mutation.error) && mutation.error.response.status === 403
+      ? '상태를 변경할 권한이 없습니다.'
+      : isHTTPError(mutation.error) && mutation.error.response.status === 401
+        ? '로그인 세션이 만료되었습니다.'
+        : '상태를 저장하지 못했습니다. 다시 시도해 주세요.'
 
   return (
     <div className="grid gap-2">
+      {nextStatus !== null && (
+        <Dialog
+          labelledBy="user-status-title"
+          busy={mutation.isPending}
+          onClose={() => setNextStatus(null)}
+          className="fixed inset-0 m-auto w-[calc(100%-2rem)] max-w-lg rounded-xl border bg-card p-6 text-card-foreground shadow-xl backdrop:bg-black/50"
+        >
+          <div className="grid gap-4">
+            <h2 id="user-status-title" className="text-lg font-semibold">
+              사용자 상태 변경
+            </h2>
+            <p>
+              {nickname}님의 상태를 {statusLabels[status]}에서 {statusLabels[nextStatus]} 상태로
+              변경할까요?
+            </p>
+            {mutation.isError && (
+              <Alert variant="destructive">
+                <AlertDescription>{errorMessage}</AlertDescription>
+              </Alert>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                disabled={mutation.isPending}
+                onClick={() => setNextStatus(null)}
+              >
+                취소
+              </Button>
+              <Button
+                disabled={mutation.isPending}
+                onClick={() => mutation.mutate({ id, status: nextStatus })}
+              >
+                변경 확인
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
       <div className="relative w-fit">
         <select
           aria-label={`${nickname} 상태`}
@@ -59,14 +98,7 @@ function UserStatusEditor({
             }
             const nextStatus = userStatusSchema.parse(event.target.value)
             mutation.reset()
-            if (
-              nextStatus !== status &&
-              window.confirm(
-                `${nickname}님의 상태를 ${statusLabels[status]}에서 ${statusLabels[nextStatus]} 상태로 변경할까요?`,
-              )
-            ) {
-              mutation.mutate({ id, status: nextStatus })
-            }
+            if (nextStatus !== status) setNextStatus(nextStatus)
           }}
         >
           {Object.entries(statusLabels).map(([value, label]) => (
