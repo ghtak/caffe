@@ -115,6 +115,7 @@ Use **shadcn/ui** as the foundation for reusable UI components in `shared/compon
 2. **Class Merging:** Always use the `cn()` utility (`clsx` + `tailwind-merge` located in `shared/lib/utils.ts`) when combining conditional classes or accepting `className` props.
 3. **Component Variants:** Use `cva` (Class Variance Authority) for components in `shared/components/` that support multiple visual variants or sizes.
 4. **No Arbitrary Magic Values:** Prefer theme tokens (`bg-primary`, `text-muted-foreground`) over hardcoded hex codes (`bg-[#3b82f6]`).
+5. **Visual & UX Consistency:** For layout rhythm, token usage, component hierarchy, and UI state patterns, follow [design.md](./design.md) as the single source of truth.
 
 ---
 

@@ -116,12 +116,12 @@ export function UserDetailPage({
           : '사용자 정보를 불러오지 못했습니다.'
 
   return (
-    <section className="mx-auto grid w-full max-w-7xl min-w-0 content-start gap-8 p-5 sm:p-8 lg:p-12">
-      <header className="grid gap-3">
-        <Link to="/admin/users" className="w-fit text-sm text-primary hover:underline">
+    <section className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <header className="grid gap-1.5">
+        <Link to="/admin/users" className="w-fit text-sm font-medium text-primary hover:underline">
           사용자 목록으로
         </Link>
-        <h1 className="text-3xl font-bold tracking-tight">사용자 상세</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">사용자 상세</h1>
         <p className="text-sm text-muted-foreground">
           사용자 기본정보와 연결된 이메일을 확인합니다.
         </p>

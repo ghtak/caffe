@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { isHTTPError } from 'ky'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
+import { EmptyState } from '@/shared/components/ui/EmptyState'
 import {
   Table,
   TableBody,
@@ -30,9 +31,9 @@ export function CatalogList({ catalog, token }: { catalog: Catalog; token: strin
   return (
     <div className="w-full min-w-0">
       {list.isPending ? (
-        <p className="text-sm text-muted-foreground" role="status">
+        <div role="status" className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
           목록을 불러오는 중…
-        </p>
+        </div>
       ) : list.isError ? (
         <div className="grid justify-items-start gap-2">
           <Alert variant="destructive">
@@ -48,55 +49,49 @@ export function CatalogList({ catalog, token }: { catalog: Catalog; token: strin
           </Button>
         </div>
       ) : list.data.length === 0 ? (
-        <p className="rounded-lg border border-dashed bg-muted/40 p-4 text-sm text-muted-foreground">
-          등록된 {label}이 없습니다.
-        </p>
+        <EmptyState>등록된 {label}이 없습니다.</EmptyState>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card">
-          <Table className="caption-top wrap-anywhere">
-            <TableCaption className="m-0 border-b px-5 py-4 text-left font-semibold text-foreground">
-              {label} 목록
-            </TableCaption>
-            <TableHeader className="bg-muted/60">
-              <TableRow>
-                <TableHead className="h-12 px-5" scope="col">
-                  코드
-                </TableHead>
-                <TableHead className="h-12 px-5" scope="col">
-                  이름
-                </TableHead>
-                <TableHead className="h-12 px-5" scope="col">
-                  설명
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.data.map(({ id, code, name, description }) => (
-                <TableRow key={code}>
-                  <TableCell className="px-5 py-4 whitespace-normal">
-                    {catalog === 'roles' ? (
-                      <Link
-                        className="underline"
-                        to="/admin/roles/$roleId"
-                        params={{ roleId: String(id) }}
-                      >
-                        <code>{code}</code>
-                      </Link>
-                    ) : (
+        <Table className="caption-top wrap-anywhere">
+          <TableCaption className="m-0 border-b px-4 py-3 text-left font-semibold text-foreground">
+            {label} 목록
+          </TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="px-4" scope="col">
+                코드
+              </TableHead>
+              <TableHead className="px-4" scope="col">
+                이름
+              </TableHead>
+              <TableHead className="px-4" scope="col">
+                설명
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.data.map(({ id, code, name, description }) => (
+              <TableRow key={code}>
+                <TableCell className="px-4 py-3 whitespace-normal">
+                  {catalog === 'roles' ? (
+                    <Link
+                      className="text-primary underline-offset-4 hover:underline"
+                      to="/admin/roles/$roleId"
+                      params={{ roleId: String(id) }}
+                    >
                       <code>{code}</code>
-                    )}
-                  </TableCell>
-                  <TableCell className="px-5 py-4 font-semibold whitespace-normal">
-                    {name}
-                  </TableCell>
-                  <TableCell className="px-5 py-4 whitespace-normal text-muted-foreground">
-                    {description}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                    </Link>
+                  ) : (
+                    <code>{code}</code>
+                  )}
+                </TableCell>
+                <TableCell className="px-4 py-3 font-semibold whitespace-normal">{name}</TableCell>
+                <TableCell className="px-4 py-3 whitespace-normal text-muted-foreground">
+                  {description}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </div>
   )

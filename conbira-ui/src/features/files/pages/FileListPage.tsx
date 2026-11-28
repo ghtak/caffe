@@ -3,8 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
+import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
+import { EmptyState } from '@/shared/components/ui/EmptyState'
 import { Input } from '@/shared/components/ui/Input'
+import { PageHeader } from '@/shared/components/ui/PageHeader'
 import {
   Table,
   TableBody,
@@ -72,40 +75,13 @@ export function FileListPage({ token, canManage }: FileListPageProps) {
   const error = change.error ?? download.error
 
   return (
-    <section className="mx-auto grid w-full max-w-7xl min-w-0 content-start gap-8 p-5 sm:p-8 lg:p-12">
-      <header className="grid gap-3">
-        <p className="text-sm font-medium text-primary">관리 / 파일 관리</p>
-        <h1 className="text-3xl font-bold tracking-tight">파일 관리</h1>
-        <p className="text-sm text-muted-foreground">
-          파일 목록을 확인하고 업로드, 다운로드, 연결과 삭제를 관리합니다.
-        </p>
-      </header>
-      {notice && <p role="status">{notice}</p>}
-      {!uploadOpen && error && (
-        <p role="alert" className="text-destructive">
-          {fileErrorMessage(error)}
-        </p>
-      )}
-      <form
-        aria-label="파일 검색"
-        className="flex flex-wrap items-end gap-3"
-        onSubmit={search.handleSubmit(({ name }) => {
-          setFilters({ name: name.trim(), page: 1 })
-          setTarget(null)
-        })}
-      >
-        <label className="grid flex-1 gap-2 text-sm">
-          파일명
-          <Input {...search.register('name')} placeholder="파일 이름 검색" disabled={busy} />
-        </label>
-        <Button type="submit" disabled={busy}>
-          검색
-        </Button>
-      </form>
-      <section aria-label="파일 목록" className="grid min-w-0 gap-4">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="font-semibold">파일 목록</h2>
-          <div className="flex items-center gap-2">
+    <section className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <PageHeader
+        eyebrow="관리 / 파일 관리"
+        title="파일 관리"
+        description="파일 목록을 확인하고 업로드, 다운로드, 연결과 삭제를 관리합니다."
+        actions={
+          <>
             {canManage && (
               <Button
                 type="button"
@@ -128,21 +104,57 @@ export function FileListPage({ token, canManage }: FileListPageProps) {
             >
               새로고침
             </Button>
-          </div>
-        </div>
+          </>
+        }
+      />
+      {notice && (
+        <Alert>
+          <AlertDescription role="status">{notice}</AlertDescription>
+        </Alert>
+      )}
+      {!uploadOpen && error && (
+        <Alert variant="destructive">
+          <AlertDescription>{fileErrorMessage(error)}</AlertDescription>
+        </Alert>
+      )}
+      <form
+        aria-label="파일 검색"
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={search.handleSubmit(({ name }) => {
+          setFilters({ name: name.trim(), page: 1 })
+          setTarget(null)
+        })}
+      >
+        <label className="grid min-w-48 flex-1 gap-2 text-sm font-medium">
+          파일명
+          <Input {...search.register('name')} placeholder="파일 이름 검색" disabled={busy} />
+        </label>
+        <Button type="submit" disabled={busy}>
+          검색
+        </Button>
+      </form>
+      <section aria-label="파일 목록" className="grid min-w-0 gap-4">
+        <h2 className="text-lg font-semibold tracking-tight">파일 목록</h2>
         {list.isPending ? (
-          <p role="status">목록을 불러오는 중…</p>
+          <div
+            role="status"
+            className="rounded-lg border bg-card p-6 text-sm text-muted-foreground"
+          >
+            목록을 불러오는 중…
+          </div>
         ) : list.isError ? (
           <div className="grid justify-items-start gap-3">
-            <p role="alert">{fileErrorMessage(list.error)}</p>
+            <Alert variant="destructive">
+              <AlertDescription>{fileErrorMessage(list.error)}</AlertDescription>
+            </Alert>
             <Button variant="outline" onClick={() => void list.refetch()}>
               다시 시도
             </Button>
           </div>
         ) : list.data.items.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">
+          <EmptyState>
             {filters.name ? '검색 조건에 맞는 파일이 없습니다.' : '등록된 파일이 없습니다.'}
-          </p>
+          </EmptyState>
         ) : (
           <Table>
             <TableHeader>

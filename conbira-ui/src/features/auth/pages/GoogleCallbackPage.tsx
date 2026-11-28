@@ -47,19 +47,23 @@ export function GoogleCallbackPage({
 
   if (status === 'success') return <Navigate to="/" replace />
   return (
-    <main className="grid min-h-90 grid-cols-[minmax(0,var(--container-sm))] place-content-center gap-4 p-4">
-      {status === 'pending' ? (
-        <p role="status">Google 로그인 중…</p>
-      ) : (
-        <>
-          <Alert variant="destructive">
-            <AlertDescription>Google 로그인에 실패했습니다. 다시 시도해 주세요.</AlertDescription>
-          </Alert>
-          <Button asChild variant="outline">
-            <Link to="/login">로그인으로 돌아가기</Link>
-          </Button>
-        </>
-      )}
+    <main className="flex flex-1 items-center justify-center p-4">
+      <div className="grid w-full max-w-sm gap-4">
+        {status === 'pending' ? (
+          <p className="text-center text-sm text-muted-foreground" role="status">
+            Google 로그인 중…
+          </p>
+        ) : (
+          <>
+            <Alert variant="destructive">
+              <AlertDescription>Google 로그인에 실패했습니다. 다시 시도해 주세요.</AlertDescription>
+            </Alert>
+            <Button asChild variant="outline">
+              <Link to="/login">로그인으로 돌아가기</Link>
+            </Button>
+          </>
+        )}
+      </div>
     </main>
   )
 }

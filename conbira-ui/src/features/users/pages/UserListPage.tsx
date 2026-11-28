@@ -4,7 +4,10 @@ import { isHTTPError } from 'ky'
 import { useState } from 'react'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
+import { EmptyState } from '@/shared/components/ui/EmptyState'
 import { Input } from '@/shared/components/ui/Input'
+import { PageHeader } from '@/shared/components/ui/PageHeader'
+import { Select } from '@/shared/components/ui/Select'
 import {
   Table,
   TableBody,
@@ -29,14 +32,12 @@ export function UserListPage({ token }: { token: string }) {
         ? '로그인 세션이 만료되었습니다.'
         : '목록을 불러오지 못했습니다.'
   return (
-    <section className="mx-auto grid w-full max-w-7xl min-w-0 content-start gap-8 p-5 sm:p-8 lg:p-12">
-      <header className="grid gap-3">
-        <p className="text-sm font-medium text-primary">관리 / 사용자 목록</p>
-        <h1 className="text-3xl font-bold tracking-tight">사용자 목록</h1>
-        <p className="text-sm text-muted-foreground sm:text-base">
-          등록된 사용자와 계정 상태를 확인합니다.
-        </p>
-      </header>
+    <section className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <PageHeader
+        eyebrow="관리 / 사용자 목록"
+        title="사용자 목록"
+        description="등록된 사용자와 계정 상태를 확인합니다."
+      />
       <form
         className="grid items-end gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]"
         onSubmit={(event) => {
@@ -62,25 +63,21 @@ export function UserListPage({ token }: { token: string }) {
         </label>
         <label className="grid gap-2 text-sm font-medium">
           상태
-          <select
-            className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          >
+          <Select value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="">전체</option>
             {Object.entries(statusLabels).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <Button type="submit">검색</Button>
       </form>
       {list.isPending ? (
-        <p className="text-sm text-muted-foreground" role="status">
+        <div role="status" className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
           목록을 불러오는 중…
-        </p>
+        </div>
       ) : list.isError ? (
         <div className="grid justify-items-start gap-2">
           <Alert variant="destructive">
@@ -96,65 +93,64 @@ export function UserListPage({ token }: { token: string }) {
           </Button>
         </div>
       ) : list.data.items.length === 0 ? (
-        <p className="rounded-lg border border-dashed bg-muted/40 p-4 text-sm text-muted-foreground">
+        <EmptyState>
           {filters.name || filters.email || filters.status
             ? '검색 조건에 맞는 사용자가 없습니다.'
             : '등록된 사용자가 없습니다.'}
-        </p>
+        </EmptyState>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card">
-          <Table className="caption-top wrap-anywhere">
-            <TableCaption className="m-0 border-b px-5 py-4 text-left font-semibold text-foreground">
-              사용자 목록
-            </TableCaption>
-            <TableHeader className="bg-muted/60">
-              <TableRow>
-                <TableHead className="h-12 px-5" scope="col">
-                  ID
-                </TableHead>
-                <TableHead className="h-12 px-5" scope="col">
-                  닉네임
-                </TableHead>
-                <TableHead className="h-12 px-5" scope="col">
-                  이메일
-                </TableHead>
-                <TableHead className="h-12 px-5" scope="col">
-                  상태
-                </TableHead>
-                <TableHead className="h-12 px-5" scope="col">
-                  가입일
-                </TableHead>
+        <Table className="caption-top wrap-anywhere">
+          <TableCaption className="m-0 border-b px-4 py-3 text-left font-semibold text-foreground">
+            사용자 목록
+          </TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="px-4" scope="col">
+                ID
+              </TableHead>
+              <TableHead className="px-4" scope="col">
+                닉네임
+              </TableHead>
+              <TableHead className="px-4" scope="col">
+                이메일
+              </TableHead>
+              <TableHead className="px-4" scope="col">
+                상태
+              </TableHead>
+              <TableHead className="px-4" scope="col">
+                가입일
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {list.data.items.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell className="px-4 py-3">{user.id}</TableCell>
+                <TableCell className="px-4 py-3 font-semibold">
+                  <Link
+                    to="/admin/users/$userId"
+                    params={{ userId: String(user.id) }}
+                    className="text-primary underline-offset-4 hover:underline"
+                  >
+                    {user.nickname}
+                  </Link>
+                </TableCell>
+                <TableCell className="px-4 py-3 whitespace-normal">
+                  {user.emails.length ? user.emails.join(', ') : '—'}
+                </TableCell>
+                <TableCell className="px-4 py-3">{statusLabels[user.status]}</TableCell>
+                <TableCell className="px-4 py-3">
+                  {new Date(user.created_at).toLocaleDateString('ko-KR')}
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.data.items.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="px-5 py-4">{user.id}</TableCell>
-                  <TableCell className="px-5 py-4 font-semibold">
-                    <Link
-                      to="/admin/users/$userId"
-                      params={{ userId: String(user.id) }}
-                      className="text-primary underline-offset-4 hover:underline"
-                    >
-                      {user.nickname}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="px-5 py-4 whitespace-normal">
-                    {user.emails.length ? user.emails.join(', ') : '—'}
-                  </TableCell>
-                  <TableCell className="px-5 py-4">{statusLabels[user.status]}</TableCell>
-                  <TableCell className="px-5 py-4">
-                    {new Date(user.created_at).toLocaleDateString('ko-KR')}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+            ))}
+          </TableBody>
+        </Table>
       )}
       <nav aria-label="사용자 목록 페이지" className="flex items-center justify-center gap-3">
         <Button
           variant="outline"
+          size="sm"
           type="button"
           className="aria-disabled:opacity-50"
           aria-disabled={filters.page === 1 || list.isFetching}
@@ -165,11 +161,12 @@ export function UserListPage({ token }: { token: string }) {
         >
           이전
         </Button>
-        <span className="text-sm" aria-live="polite">
+        <span className="text-sm text-muted-foreground" aria-live="polite">
           {filters.page} 페이지
         </span>
         <Button
           variant="outline"
+          size="sm"
           type="button"
           className="aria-disabled:opacity-50"
           aria-disabled={!list.data?.has_next || list.isFetching}

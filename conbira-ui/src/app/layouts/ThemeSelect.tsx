@@ -37,8 +37,8 @@ export function ThemeSelect() {
         value={theme}
         onChange={changeTheme}
         className={cn(
-          buttonVariants({ variant: 'outline' }),
-          'block appearance-none pr-8 py-0 text-foreground',
+          buttonVariants({ variant: 'outline', size: 'sm' }),
+          'block appearance-none py-0 pr-8 text-foreground',
         )}
       >
         <option value="system">시스템</option>

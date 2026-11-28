@@ -13,24 +13,24 @@
 
 :root {
   color-scheme: light dark;
-  --background: light-dark(oklch(0.98 0.006 85), oklch(0.17 0.012 220));
-  --foreground: light-dark(oklch(0.23 0.035 255), oklch(0.95 0.01 190));
-  --card: light-dark(oklch(1 0 0), oklch(0.21 0.006 285.885));
+  --background: light-dark(oklch(0.985 0.002 240), oklch(0.16 0.01 240));
+  --foreground: light-dark(oklch(0.205 0.015 245), oklch(0.95 0.006 240));
+  --card: light-dark(oklch(1 0 0), oklch(0.205 0.012 240));
   --card-foreground: var(--foreground);
   --popover: var(--card);
   --popover-foreground: var(--card-foreground);
-  --primary: light-dark(oklch(0.47 0.09 180), oklch(0.77 0.1 175));
-  --primary-foreground: light-dark(oklch(0.99 0 0), oklch(0.19 0.03 190));
-  --secondary: light-dark(oklch(0.95 0.012 175), oklch(0.27 0.025 190));
+  --primary: light-dark(oklch(0.46 0.095 182), oklch(0.75 0.105 178));
+  --primary-foreground: light-dark(oklch(0.99 0 0), oklch(0.18 0.025 190));
+  --secondary: light-dark(oklch(0.955 0.008 220), oklch(0.26 0.015 240));
   --secondary-foreground: var(--foreground);
-  --muted: var(--secondary);
-  --muted-foreground: light-dark(oklch(0.51 0.015 285.938), oklch(0.72 0.015 286.067));
-  --accent: light-dark(oklch(0.91 0.035 175), oklch(0.34 0.04 185));
+  --muted: light-dark(oklch(0.96 0.004 240), oklch(0.24 0.012 240));
+  --muted-foreground: light-dark(oklch(0.49 0.012 245), oklch(0.7 0.012 240));
+  --accent: light-dark(oklch(0.92 0.03 180), oklch(0.31 0.035 185));
   --accent-foreground: var(--foreground);
-  --destructive: light-dark(oklch(0.51 0.2 27), oklch(0.72 0.17 26));
-  --border: light-dark(oklch(0.88 0.004 286.32), oklch(0.35 0.006 286.033));
-  --input: light-dark(oklch(0.72 0.009 286.067), oklch(0.55 0.01 286.067));
-  --ring: light-dark(oklch(0.52 0.012 286.067), oklch(0.75 0.012 286.067));
+  --destructive: light-dark(oklch(0.52 0.2 26), oklch(0.7 0.17 25));
+  --border: light-dark(oklch(0.89 0.004 240), oklch(0.3 0.01 240));
+  --input: light-dark(oklch(0.82 0.006 240), oklch(0.36 0.012 240));
+  --ring: light-dark(oklch(0.46 0.095 182), oklch(0.75 0.105 178));
   --radius: 0.5rem;
 }
 

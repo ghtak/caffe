@@ -401,14 +401,14 @@ export function RoleDetailPage({
       </p>
     )
   return (
-    <section className="mx-auto grid w-full max-w-7xl min-w-0 content-start gap-8 p-5 sm:p-8 lg:p-12">
-      <header className="grid gap-2">
-        <Link to="/admin/roles" className="text-sm text-primary">
+    <section className="mx-auto flex w-full max-w-6xl min-w-0 flex-col gap-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <header className="grid gap-1.5">
+        <Link to="/admin/roles" className="w-fit text-sm font-medium text-primary hover:underline">
           역할 관리
         </Link>
-        <h1 className="text-3xl font-bold">{role.data.name}</h1>
-        <code>{role.data.code}</code>
-        <p className="text-muted-foreground">{role.data.description}</p>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{role.data.name}</h1>
+        <code className="text-xs text-muted-foreground">{role.data.code}</code>
+        <p className="text-sm text-muted-foreground">{role.data.description}</p>
       </header>
       <div className="grid content-start gap-5 rounded-lg border bg-card p-5">
         <nav aria-label="역할 설정" className="flex gap-2 border-b pb-4">
