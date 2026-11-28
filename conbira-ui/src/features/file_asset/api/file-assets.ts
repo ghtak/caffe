@@ -113,20 +113,10 @@ export function downloadFileAssetOptions(token: string) {
             .get(`/api/file-assets/${id}/download`, { headers: auth(token), retry: 0 })
             .json(),
         ).data
-      const response = await fetch(ticket.download_url, {
-        headers: ticket.headers,
-        credentials: 'omit',
-      })
-      if (!response.ok) throw new Error('스토리지 다운로드에 실패했습니다.')
-      const url = URL.createObjectURL(await response.blob())
-      try {
-        const link = document.createElement('a')
-        link.href = url
-        link.download = filename
-        link.click()
-      } finally {
-        URL.revokeObjectURL(url)
-      }
+      const link = document.createElement('a')
+      link.href = ticket.download_url
+      link.download = filename
+      link.click()
     },
   })
 }

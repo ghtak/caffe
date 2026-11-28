@@ -72,20 +72,10 @@ export async function downloadAttachment(
         })
         .json(),
     ).data
-  const response = await fetch(ticket.download_url, {
-    headers: ticket.headers,
-    credentials: 'omit',
-  })
-  if (!response.ok) throw new Error('Download failed')
-  const url = URL.createObjectURL(await response.blob())
-  try {
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    link.click()
-  } finally {
-    URL.revokeObjectURL(url)
-  }
+  const link = document.createElement('a')
+  link.href = ticket.download_url
+  link.download = filename
+  link.click()
 }
 const postSchema = z.object({
   id: z.number().int(),

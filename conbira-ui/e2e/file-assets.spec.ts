@@ -75,7 +75,12 @@ test('파일 에셋을 presigned URL로 업로드하고 다운로드한다', asy
       expect(route.request().headers()['content-type']).toBe('text/plain')
       uploaded = true
       await route.fulfill({ status: 200 })
-    } else await route.fulfill({ body: 'hello', contentType: 'text/plain' })
+    } else
+      await route.fulfill({
+        body: 'hello',
+        contentType: 'text/plain',
+        headers: { 'content-disposition': `attachment; filename="${name}"` },
+      })
   })
   await page.goto('/admin')
   await page.getByRole('link', { name: '파일 에셋 관리', exact: true }).click()
