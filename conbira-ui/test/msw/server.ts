@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 
 export const server = setupServer(
+  http.get('*/api/board/posts/:id/comments', () => HttpResponse.json({ code: 'OK', data: [] })),
   http.post('*/api/auth/web/refresh', async ({ request }) => {
     const token =
       request.headers.get('cookie')?.match(/(?:^|; )test-session=([^;]+)/)?.[1] ??

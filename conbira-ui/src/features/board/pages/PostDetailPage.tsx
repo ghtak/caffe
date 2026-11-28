@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import { postDetailOptions } from '../api/posts'
 import { PostEditForm } from './PostEditForm'
+import { Comments } from '../components/Comments'
 
 export function PostDetailPage({
   id,
@@ -93,6 +94,7 @@ export function PostDetailPage({
           {post.content}
         </section>
       )}
+      {post.board_slug === 'free' && <Comments key={id} postId={id} token={token} />}
       <footer>
         <Button asChild variant="outline">
           <Link to={listPath}>목록으로</Link>
