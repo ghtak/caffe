@@ -14,7 +14,7 @@ pub struct Container {
     pub config: Config,
     pub file_storage: std::sync::Arc<dyn crate::app::files::s3::S3ObjectPort>,
     pub file_resource_access: std::sync::Arc<dyn crate::app::files::access::ResourceAccessPort>,
-    pub db: db::Database,
+    pub db: std::sync::Arc<db::Database>,
     pub cache: espr::cache::Cache,
     pub http_server: espr::http::Server,
     pub password_hash_service: crate::app::auth::service::password_hash::PasswordHashService,
@@ -28,9 +28,17 @@ impl Container {
     pub async fn new(config: &Config) -> crate::Result<Self> {
         let file_storage =
             std::sync::Arc::new(crate::app::files::s3::S3ObjectAdapter::new(&config.files).await?);
-        let db = db::Database::new(&config.database)
-            .await
-            .map_err_internal("Failed to initialize database", crate::here!())?;
+        let db = std::sync::Arc::new(
+            db::Database::new(&config.database)
+                .await
+                .map_err_internal("Failed to initialize database", crate::here!())?,
+        );
+
+        let policy_db = std::sync::Arc::new(
+            db::Database::new(&config.database)
+                .await
+                .map_err_internal("Failed to initialize file policy database", crate::here!())?,
+        );
 
         let cache = cache::Cache::new(&config.cache)
             .await
@@ -68,9 +76,9 @@ impl Container {
         Ok(Self {
             config: config.clone(),
             file_storage,
-            file_resource_access: std::sync::Arc::new(
-                crate::app::files::access::DomainResourceAccess,
-            ),
+            file_resource_access: std::sync::Arc::new(crate::app::board::PostFileAccess {
+                db: policy_db,
+            }),
             db,
             cache,
             http_server,

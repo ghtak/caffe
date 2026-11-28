@@ -2,11 +2,19 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { isHTTPError } from 'ky'
 import { useForm } from 'react-hook-form'
+import { useState } from 'react'
 import { z } from 'zod'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
-import { postDetailOptions, postKeys, postUpdateOptions } from '../api/posts'
+import {
+  postDetailOptions,
+  postKeys,
+  postUpdateOptions,
+  prepareAttachments,
+  type Attachment,
+} from '../api/posts'
+import { Attachments } from '../components/Attachments'
 
 const schema = z.object({
   title: z
@@ -22,22 +30,37 @@ export function PostEditForm({
   token,
   onClose,
 }: {
-  post: { id: number; title: string; content: string }
+  post: {
+    id: number
+    title: string
+    content: string
+    board_slug: string
+    attachment_group_id: string | null
+    attachments: Attachment[]
+  }
   token: string
   onClose: () => void
 }) {
+  const [files, setFiles] = useState<File[]>([])
+  const [removed, setRemoved] = useState<string[]>([])
   const queryClient = useQueryClient()
   const form = useForm<z.infer<typeof schema>>({
     resolver: zodResolver(schema),
     defaultValues: { title: post.title, content: post.content },
   })
   const update = useMutation({
-    ...postUpdateOptions(post.id, token),
+    mutationFn: async (values: { title: string; content: string }, context) => {
+      const attachments = await prepareAttachments(token, files, post.attachment_group_id, removed)
+      return postUpdateOptions(post.id, token).mutationFn!({ ...values, attachments }, context)
+    },
     onSuccess: (_data, values) => {
       queryClient.setQueryData(
         postDetailOptions(post.id).queryKey,
         (previous) => previous && { ...previous, ...values },
       )
+      if (post.board_slug === 'data') {
+        void queryClient.invalidateQueries({ queryKey: postDetailOptions(post.id).queryKey })
+      }
       void queryClient.invalidateQueries({ queryKey: [...postKeys.all, 'list'] })
       onClose()
     },
@@ -74,6 +97,27 @@ export function PostEditForm({
         <p role="alert" className="text-xs text-destructive">
           {form.formState.errors.content.message}
         </p>
+      )}
+      {post.board_slug === 'data' && (
+        <>
+          {post.attachments
+            .filter((file) => !removed.includes(file.file_id))
+            .map((file) => (
+              <div key={file.file_id} className="flex items-center justify-between gap-2 text-sm">
+                <span>{file.original_filename}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={update.isPending}
+                  aria-label={`${file.original_filename} 삭제`}
+                  onClick={() => setRemoved([...removed, file.file_id])}
+                >
+                  삭제
+                </Button>
+              </div>
+            ))}
+          <Attachments files={files} onChange={setFiles} disabled={update.isPending} />
+        </>
       )}
       {update.isError && (
         <Alert variant="destructive">

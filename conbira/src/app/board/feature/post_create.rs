@@ -14,6 +14,7 @@ pub mod endpoint {
         pub board_slug: String,
         pub title: String,
         pub content: String,
+        pub attachments: Option<crate::app::board::AttachmentChanges>,
     }
 
     impl espr::validate::Validate for RequestBody {
@@ -47,11 +48,13 @@ pub mod endpoint {
         )?;
         Ok(super::usecase::execute(
             &container.db,
+            container.config.files.pending_ttl_seconds,
+            caller,
             super::usecase::Command {
                 board_slug: request.board_slug.trim().to_owned(),
                 title: request.title.trim().to_owned(),
                 content: request.content,
-                author_id: caller.id,
+                attachments: request.attachments,
             },
         )
         .await?
@@ -70,21 +73,36 @@ pub mod usecase {
         pub board_slug: String,
         pub title: String,
         pub content: String,
-        pub author_id: i64,
+        pub attachments: Option<crate::app::board::AttachmentChanges>,
     }
 
-    pub async fn execute(db: &Database, command: Command) -> crate::Result<Post> {
+    pub async fn execute(
+        db: &Database,
+        ttl: u64,
+        caller: crate::app::auth::claims::UserClaims,
+        command: Command,
+    ) -> crate::Result<Post> {
         let mut tx = db.begin_tx(crate::here!()).await?;
-        let post = post::insert(
+        let mut post = post::insert(
             &mut tx.handle(),
             &post::NewPost {
                 board_slug: command.board_slug,
                 title: command.title,
-                author_id: command.author_id,
+                author_id: caller.id,
             },
         )
         .await?;
         post_content::insert(&mut tx.handle(), post.id, &command.content).await?;
+        if let Some(changes) = command.attachments {
+            super::super::super::change_attachments(
+                &mut tx.handle(),
+                caller,
+                &mut post,
+                changes,
+                ttl,
+            )
+            .await?;
+        }
         tx.commit()
             .await
             .map_err_internal("Failed to commit post creation", crate::here!())?;
@@ -203,6 +221,7 @@ mod tests {
                     board_slug,
                     title,
                     content: content.into(),
+                    attachments: None,
                 };
                 // 필수값과 DB 컬럼 길이 제한을 API 경계에서 검사한다.
                 assert!(request.validate().is_err());
@@ -211,6 +230,7 @@ mod tests {
                 board_slug: "x".repeat(64),
                 title: "가".repeat(255),
                 content: "body".into(),
+                attachments: None,
             };
             // 길이 상한과 한글 제목은 허용한다.
             assert!(request.validate().is_ok());
@@ -228,8 +248,8 @@ mod tests {
                     ALTER TABLE conbira_post_contents ADD CONSTRAINT reject_content CHECK (content <> 'rejected');")
                     .execute(conn.handle().conn()).await?;
                 drop(conn);
-                let result = super::super::usecase::execute(&context.db, super::super::usecase::Command {
-                    board_slug: "free".into(), author_id: 1, title: "title".into(), content: "rejected".into(),
+                let result = super::super::usecase::execute(&context.db, 3600, crate::app::auth::claims::UserClaims::new(1, crate::app::auth::entity::UserStatus::Active, vec![]), super::super::usecase::Command {
+                    board_slug: "free".into(), attachments: None, title: "title".into(), content: "rejected".into(),
                 }).await;
                 let mut conn = context.db.conn().await?;
                 let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_posts")
@@ -240,5 +260,64 @@ mod tests {
                 Ok(())
             }).await
         }
+    }
+}
+
+#[cfg(test)]
+mod attachment_tests {
+    use axum::body::{Body, to_bytes};
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt as _;
+
+    use crate::app::auth::claims::UserClaims;
+    use crate::app::auth::entity::UserStatus;
+    use crate::app::files::access::Action;
+    use crate::app::files::entity::FileStatus;
+    use crate::app::files::repository;
+
+    #[tokio::test]
+    async fn creates_attachment_atomically_and_enforces_post_access() -> anyhow::Result<()> {
+        crate::test_support::TestContext::run(3, |context| async move {
+            let fixture = crate::test_support::files::FileFixture::new(context.clone()).await?;
+            let mut conn = context.db.conn().await?;
+            sqlx::raw_sql(include_str!("../../../../migrations/0020_posts.sql")).execute(conn.handle().conn()).await?;
+            let group = uuid::Uuid::new_v4();
+            let file = fixture.file(group);
+            repository::insert(&mut conn.handle(), &file).await?;
+            drop(conn);
+            let container = std::sync::Arc::new(context.container().await?);
+            let claims = UserClaims::new(fixture.user_id, UserStatus::Active, vec!["board.data.write".into()]);
+            let token = container.jwt_token_service.issue(&fixture.user_id.to_string(), claims.try_into()?)?.token;
+            let router = crate::app::http::router(container.clone())?;
+            let body = serde_json::json!({"board_slug":"data", "title":"title", "content":"body", "attachments":{"group_id":group,"attach_file_ids":[file.file_id],"detach_file_ids":[]}});
+            let response = router.clone().oneshot(Request::post("/api/board/posts").header("Authorization", format!("Bearer {token}")).header("Content-Type", "application/json").body(Body::from(body.to_string()))?).await?;
+            assert_eq!(response.status(), StatusCode::OK);
+            let value: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
+            let id = value["data"]["id"].as_i64().unwrap();
+            let response = router.clone().oneshot(Request::get(format!("/api/board/posts/{id}")).body(Body::empty())?).await?;
+            let detail: serde_json::Value = serde_json::from_slice(&to_bytes(response.into_body(), 65536).await?)?;
+            assert_eq!(detail["data"]["attachments"][0]["original_filename"], "report.txt");
+            let reader = UserClaims::new(fixture.user_id + 100, UserStatus::Active, vec![]);
+            assert!(container.file_resource_access.decide(&reader, "board.post", &id.to_string(), Action::Read).await?);
+            assert!(!container.file_resource_access.decide(&reader, "board.post", &id.to_string(), Action::Edit).await?);
+            let owner = UserClaims::new(fixture.user_id, UserStatus::Active, vec![]);
+            assert!(container.file_resource_access.decide(&owner, "board.post", &id.to_string(), Action::Edit).await?);
+            let mut conn = context.db.conn().await?;
+            assert_eq!(repository::find_by_id(&mut conn.handle(), file.file_id).await?.unwrap().status, FileStatus::Attached);
+            drop(conn);
+            let invalid = serde_json::json!({"board_slug":"data", "title":"bad", "content":"body", "attachments":{"group_id":uuid::Uuid::new_v4(),"attach_file_ids":[uuid::Uuid::new_v4()],"detach_file_ids":[]}});
+            let response = router.clone().oneshot(Request::post("/api/board/posts").header("Authorization", format!("Bearer {token}")).header("Content-Type", "application/json").body(Body::from(invalid.to_string()))?).await?;
+            assert_ne!(response.status(), StatusCode::OK);
+            let mut conn = context.db.conn().await?;
+            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM conbira_posts").fetch_one(conn.handle().conn()).await?;
+            assert_eq!(count, 1);
+            drop(conn);
+            let update = serde_json::json!({"title":"edited", "content":"body", "attachments":{"group_id":group,"attach_file_ids":[],"detach_file_ids":[file.file_id]}});
+            let response = router.oneshot(Request::put(format!("/api/board/posts/{id}")).header("Authorization", format!("Bearer {token}")).header("Content-Type", "application/json").body(Body::from(update.to_string()))?).await?;
+            assert_eq!(response.status(), StatusCode::OK);
+            let mut conn = context.db.conn().await?;
+            assert_eq!(repository::find_by_id(&mut conn.handle(), file.file_id).await?.unwrap().status, FileStatus::Deleted);
+            Ok(())
+        }).await
     }
 }

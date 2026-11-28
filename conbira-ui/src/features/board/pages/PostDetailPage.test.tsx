@@ -45,6 +45,31 @@ describe('contract', () => {
     expect(screen.getByRole('region', { name: '본문' })).toHaveTextContent('수정 본문')
     expect(payload).toEqual({ title: '수정 제목', content: '수정 본문' })
   })
+  it('비로그인 사용자에게 첨부 목록과 로그인 안내를 표시한다', async () => {
+    server.use(
+      http.get('*/api/board/posts/1', () =>
+        HttpResponse.json({
+          code: 'OK',
+          data: {
+            ...post,
+            board_slug: 'data',
+            content: '본문',
+            attachments: [
+              {
+                file_id: 'dcb68ff6-4ed1-4a56-9788-b35d887bf91b',
+                group_id: 'dcb68ff6-4ed1-4a56-9788-b35d887bf91a',
+                original_filename: '자료.txt',
+              },
+            ],
+          },
+        }),
+      ),
+    )
+    renderWithProviders('/community/posts/1')
+    expect(await screen.findByText('자료.txt')).toBeVisible()
+    expect(screen.getByText('로그인 후 다운로드')).toBeVisible()
+    expect(screen.queryByRole('button', { name: '다운로드' })).not.toBeInTheDocument()
+  })
   it('다른 사용자의 게시글에는 수정 버튼을 표시하지 않는다', async () => {
     server.use(
       http.get('*/api/auth/me', () =>

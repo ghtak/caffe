@@ -3,12 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { isHTTPError } from 'ky'
 import { useForm } from 'react-hook-form'
+import { useState } from 'react'
 import { z } from 'zod'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
 import { Input } from '@/shared/components/ui/Input'
 import { PageHeader } from '@/shared/components/ui/PageHeader'
-import { postCreateOptions, postKeys } from '../api/posts'
+import { postCreateOptions, postKeys, prepareAttachments } from '../api/posts'
+import { Attachments } from '../components/Attachments'
 
 const schema = z.object({
   title: z
@@ -27,6 +29,7 @@ export function PostCreatePage({
   title: string
   token: string
 }) {
+  const [files, setFiles] = useState<File[]>([])
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const form = useForm<z.infer<typeof schema>>({
@@ -34,7 +37,13 @@ export function PostCreatePage({
     defaultValues: { title: '', content: '' },
   })
   const create = useMutation({
-    ...postCreateOptions(token),
+    mutationFn: async (
+      values: { title: string; content: string; board_slug: typeof boardSlug },
+      context,
+    ) => {
+      const attachments = await prepareAttachments(token, files, null, [])
+      return postCreateOptions(token).mutationFn!({ ...values, attachments }, context)
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: postKeys.all })
       await navigate({ to: `/community/${boardSlug}` })
@@ -81,6 +90,9 @@ export function PostCreatePage({
             </p>
           )}
         </div>
+        {boardSlug === 'data' && (
+          <Attachments files={files} onChange={setFiles} disabled={create.isPending} />
+        )}
         {create.isError && (
           <Alert variant="destructive">
             <AlertDescription>

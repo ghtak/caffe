@@ -10,15 +10,40 @@ pub mod endpoint {
     use crate::app::{Container, DatabaseExt as _};
     use crate::{Code, Error};
 
+    #[derive(serde::Serialize)]
+    pub struct ResponseData {
+        #[serde(flatten)]
+        post: PostDetail,
+        attachments: Vec<crate::app::files::entity::FileSummary>,
+    }
+
     pub async fn handler(
         State(container): State<Arc<Container>>,
         ApiPath(id): ApiPath<i64>,
-    ) -> ApiResult<PostDetail> {
+    ) -> ApiResult<ResponseData> {
         let mut conn = container.db.acquire_conn(crate::here!()).await?;
         let post = post::find_by_id(&mut conn.handle(), id)
             .await?
             .ok_or_else(|| Error::new(Code::NotFound, "Post not found").at(crate::here!()))?;
-        Ok(post.into())
+        let attachments = if post.summary.post.board_slug == "data" {
+            if let Some(group_id) = post.summary.post.attachment_group_id {
+                crate::app::files::repository::list_by_group_id(&mut conn.handle(), group_id)
+                    .await?
+                    .into_iter()
+                    .filter(|file| {
+                        file.status == crate::app::files::entity::FileStatus::Attached
+                            && file.resource_type.as_deref() == Some("board.post")
+                            && file.resource_key.as_deref() == Some(id.to_string().as_str())
+                    })
+                    .map(Into::into)
+                    .collect()
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+        Ok(ResponseData { post, attachments }.into())
     }
 }
 

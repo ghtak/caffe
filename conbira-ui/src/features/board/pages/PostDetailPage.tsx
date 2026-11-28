@@ -4,7 +4,7 @@ import { isHTTPError } from 'ky'
 import { useState } from 'react'
 import { Alert, AlertDescription } from '@/shared/components/ui/Alert'
 import { Button } from '@/shared/components/ui/Button'
-import { postDetailOptions } from '../api/posts'
+import { downloadAttachment, postDetailOptions } from '../api/posts'
 import { PostEditForm } from './PostEditForm'
 import { Comments } from '../components/Comments'
 
@@ -19,6 +19,7 @@ export function PostDetailPage({
 }) {
   const detail = useQuery(postDetailOptions(id))
   const [editing, setEditing] = useState(false)
+  const [downloadError, setDownloadError] = useState(false)
   if (detail.isPending)
     return (
       <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
@@ -92,6 +93,41 @@ export function PostDetailPage({
           className="rounded-lg border bg-card p-6 text-sm leading-6 break-words whitespace-pre-wrap"
         >
           {post.content}
+        </section>
+      )}
+      {!editing && post.board_slug === 'data' && post.attachments.length > 0 && (
+        <section aria-label="첨부파일" className="grid gap-2 rounded-lg border bg-card p-6">
+          <h2 className="text-sm font-medium">첨부파일</h2>
+          <ul className="grid gap-2">
+            {post.attachments.map((file) => (
+              <li key={file.file_id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="break-all">{file.original_filename}</span>
+                {token ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDownloadError(false)
+                      void downloadAttachment(token, file.file_id).catch(() =>
+                        setDownloadError(true),
+                      )
+                    }}
+                  >
+                    다운로드
+                  </Button>
+                ) : (
+                  <span className="text-muted-foreground">로그인 후 다운로드</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {downloadError && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                파일을 다운로드하지 못했습니다. 다시 시도해 주세요.
+              </AlertDescription>
+            </Alert>
+          )}
         </section>
       )}
       {post.board_slug === 'free' && (

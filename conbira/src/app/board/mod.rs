@@ -98,3 +98,100 @@ mod tests {
         }
     }
 }
+
+/// 게시글에 연결된 파일의 접근 정책.
+pub struct PostFileAccess {
+    pub db: std::sync::Arc<crate::app::db::Database>,
+}
+
+#[async_trait::async_trait]
+impl crate::app::files::access::ResourceAccessPort for PostFileAccess {
+    async fn decide(
+        &self,
+        caller: &crate::app::auth::claims::UserClaims,
+        kind: &str,
+        key: &str,
+        action: crate::app::files::access::Action,
+    ) -> crate::Result<bool> {
+        use crate::app::DatabaseExt as _;
+        use crate::app::files::access::Action;
+        if kind != "board.post" {
+            return Ok(false);
+        }
+        let Ok(id) = key.parse::<i64>() else {
+            return Ok(false);
+        };
+        let mut conn = self.db.acquire_conn(crate::here!()).await?;
+        let post = repository::post::find_by_id(&mut conn.handle(), id).await?;
+        Ok(post.is_some_and(|p| {
+            p.summary.post.board_slug == "data"
+                && (action == Action::Read || p.summary.post.author_id == caller.id)
+        }))
+    }
+}
+
+#[derive(serde::Deserialize)]
+pub struct AttachmentChanges {
+    pub group_id: uuid::Uuid,
+    pub attach_file_ids: Vec<uuid::Uuid>,
+    pub detach_file_ids: Vec<uuid::Uuid>,
+}
+
+// 게시글 작성자 확인을 마친 트랜잭션 내부에서만 사용한다.
+struct AuthorizedPost;
+#[async_trait::async_trait]
+impl crate::app::files::access::ResourceAccessPort for AuthorizedPost {
+    async fn decide(
+        &self,
+        _: &crate::app::auth::claims::UserClaims,
+        kind: &str,
+        _: &str,
+        _: crate::app::files::access::Action,
+    ) -> crate::Result<bool> {
+        Ok(kind == "board.post")
+    }
+}
+
+async fn change_attachments(
+    tx: &mut crate::app::db::Handle<'_>,
+    caller: crate::app::auth::claims::UserClaims,
+    post: &mut entity::Post,
+    changes: AttachmentChanges,
+    ttl: u64,
+) -> crate::Result<()> {
+    if post.board_slug != "data"
+        || post
+            .attachment_group_id
+            .is_some_and(|id| id != changes.group_id)
+        || (post.attachment_group_id.is_none() && changes.attach_file_ids.is_empty())
+    {
+        return Err(crate::Error::new(
+            crate::Code::InvalidRequest,
+            "Invalid post attachment group",
+        )
+        .at(crate::here!()));
+    }
+    crate::app::files::file_group_attach::execute_in_tx(
+        tx,
+        &AuthorizedPost,
+        ttl,
+        crate::app::files::file_group_attach::Command {
+            caller,
+            group_id: changes.group_id,
+            resource_type: "board.post".into(),
+            resource_key: post.id.to_string(),
+            attach_file_ids: changes.attach_file_ids,
+            detach_file_ids: changes.detach_file_ids,
+        },
+    )
+    .await?;
+    use crate::error::ResultExt as _;
+    sqlx::query("UPDATE conbira_posts SET attachment_group_id = $2 WHERE id = $1")
+        .bind(post.id)
+        .bind(changes.group_id)
+        .execute(tx.conn())
+        .await
+        .map_err_internal("Failed to update attachment group", crate::here!())?;
+    post.attachment_group_id = Some(changes.group_id);
+    Ok(())
+}

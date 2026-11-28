@@ -24,6 +24,14 @@ pub mod endpoint {
         ApiPath(group_id): ApiPath<Uuid>,
         ApiJson(body): ApiJson<RequestBody>,
     ) -> ApiResult<super::usecase::Output> {
+        if body.resource_type == "board.post" {
+            return Err(crate::Error::new(
+                crate::Code::Forbidden,
+                "Post attachments must be changed through the post API",
+            )
+            .at(crate::here!())
+            .into());
+        }
         let output = super::usecase::execute(
             &container.db,
             container.file_resource_access.as_ref(),

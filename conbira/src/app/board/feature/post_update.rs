@@ -13,6 +13,7 @@ pub mod endpoint {
     pub struct RequestBody {
         pub title: String,
         pub content: String,
+        pub attachments: Option<crate::app::board::AttachmentChanges>,
     }
 
     impl espr::validate::Validate for RequestBody {
@@ -42,7 +43,9 @@ pub mod endpoint {
         Ok(super::usecase::execute(
             &container.db,
             id,
-            caller.id,
+            caller,
+            container.config.files.pending_ttl_seconds,
+            request.attachments,
             request.title.trim(),
             &request.content,
         )
@@ -95,7 +98,8 @@ mod tests {
                 assert!(
                     super::super::endpoint::RequestBody {
                         title,
-                        content: content.into()
+                        content: content.into(),
+                        attachments: None
                     }
                     .validate()
                     .is_err()
@@ -134,7 +138,9 @@ pub mod usecase {
     pub async fn execute(
         db: &Database,
         id: i64,
-        author_id: i64,
+        caller: crate::app::auth::claims::UserClaims,
+        ttl: u64,
+        attachments: Option<crate::app::board::AttachmentChanges>,
         title: &str,
         content: &str,
     ) -> crate::Result<Post> {
@@ -142,13 +148,23 @@ pub mod usecase {
         let existing = post::find_by_id(&mut tx.handle(), id)
             .await?
             .ok_or_else(|| Error::new(Code::NotFound, "Post not found").at(crate::here!()))?;
-        if existing.summary.post.author_id != author_id {
+        if existing.summary.post.author_id != caller.id {
             return Err(Error::new(Code::Forbidden, "Post access denied").at(crate::here!()));
         }
-        let updated = post::update_title(&mut tx.handle(), id, author_id, title)
+        let mut updated = post::update_title(&mut tx.handle(), id, caller.id, title)
             .await?
             .ok_or_else(|| Error::new(Code::NotFound, "Post not found").at(crate::here!()))?;
         post_content::update(&mut tx.handle(), id, content).await?;
+        if let Some(changes) = attachments {
+            super::super::super::change_attachments(
+                &mut tx.handle(),
+                caller,
+                &mut updated,
+                changes,
+                ttl,
+            )
+            .await?;
+        }
         tx.commit()
             .await
             .map_err_internal("Failed to commit post update", crate::here!())?;

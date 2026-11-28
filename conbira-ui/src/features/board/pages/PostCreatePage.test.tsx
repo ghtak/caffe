@@ -55,6 +55,63 @@ describe('contract', () => {
       expect(router.state.location.pathname).toBe(`/community/${board}`)
     },
   )
+  it('자료실 파일을 업로드하고 게시글에 연결한다', async () => {
+    const group = 'dcb68ff6-4ed1-4a56-9788-b35d887bf91a'
+    const file = 'dcb68ff6-4ed1-4a56-9788-b35d887bf91b'
+    let payload: unknown
+    server.use(
+      session(['board.data.write']),
+      list(),
+      http.post('*/api/files', () => {
+        return HttpResponse.json(
+          { data: [{ file_id: file, group_id: group, original_filename: '자료.txt' }] },
+          { status: 201 },
+        )
+      }),
+      http.post('*/api/board/posts', async ({ request }) => {
+        payload = await request.json()
+        return HttpResponse.json({
+          code: 'OK',
+          data: {
+            id: 1,
+            title: '제목',
+            board_slug: 'data',
+            author_id: 1,
+            view_count: 0,
+            comment_count: 0,
+            created_at: '2026-01-01T00:00:00Z',
+          },
+        })
+      }),
+    )
+    renderWithProviders('/community/data/new', 'writer')
+    const user = userEvent.setup()
+    await user.type(await screen.findByLabelText('제목'), '제목')
+    await user.type(screen.getByLabelText('본문'), '본문')
+    await user.upload(screen.getByLabelText('파일 선택'), new File(['content'], '자료.txt'))
+    await user.click(screen.getByRole('button', { name: '등록' }))
+    expect(await screen.findByRole('heading', { name: '게시글 목록' })).toBeVisible()
+    expect(payload).toEqual({
+      board_slug: 'data',
+      title: '제목',
+      content: '본문',
+      attachments: { group_id: group, attach_file_ids: [file], detach_file_ids: [] },
+    })
+  })
+  it('자료실에서 파일을 추가하고 제거할 수 있다', async () => {
+    server.use(session(['board.data.write']))
+    renderWithProviders('/community/data/new', 'writer')
+    const user = userEvent.setup()
+    const input = await screen.findByLabelText('파일 선택')
+    await user.upload(input, [new File(['a'], '첫째.txt'), new File(['b'], '둘째.txt')])
+    expect(screen.getByText('첫째.txt')).toBeVisible()
+    expect(screen.getByRole('button', { name: '등록' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: '첫째.txt 삭제' }))
+    expect(screen.queryByText('첫째.txt')).not.toBeInTheDocument()
+    expect(screen.getByText('둘째.txt')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '둘째.txt 삭제' }))
+    expect(screen.getByRole('button', { name: '등록' })).toBeEnabled()
+  })
   it('다른 게시판 쓰기 권한으로는 공지 작성 화면에 접근할 수 없다', async () => {
     server.use(session(['board.free.write']))
     renderWithProviders('/community/notice/new', 'writer')
