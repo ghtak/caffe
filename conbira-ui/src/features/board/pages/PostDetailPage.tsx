@@ -100,7 +100,7 @@ export function PostDetailPage({
           <h2 className="text-sm font-medium">첨부파일</h2>
           <ul className="grid gap-2">
             {post.attachments.map((file) => (
-              <li key={file.file_id} className="flex items-center justify-between gap-2 text-sm">
+              <li key={file.id} className="flex items-center justify-between gap-2 text-sm">
                 <span className="break-all">{file.original_filename}</span>
                 {token ? (
                   <Button
@@ -108,9 +108,12 @@ export function PostDetailPage({
                     size="sm"
                     onClick={() => {
                       setDownloadError(false)
-                      void downloadAttachment(token, file.file_id).catch(() =>
-                        setDownloadError(true),
-                      )
+                      void downloadAttachment(
+                        token,
+                        post.id,
+                        file.id,
+                        file.original_filename,
+                      ).catch(() => setDownloadError(true))
                     }}
                   >
                     다운로드

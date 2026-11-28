@@ -44,7 +44,7 @@ pub mod endpoint {
             &container.db,
             id,
             caller,
-            container.config.files.pending_ttl_seconds,
+            &container.file_asset_service,
             request.attachments,
             request.title.trim(),
             &request.content,
@@ -139,7 +139,7 @@ pub mod usecase {
         db: &Database,
         id: i64,
         caller: crate::app::auth::claims::UserClaims,
-        ttl: u64,
+        service: &crate::app::file_asset::service::FileAssetService,
         attachments: Option<crate::app::board::AttachmentChanges>,
         title: &str,
         content: &str,
@@ -151,17 +151,17 @@ pub mod usecase {
         if existing.summary.post.author_id != caller.id {
             return Err(Error::new(Code::Forbidden, "Post access denied").at(crate::here!()));
         }
-        let mut updated = post::update_title(&mut tx.handle(), id, caller.id, title)
+        let updated = post::update_title(&mut tx.handle(), id, caller.id, title)
             .await?
             .ok_or_else(|| Error::new(Code::NotFound, "Post not found").at(crate::here!()))?;
         post_content::update(&mut tx.handle(), id, content).await?;
         if let Some(changes) = attachments {
             super::super::super::change_attachments(
                 &mut tx.handle(),
-                caller,
-                &mut updated,
+                service,
+                caller.id,
+                &updated,
                 changes,
-                ttl,
             )
             .await?;
         }

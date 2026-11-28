@@ -56,18 +56,17 @@ describe('contract', () => {
     },
   )
   it('자료실 파일을 업로드하고 게시글에 연결한다', async () => {
-    const group = 'dcb68ff6-4ed1-4a56-9788-b35d887bf91a'
     const file = 'dcb68ff6-4ed1-4a56-9788-b35d887bf91b'
     let payload: unknown
     server.use(
       session(['board.data.write']),
       list(),
-      http.post('*/api/files', () => {
-        return HttpResponse.json(
-          { data: [{ file_id: file, group_id: group, original_filename: '자료.txt' }] },
-          { status: 201 },
-        )
-      }),
+      http.post('*/api/board/posts/attachments/upload', () =>
+        HttpResponse.json({
+          data: { id: file, upload_url: 'https://storage.example/upload', headers: [] },
+        }),
+      ),
+      http.put('https://storage.example/upload', () => new HttpResponse(null, { status: 200 })),
       http.post('*/api/board/posts', async ({ request }) => {
         payload = await request.json()
         return HttpResponse.json({
@@ -95,7 +94,7 @@ describe('contract', () => {
       board_slug: 'data',
       title: '제목',
       content: '본문',
-      attachments: { group_id: group, attach_file_ids: [file], detach_file_ids: [] },
+      attachments: { attach_file_ids: [file], detach_file_ids: [] },
     })
   })
   it('자료실에서 파일을 추가하고 제거할 수 있다', async () => {

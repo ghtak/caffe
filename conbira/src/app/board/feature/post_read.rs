@@ -14,7 +14,7 @@ pub mod endpoint {
     pub struct ResponseData {
         #[serde(flatten)]
         post: PostDetail,
-        attachments: Vec<crate::app::files::entity::FileSummary>,
+        attachments: Vec<crate::app::file_asset::FileAssetSummary>,
     }
 
     pub async fn handler(
@@ -25,24 +25,14 @@ pub mod endpoint {
         let post = post::find_by_id(&mut conn.handle(), id)
             .await?
             .ok_or_else(|| Error::new(Code::NotFound, "Post not found").at(crate::here!()))?;
-        let attachments = if post.summary.post.board_slug == "data" {
-            if let Some(group_id) = post.summary.post.attachment_group_id {
-                crate::app::files::repository::list_by_group_id(&mut conn.handle(), group_id)
-                    .await?
-                    .into_iter()
-                    .filter(|file| {
-                        file.status == crate::app::files::entity::FileStatus::Attached
-                            && file.resource_type.as_deref() == Some("board.post")
-                            && file.resource_key.as_deref() == Some(id.to_string().as_str())
-                    })
-                    .map(Into::into)
-                    .collect()
-            } else {
-                Vec::new()
-            }
-        } else {
-            Vec::new()
-        };
+        let ids =
+            super::super::super::repository::post_attachment::list_ids(&mut conn.handle(), id)
+                .await?;
+        let attachments = crate::app::file_asset::find_by_ids(&mut conn.handle(), &ids)
+            .await?
+            .into_iter()
+            .filter(|asset| asset.status == "attached")
+            .collect();
         Ok(ResponseData { post, attachments }.into())
     }
 }

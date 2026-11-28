@@ -136,3 +136,21 @@ JOIN conbira_rbac_permissions p
 WHERE r.code = 'admin'
     OR (r.code = 'user' AND p.code = 'board.free.write')
 ON CONFLICT (role_id, permission_id) DO NOTHING;
+
+-- ============================================================================
+-- 6. 게시글 첨부파일과 파일 에셋 연결
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS conbira_post_attachments (
+    post_id       BIGINT      NOT NULL REFERENCES conbira_posts (id) ON DELETE CASCADE,
+    file_asset_id UUID        NOT NULL REFERENCES conbira_file_assets (id) ON DELETE CASCADE,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (post_id, file_asset_id)
+);
+
+CREATE INDEX IF NOT EXISTS conbira_post_attachments_file_asset_idx
+    ON conbira_post_attachments (file_asset_id);
+
+COMMENT ON TABLE conbira_post_attachments IS '게시글과 파일 에셋의 첨부 관계';
+COMMENT ON COLUMN conbira_post_attachments.post_id IS '게시글 ID';
+COMMENT ON COLUMN conbira_post_attachments.file_asset_id IS '파일 에셋 ID';
+COMMENT ON COLUMN conbira_post_attachments.created_at IS '첨부 관계 생성 시각';

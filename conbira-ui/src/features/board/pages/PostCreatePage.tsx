@@ -41,7 +41,7 @@ export function PostCreatePage({
       values: { title: string; content: string; board_slug: typeof boardSlug },
       context,
     ) => {
-      const attachments = await prepareAttachments(token, files, null, [])
+      const attachments = await prepareAttachments(token, files, boardSlug, [])
       return postCreateOptions(token).mutationFn!({ ...values, attachments }, context)
     },
     onSuccess: async () => {

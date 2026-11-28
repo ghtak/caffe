@@ -56,8 +56,7 @@ describe('contract', () => {
             content: '본문',
             attachments: [
               {
-                file_id: 'dcb68ff6-4ed1-4a56-9788-b35d887bf91b',
-                group_id: 'dcb68ff6-4ed1-4a56-9788-b35d887bf91a',
+                id: 'dcb68ff6-4ed1-4a56-9788-b35d887bf91b',
                 original_filename: '자료.txt',
               },
             ],

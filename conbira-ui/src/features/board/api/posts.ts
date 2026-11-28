@@ -3,49 +3,89 @@ import { z } from 'zod'
 import { apiClient } from '@/shared/api/client'
 
 const attachmentSchema = z.object({
-  file_id: z.uuid(),
-  group_id: z.uuid(),
+  id: z.uuid(),
   original_filename: z.string(),
 })
 export type Attachment = z.infer<typeof attachmentSchema>
-type AttachmentChanges = { group_id: string; attach_file_ids: string[]; detach_file_ids: string[] }
+type AttachmentChanges = { attach_file_ids: string[]; detach_file_ids: string[] }
 export async function prepareAttachments(
   token: string,
   files: File[],
-  groupId: string | null,
+  boardSlug: string,
   removed: string[],
 ): Promise<AttachmentChanges | undefined> {
   if (!files.length && !removed.length) return undefined
-  const body = new FormData()
-  for (const file of files) body.append('file', file, file.name)
-  if (groupId) body.append('group_id', groupId)
-  const uploaded = files.length
-    ? z
-        .object({ data: z.array(attachmentSchema).min(1) })
-        .parse(
-          await apiClient
-            .post('/api/files', { headers: { Authorization: `Bearer ${token}` }, body, retry: 0 })
-            .json(),
-        ).data
-    : []
-  groupId = groupId ?? uploaded[0]?.group_id ?? null
-  if (!groupId) throw new Error('Missing file group')
-  return {
-    group_id: groupId,
-    attach_file_ids: uploaded.map((f) => f.file_id),
-    detach_file_ids: removed,
-  }
-}
-export async function downloadAttachment(token: string, id: string) {
-  const response = z.object({ data: z.object({ url: z.url({ protocol: /^https?$/ }) }) }).parse(
-    await apiClient
-      .get(`/api/files/${id}/download`, {
-        headers: { Authorization: `Bearer ${token}` },
-        retry: 0,
+  const ids: string[] = []
+  for (const file of files) {
+    const contentType = file.type || 'application/octet-stream'
+    const ticket = z
+      .object({
+        data: z.object({
+          id: z.uuid(),
+          upload_url: z.url({ protocol: /^https?$/ }),
+          headers: z.array(z.tuple([z.string(), z.string()])),
+        }),
       })
-      .json(),
-  )
-  window.location.assign(response.data.url)
+      .parse(
+        await apiClient
+          .post('/api/board/posts/attachments/upload', {
+            headers: { Authorization: `Bearer ${token}` },
+            json: {
+              board_slug: boardSlug,
+              original_filename: file.name,
+              size_bytes: file.size,
+              content_type: contentType,
+            },
+            retry: 0,
+          })
+          .json(),
+      ).data
+    const response = await fetch(ticket.upload_url, {
+      method: 'PUT',
+      headers: ticket.headers,
+      body: file,
+      credentials: 'omit',
+    })
+    if (!response.ok) throw new Error('Upload failed')
+    ids.push(ticket.id)
+  }
+  return { attach_file_ids: ids, detach_file_ids: removed }
+}
+export async function downloadAttachment(
+  token: string,
+  postId: number,
+  id: string,
+  filename: string,
+) {
+  const ticket = z
+    .object({
+      data: z.object({
+        download_url: z.url({ protocol: /^https?$/ }),
+        headers: z.array(z.tuple([z.string(), z.string()])),
+      }),
+    })
+    .parse(
+      await apiClient
+        .get(`/api/board/posts/${postId}/attachments/${id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          retry: 0,
+        })
+        .json(),
+    ).data
+  const response = await fetch(ticket.download_url, {
+    headers: ticket.headers,
+    credentials: 'omit',
+  })
+  if (!response.ok) throw new Error('Download failed')
+  const url = URL.createObjectURL(await response.blob())
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
 }
 const postSchema = z.object({
   id: z.number().int(),

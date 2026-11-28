@@ -205,6 +205,15 @@ impl FileAssetService {
         super::repository::change_status(handle, id, expected.as_str(), target.as_str()).await
     }
 
+    pub async fn attach_owned(
+        &self,
+        handle: &mut Handle<'_>,
+        id: Uuid,
+        user_id: i64,
+    ) -> crate::Result<bool> {
+        super::repository::attach_owned(handle, id, user_id).await
+    }
+
     /// Marks an asset for cleanup, including assets in the attached state.
     pub async fn delete(&self, handle: &mut Handle<'_>, id: Uuid) -> crate::Result<()> {
         if super::repository::mark_deleted(handle, id).await? {

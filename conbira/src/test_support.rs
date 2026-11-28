@@ -55,6 +55,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0011_refresh_token.sql"),
     include_str!("../migrations/0012_rbac.sql"),
     include_str!("../migrations/0013_files.sql"),
+    include_str!("../migrations/0014_file_asset.sql"),
 ];
 
 /// 테스트 설정과 독립 DB 스키마의 수명을 소유한다.

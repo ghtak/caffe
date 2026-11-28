@@ -48,6 +48,13 @@ pub async fn change_status(
     Ok(result.rows_affected() == 1)
 }
 
+pub async fn attach_owned(handle: &mut Handle<'_>, id: Uuid, user_id: i64) -> crate::Result<bool> {
+    let result = sqlx::query("UPDATE conbira_file_assets SET status = 'attached', updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND uploaded_by = $2 AND status = 'pending'")
+        .bind(id).bind(user_id).execute(handle.conn()).await
+        .map_err_internal("Failed to attach file asset", crate::here!())?;
+    Ok(result.rows_affected() == 1)
+}
+
 pub async fn mark_deleted(handle: &mut Handle<'_>, id: Uuid) -> crate::Result<bool> {
     let result = sqlx::query("UPDATE conbira_file_assets SET status = 'deleted', updated_at = CASE WHEN status <> 'deleted' THEN CURRENT_TIMESTAMP ELSE updated_at END, deleted_at = COALESCE(deleted_at, CURRENT_TIMESTAMP) WHERE id = $1 AND status IN ('pending', 'attached', 'deleted')")
         .bind(id)

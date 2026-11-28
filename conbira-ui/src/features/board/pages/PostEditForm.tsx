@@ -50,7 +50,7 @@ export function PostEditForm({
   })
   const update = useMutation({
     mutationFn: async (values: { title: string; content: string }, context) => {
-      const attachments = await prepareAttachments(token, files, post.attachment_group_id, removed)
+      const attachments = await prepareAttachments(token, files, post.board_slug, removed)
       return postUpdateOptions(post.id, token).mutationFn!({ ...values, attachments }, context)
     },
     onSuccess: (_data, values) => {
@@ -101,16 +101,16 @@ export function PostEditForm({
       {post.board_slug === 'data' && (
         <>
           {post.attachments
-            .filter((file) => !removed.includes(file.file_id))
+            .filter((file) => !removed.includes(file.id))
             .map((file) => (
-              <div key={file.file_id} className="flex items-center justify-between gap-2 text-sm">
+              <div key={file.id} className="flex items-center justify-between gap-2 text-sm">
                 <span>{file.original_filename}</span>
                 <Button
                   type="button"
                   variant="ghost"
                   disabled={update.isPending}
                   aria-label={`${file.original_filename} 삭제`}
-                  onClick={() => setRemoved([...removed, file.file_id])}
+                  onClick={() => setRemoved([...removed, file.id])}
                 >
                   삭제
                 </Button>

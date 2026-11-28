@@ -15,15 +15,33 @@ pub fn router() -> axum::Router<std::sync::Arc<crate::app::Container>> {
                 .post(feature::comment_create::endpoint::handler),
         )
         .route(
+            "/posts/{id}/attachments/{asset_id}",
+            axum::routing::get(feature::post_attachment_download::endpoint::handler)
+                .layer(axum::middleware::map_response(no_store)),
+        )
+        .route(
             "/posts/{id}",
             axum::routing::get(feature::post_read::endpoint::handler)
                 .put(feature::post_update::endpoint::handler),
+        )
+        .route(
+            "/posts/attachments/upload",
+            axum::routing::post(feature::post_upload::endpoint::handler)
+                .layer(axum::middleware::map_response(no_store)),
         )
         .route(
             "/posts",
             axum::routing::get(feature::post_search::endpoint::handler)
                 .post(feature::post_create::endpoint::handler),
         )
+}
+
+async fn no_store(mut response: axum::response::Response) -> axum::response::Response {
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response
 }
 
 #[cfg(test)]
@@ -132,66 +150,47 @@ impl crate::app::files::access::ResourceAccessPort for PostFileAccess {
 
 #[derive(serde::Deserialize)]
 pub struct AttachmentChanges {
-    pub group_id: uuid::Uuid,
     pub attach_file_ids: Vec<uuid::Uuid>,
     pub detach_file_ids: Vec<uuid::Uuid>,
 }
 
-// 게시글 작성자 확인을 마친 트랜잭션 내부에서만 사용한다.
-struct AuthorizedPost;
-#[async_trait::async_trait]
-impl crate::app::files::access::ResourceAccessPort for AuthorizedPost {
-    async fn decide(
-        &self,
-        _: &crate::app::auth::claims::UserClaims,
-        kind: &str,
-        _: &str,
-        _: crate::app::files::access::Action,
-    ) -> crate::Result<bool> {
-        Ok(kind == "board.post")
-    }
-}
-
 async fn change_attachments(
     tx: &mut crate::app::db::Handle<'_>,
-    caller: crate::app::auth::claims::UserClaims,
-    post: &mut entity::Post,
+    service: &crate::app::file_asset::service::FileAssetService,
+    caller_id: i64,
+    post: &entity::Post,
     changes: AttachmentChanges,
-    ttl: u64,
 ) -> crate::Result<()> {
-    if post.board_slug != "data"
-        || post
-            .attachment_group_id
-            .is_some_and(|id| id != changes.group_id)
-        || (post.attachment_group_id.is_none() && changes.attach_file_ids.is_empty())
-    {
-        return Err(crate::Error::new(
-            crate::Code::InvalidRequest,
-            "Invalid post attachment group",
+    use crate::app::file_asset::service::FileAssetStatus;
+    use crate::{Code, Error};
+    if post.board_slug != "data" {
+        return Err(Error::new(
+            Code::InvalidRequest,
+            "Attachments are not allowed on this board",
         )
         .at(crate::here!()));
     }
-    crate::app::files::file_group_attach::execute_in_tx(
-        tx,
-        &AuthorizedPost,
-        ttl,
-        crate::app::files::file_group_attach::Command {
-            caller,
-            group_id: changes.group_id,
-            resource_type: "board.post".into(),
-            resource_key: post.id.to_string(),
-            attach_file_ids: changes.attach_file_ids,
-            detach_file_ids: changes.detach_file_ids,
-        },
-    )
-    .await?;
-    use crate::error::ResultExt as _;
-    sqlx::query("UPDATE conbira_posts SET attachment_group_id = $2 WHERE id = $1")
-        .bind(post.id)
-        .bind(changes.group_id)
-        .execute(tx.conn())
-        .await
-        .map_err_internal("Failed to update attachment group", crate::here!())?;
-    post.attachment_group_id = Some(changes.group_id);
+    for id in changes.attach_file_ids {
+        if !service.attach_owned(tx, id, caller_id).await? {
+            return Err(Error::new(
+                Code::InvalidRequest,
+                "File asset is not an owned pending upload",
+            )
+            .at(crate::here!()));
+        }
+        repository::post_attachment::insert(tx, post.id, id).await?;
+    }
+    for id in changes.detach_file_ids {
+        if !repository::post_attachment::remove(tx, post.id, id).await?
+            || !service
+                .change_status(tx, id, FileAssetStatus::Attached, FileAssetStatus::Deleted)
+                .await?
+        {
+            return Err(
+                Error::new(Code::InvalidRequest, "Post attachment cannot be removed")
+                    .at(crate::here!()),
+            );
+        }
+    }
     Ok(())
 }
